@@ -1,31 +1,31 @@
 ---
 name: knowledge-ingest
-description: Use when adding source material to knowledge/raw or converting source evidence into reusable knowledge/wiki documentation while preserving provenance and raw/wiki separation.
+description: 出典情報とraw/wikiの分離を維持しながら、原資料をknowledge/rawへ追加する場合、または資料の証拠を再利用可能なknowledge/wiki文書へ変換する場合に使用します。
 ---
 
-# Knowledge Ingest
+# 知識の取込み
 
-Read knowledge/AGENTS.md and knowledge/SCHEMA.md before ingesting material. Raw evidence has authority over derived wiki content.
+資料を取り込む前にknowledge/AGENTS.mdとknowledge/SCHEMA.mdを読みます。原証拠は、導出済みwiki内容より優先されます。
 
-## Workflow
+## ワークフロー
 
-1. Classify the source type, ownership, provenance, expected reuse, and whether it is evidence or already a synthesis.
-2. Check for secrets, personal data, confidentiality, copyright restrictions, licensing limits, large files, and binary content.
-3. Decide whether repository storage is permitted. If uncertain or sensitive, keep it outside Git and request direction; do not reproduce protected content unnecessarily.
-4. Save permitted evidence under knowledge/raw/ with a stable descriptive name. Preserve the original; do not rewrite it to fix perceived errors.
-5. Inspect enough of the source to support the intended claims.
-6. Search knowledge/wiki/index.md and relevant wiki pages for an existing topic.
-7. Compare the source with existing evidence and record contradictions rather than silently choosing one account.
-8. Update an existing wiki page when it already owns the topic; create a new page only for a distinct reusable responsibility.
-9. Add precise source references that identify the raw artifact or authoritative external source and distinguish facts from inference.
-10. Update knowledge/wiki/index.md with the canonical wiki entry.
-11. Append a concise dated entry to knowledge/wiki/log.md describing the knowledge change and sources.
-12. Verify provenance, links, contradiction notes, privacy, Git policy, and consistency with existing docs.
+1. 資料の種類、所有者、出典、想定される再利用方法、および証拠か既存の統合知識かを分類する。
+2. 秘密情報、個人データ、機密性、著作権上の制限、ライセンス上の制限、大容量ファイル、バイナリ内容を確認する。
+3. リポジトリへの保存が許可されるか判断する。不明または機微な場合はGit外に保持してユーザーへ確認し、保護対象の内容を不必要に複製しない。
+4. 許可された証拠を、安定した説明的な名前でknowledge/raw/配下へ保存する。原本を保持し、誤りと思われる箇所を修正する目的で書き換えない。
+5. 意図した主張を裏付けるために十分な範囲の資料を確認する。
+6. knowledge/wiki/index.mdと関連wikiページを検索し、既存トピックがないか確認する。
+7. 資料を既存証拠と比較し、暗黙に一方を選ばず矛盾を記録する。
+8. 既存wikiページがそのトピックを所有している場合は更新し、異なる再利用可能な責務に限り新規ページを作成する。
+9. raw成果物または正式な外部資料を特定し、事実と推論を区別できる正確な出典参照を追加する。
+10. 正規のwiki項目をknowledge/wiki/index.mdへ追加または更新する。
+11. 知識変更と資料を説明する簡潔な日付付き項目をknowledge/wiki/log.mdへ追記する。
+12. 出典、リンク、矛盾の注記、プライバシー、Gitポリシー、既存docsとの一貫性を検証する。
 
-## Boundaries
+## 境界
 
-- Do not generate many summaries of the same source; integrate into the existing canonical topic when possible.
-- Do not cite a wiki summary as proof of what a raw source says when the raw source is available.
-- Do not force-add ignored raw material.
-- Do not turn task-only research into durable wiki content unless it has demonstrated cross-task value.
-- Do not copy a normative project specification into the wiki; current specifications belong in docs/.
+- 同じ資料に対する多数の要約を生成せず、可能な場合は既存の正規トピックへ統合します。
+- 原資料を利用できる場合に、原資料の記載内容を証明するものとしてwiki要約を引用しません。
+- 追跡対象外の原資料を強制追加しません。
+- 複数タスクでの価値が実証されない限り、タスク限定の調査を永続的なwiki内容へ変換しません。
+- 規範的なプロジェクト仕様をwikiへ複製しません。現在の仕様はdocs/に記載します。

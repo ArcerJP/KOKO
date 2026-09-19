@@ -1,36 +1,36 @@
-# Source of Truth
+# 信頼できる情報源
 
-## Principle
+## 原則
 
-KOKO does not treat every record as equally authoritative. The correct source depends on the question being answered.
+KOKOでは、すべての記録を同じ正本性で扱いません。適切な情報源は、回答対象の問いによって異なります。
 
-| Question | Authoritative source | Non-authoritative supporting material |
+| 問い | 正本 | 正本ではない補助資料 |
 | --- | --- | --- |
-| What does the system currently do? | Actual source code and observed runtime behavior | Plans, handoffs, old docs |
-| Why was an architecture choice made? | Accepted ADR in docs/decisions/ | MEMORY.md summary, task discussion |
-| What is the current formal architecture or specification? | Current docs/ | Wiki synthesis, implementation plan |
-| What did an original source say? | knowledge/raw/ or the cited authoritative external source | knowledge/wiki/ summary |
-| What reusable conclusions have been derived? | Canonical page in knowledge/wiki/, subject to its evidence | Task research |
-| What project continuity should persist? | MEMORY.md | Temporary memory entries |
-| What evidence and intent belong to an active task? | work/notebook/<task-id>/ | Chat recollection |
-| What was handed to a human for review? | work/outbox/<task-id>/ | Active notebook copy, which must not coexist |
-| What is the historical task record? | work/archive/YYYY/<task-id>/ | Prior state locations |
-| How should Codex behave? | Applicable AGENTS.md and selected Skill | README or ordinary docs |
+| システムは現在何をするか | 実際のソースコードと観測したランタイム動作 | 計画、引き渡し、古い文書 |
+| なぜそのアーキテクチャを選択したか | docs/decisions/の受理済みADR | MEMORY.mdの要約、タスク上の議論 |
+| 現在の正式なアーキテクチャまたは仕様は何か | 現在のdocs/ | wikiの統合知識、実装計画 |
+| 原資料には何と記載されていたか | knowledge/raw/または引用した正式な外部資料 | knowledge/wiki/の要約 |
+| どのような再利用可能な結論が導出されたか | 証拠に基づくknowledge/wiki/の正規ページ | タスク固有の調査 |
+| どのプロジェクト継続情報を残すべきか | MEMORY.md | 一時メモリの記録 |
+| 実行中タスクの証拠と意図は何か | work/notebook/<task-id>/ | チャット上の記憶 |
+| 人間のレビューへ何を引き渡したか | work/outbox/<task-id>/ | 併存してはならない実行中notebookのコピー |
+| 過去のタスク記録は何か | work/archive/YYYY/<task-id>/ | 以前の状態の配置場所 |
+| Codexはどのように振る舞うべきか | 適用されるAGENTS.mdと選択されたSkill | READMEまたは通常の文書 |
 
-## Conflict Rules
+## 競合時のルール
 
-1. Do not silently reconcile conflicting sources.
-2. Identify the question and its authoritative category.
-3. Check dates, versions, provenance, implementation state, and whether a decision is proposed, accepted, superseded, or deprecated.
-4. Prefer current observed behavior for what exists, while recording when it violates an accepted specification.
-5. Prefer raw evidence over derived wiki claims about the evidence.
-6. Correct the stale non-authoritative copy or replace it with a link; do not preserve competing full copies.
-7. Escalate material ambiguity that changes scope, safety, compatibility, or architecture.
+1. 競合する情報源を暗黙に調整しません。
+2. 問いと、その正本区分を特定します。
+3. 日付、バージョン、出典、実装状態、および決定が提案済み、受理済み、置換済み、廃止済みのいずれかを確認します。
+4. 存在する動作については現在観測した動作を優先し、受理済み仕様に違反する場合は記録します。
+5. 証拠に関する主張では、導出済みwiki内容より原証拠を優先します。
+6. 古くなった非正本のコピーを修正するかリンクへ置き換え、競合する完全な複製を残しません。
+7. 範囲、安全性、互換性、アーキテクチャを変える重大な曖昧さは、人間へ判断を求めます。
 
-## Duplication Boundaries
+## 重複の境界
 
-- MEMORY.md may link to an ADR but must not reproduce it.
-- README.md may summarize architecture but must link to formal docs.
-- Plans describe intended changes and do not become current specifications after implementation.
-- Research is task-specific; only reusable synthesis is promoted to the wiki.
-- Wiki pages cite evidence and do not replace raw sources or normative docs.
+- MEMORY.mdからADRへリンクできますが、その内容を複製してはいけません。
+- README.mdでアーキテクチャを要約できますが、正式文書へリンクしなければなりません。
+- 計画は意図した変更を説明するもので、実装後に現在の仕様とはなりません。
+- 調査はタスク固有です。再利用可能な統合知識だけをwikiへ昇格します。
+- wikiページは証拠を引用し、原資料や規範的文書を置き換えません。

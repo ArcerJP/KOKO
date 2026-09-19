@@ -1,16 +1,16 @@
-# Tool Guidance
+# ツールの指針
 
-## Current Tool Categories
+## 現在のツール区分
 
-- OpenAI Codex: primary AI development environment.
-- Git: local version control; inspect state before mutation.
-- GitHub CLI: optional GitHub integration; verify availability and authentication before use.
-- Project tooling: add only after the technology stack is deliberately selected.
+- OpenAI Codex：主要なAI開発環境。
+- Git：ローカルのバージョン管理。変更前に状態を確認します。
+- GitHub CLI：任意のGitHub連携。使用前に利用可否と認証状態を確認します。
+- プロジェクト用ツール：技術スタックを意図的に選定した後に限り追加します。
 
-## Usage Rules
+## 利用ルール
 
-- Prefer official, current documentation for tool behavior.
-- Check installed capability at the time of use; do not rely on recorded version numbers as current truth.
-- Do not install tools or packages during workspace bootstrap.
-- Do not write repository-specific rules into global Codex, Git, IDE, OS, or environment configuration without explicit permission.
-- Never record API keys, tokens, passwords, credentials, private keys, session data, or secret values here.
+- ツールの動作については、最新の公式文書を優先します。
+- 使用時点でインストール済みの機能を確認し、記録されたバージョン番号を現在の事実として扱いません。
+- ワークスペースの初期構築中に、ツールやパッケージをインストールしません。
+- 明示的な許可なく、リポジトリ固有のルールをCodex、Git、IDE、OS、環境のグローバル設定へ書き込みません。
+- APIキー、トークン、パスワード、認証情報、秘密鍵、セッションデータ、秘密の値をここへ記録しません。

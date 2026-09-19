@@ -4,22 +4,22 @@ created:
 status:
 ---
 
-# Research
+# 調査
 
-## Question
+## 問い
 
-## Scope
+## 範囲
 
-## Current State
+## 現在の状態
 
-## Evidence
+## 証拠
 
-## Relevant Files
+## 関連ファイル
 
-## Constraints
+## 制約
 
-## Unknowns
+## 不明点
 
-## Findings
+## 調査結果
 
-## Implications for Planning
+## 計画への影響

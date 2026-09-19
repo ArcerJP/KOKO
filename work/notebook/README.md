@@ -1,5 +1,5 @@
-# Notebook
+# Notebook（実行中）
 
-This state contains the single active folder for each task being researched, planned, implemented, or verified.
+この状態には、調査、計画、実装、または検証中の各タスクについて、実行中フォルダーを1つだけ置きます。
 
-Add research/, plans/, or prs/ only when needed. Do not copy active source code into the task folder. Dynamic task folders are ignored by Git and private by default.
+research/、plans/、prs/は、必要な場合に限り追加します。実行中のソースコードをタスクフォルダーへ複製しません。動的なタスクフォルダーはGitの追跡対象外で、既定では非公開です。

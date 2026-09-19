@@ -8,18 +8,18 @@ risk:
 owner:
 ---
 
-# Request
+# 依頼
 
-## Goal
+## 目標
 
-## Background
+## 背景
 
-## Requirements
+## 要件
 
-## Constraints
+## 制約
 
-## Acceptance Criteria
+## 受入条件
 
-## References
+## 参照資料
 
-## Unknowns
+## 不明点

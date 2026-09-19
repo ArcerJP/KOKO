@@ -7,42 +7,42 @@ approved_by:
 approved_at:
 ---
 
-# Implementation Plan
+# 実装計画
 
-## Objective
+## 目的
 
-## Current State
+## 現在の状態
 
-## Desired State
+## 目標状態
 
-## Scope
+## 範囲
 
-### In Scope
+### 対象範囲
 
-### Out of Scope
+### 対象外
 
-## Files
+## ファイル
 
-### Create
+### 作成
 
-### Modify
+### 変更
 
-### Delete
+### 削除
 
-## Phases
+## フェーズ
 
-## Verification
+## 検証
 
-## Tests
+## テスト
 
-## Documentation
+## 文書
 
-## Security
+## セキュリティ
 
-## Compatibility
+## 互換性
 
-## Rollback
+## ロールバック
 
-## Risks
+## リスク
 
-## Open Questions
+## 未解決の問い

@@ -1,96 +1,96 @@
-# Knowledge Schema
+# 知識スキーマ
 
-## Purpose
+## 目的
 
-The knowledge system preserves original evidence separately from reusable synthesis, with provenance, authority, privacy, and lifecycle made explicit.
+知識システムでは、原証拠と再利用可能な統合知識を分離して保存し、出典、正本性、プライバシー、ライフサイクルを明示します。
 
-## Layers
+## レイヤー
 
 ### raw
 
-knowledge/raw/ contains evidence or source material such as specifications, PDFs, exported data, user-provided references, external documentation snapshots, original text, and original datasets.
+knowledge/raw/には、仕様書、PDF、エクスポートデータ、ユーザー提供資料、外部文書のスナップショット、原文、元データセットなどの証拠または原資料を保存します。
 
-Raw material is normally immutable after ingestion. If a source is wrong, preserve it and record corrections, contradictions, or interpretation in the wiki.
+原資料は通常、取込み後に変更しません。資料に誤りがある場合もそのまま保存し、訂正、矛盾、解釈をwikiへ記録します。
 
 ### wiki
 
-knowledge/wiki/ contains maintained, reusable knowledge synthesized from raw or authoritative external evidence. Wiki pages are secondary sources and must not erase uncertainty or contradicting evidence.
+knowledge/wiki/には、rawまたは正式な外部証拠から統合し、保守される再利用可能な知識を保存します。wikiページは二次資料であり、不確実性や矛盾する証拠を消してはいけません。
 
-## Authority
+## 正本性
 
-For claims about source content:
+原資料の内容に関する主張では、次の優先順位を使用します。
 
 ~~~text
-raw evidence > derived wiki
+原証拠 > 導出済みwiki
 ~~~
 
-Normative project specifications remain in docs/ and implemented behavior remains authoritative in the actual source/runtime. The wiki does not override either category.
+規範的なプロジェクト仕様はdocs/に保持し、実装済みの動作については実際のソース／ランタイムを正本とします。wikiは、いずれの区分も上書きしません。
 
-## Ingest Workflow
+## 取込みワークフロー
 
-Use the knowledge-ingest Skill:
+knowledge-ingest Skillを使用して、次を実施します。
 
-1. Classify source and provenance.
-2. Assess sensitivity, rights, secrets, format, and size.
-3. Decide whether storage is permitted.
-4. Preserve permitted raw evidence without rewriting it.
-5. Inspect the source and existing wiki.
-6. Record contradictions and distinguish facts from inference.
-7. Update the canonical wiki topic with references.
-8. Update the wiki index and change log.
-9. Verify consistency, privacy, and Git policy.
+1. 資料と出典を分類する。
+2. 機密性、権利、秘密情報、形式、サイズを評価する。
+3. 保存が許可されるか判断する。
+4. 許可された原証拠を、書き換えずに保存する。
+5. 原資料と既存wikiを確認する。
+6. 矛盾を記録し、事実と推論を区別する。
+7. 参照情報とともに正規のwikiトピックを更新する。
+8. wikiの索引と変更履歴を更新する。
+9. 一貫性、プライバシー、Gitポリシーを検証する。
 
-## Naming
+## 命名
 
-- Use lowercase kebab-case Markdown names for ordinary wiki topics.
-- Use YYYY-MM-DD-topic.md when a dated snapshot is intrinsic to the artifact.
-- Preserve meaningful original filenames for raw evidence when safe; add a stable contextual prefix if collision or provenance would otherwise be unclear.
-- Do not use final-v2, final-final, new, old2, misc, other, or stuff.
+- 通常のwikiトピックには、小文字のkebab-caseによるMarkdownファイル名を使用します。
+- 日付付きスナップショットであることが成果物の本質に含まれる場合は、YYYY-MM-DD-topic.mdを使用します。
+- 安全な場合は、原証拠の意味ある元ファイル名を維持します。名前の衝突または出典が不明確になる場合は、安定したコンテキスト接頭辞を付けます。
+- final-v2、final-final、new、old2、misc、other、stuffを使用しません。
 
-## Source References
+## 出典参照
 
-A wiki claim should cite the most precise available source:
+wiki上の主張では、利用可能な最も正確な資料を引用します。
 
-- Repository raw source: relative path, relevant section/page/record, and source date if known.
-- External authoritative source: direct URL, publisher, title, and access or verification date when currency matters.
-- User-provided evidence not stored in Git: describe provenance without exposing confidential contents or personal data.
+- リポジトリ内の原資料：相対パス、関連する節／ページ／レコード、および判明している場合は資料の日付。
+- 正式な外部資料：直接URL、発行者、タイトル、および最新性が重要な場合はアクセス日または確認日。
+- Gitに保存しないユーザー提供証拠：機密内容または個人データを公開せず、出典を説明。
 
-Clearly mark quoted text, paraphrase, fact, inference, and unresolved interpretation. Do not cite a wiki page as a substitute for its raw source when verifying the original.
+引用文、言い換え、事実、推論、未解決の解釈を明確に区別します。原文を検証する際に、原資料の代わりとしてwikiページを引用しません。
 
-## Contradictions
+## 矛盾
 
-Do not silently choose between conflicting sources. Record:
+競合する資料から暗黙に1つを選びません。次を記録します。
 
-- the competing sources;
-- their dates, versions, scope, and authority;
-- the precise disagreement;
-- whether resolution is known, inferred, or pending;
-- the downstream implications.
+- 競合する資料。
+- 各資料の日付、バージョン、範囲、正本性。
+- 正確な相違点。
+- 解決が判明済み、推論、保留中のいずれか。
+- 下流への影響。
 
-If the contradiction affects a current normative specification or implementation, route it to docs/, an ADR, or the relevant task rather than resolving it only in the wiki.
+矛盾が現在の規範的仕様または実装へ影響する場合は、wiki内だけで解決せず、docs/、ADR、または関連タスクへ送ります。
 
-## Updates
+## 更新
 
-Update an existing canonical page when it already owns the topic. Create a new page only for a distinct reusable responsibility. Preserve meaningful history through Git and the wiki log; do not create filename-based versions.
+既存の正規ページがそのトピックを所有している場合は、そのページを更新します。異なる再利用可能な責務に限り、新しいページを作成します。意味のある履歴はGitとwikiログで保持し、ファイル名によるバージョンを作成しません。
 
-Re-check source currency when a claim is likely to have changed. Mark stale or superseded knowledge rather than leaving it apparently current.
+主張が変化している可能性がある場合は、資料の最新性を再確認します。古くなった知識または置換済みの知識には、その状態を明記し、最新であるかのように残しません。
 
-## Index
+## 索引
 
-knowledge/wiki/index.md lists canonical wiki pages and their purpose. Every durable topic page must be reachable from the index. The index is navigation, not a duplicate summary of every page.
+knowledge/wiki/index.mdには、正規のwikiページとその目的を一覧化します。すべての永続トピックページは、索引から到達可能でなければなりません。索引は案内用であり、各ページの要約を複製する場所ではありません。
 
-## Change Log
+## 変更履歴
 
-knowledge/wiki/log.md records dated knowledge additions, material revisions, contradiction updates, and retirements with concise source references. It is not a copy of page contents or Git history.
+knowledge/wiki/log.mdには、日付付きの知識追加、重要な改訂、矛盾の更新、廃止を、簡潔な資料参照とともに記録します。ページ内容やGit履歴を複製する場所ではありません。
 
-## Privacy
+## プライバシー
 
-Before storing source material, check for personal data, credentials, confidential content, contractual restrictions, copyright constraints, and unnecessary sensitive detail. Store the minimum required information. If authorization is unclear, do not add the material and ask the user.
+原資料を保存する前に、個人データ、認証情報、機密内容、契約上の制限、著作権上の制約、不要な機微情報を確認します。必要最小限の情報だけを保存します。許可が不明な場合は資料を追加せず、ユーザーへ確認します。
 
-Never reproduce or report detected secret values. Report only the affected path and next safe action.
+検出した秘密の値は、複製も報告もしません。影響を受けるパスと、次に行う安全な対応だけを報告します。
 
-## Git Policy
+## Gitポリシー
 
-knowledge/raw/ is private-first and ignored by default except for its README.md. Do not force-add raw content. A future decision to track a raw class requires explicit policy, rights and privacy review, file-size review, and any needed LFS decision.
+knowledge/raw/はプライベート優先で、README.mdを除き既定では追跡対象外です。rawの内容を強制追加しません。将来、特定区分のrawを追跡すると決定する場合は、明示的なポリシー、権利とプライバシーのレビュー、ファイルサイズのレビュー、必要に応じたLFSの決定が必要です。
 
-knowledge/wiki/ may be tracked when content and source references are public-safe and repository-appropriate. Do not move sensitive raw content into a tracked wiki summary to bypass the raw policy.
+knowledge/wiki/は、内容と出典参照が公開可能でリポジトリに適している場合に追跡できます。rawポリシーを回避する目的で、機微なraw内容を追跡対象のwiki要約へ移しません。

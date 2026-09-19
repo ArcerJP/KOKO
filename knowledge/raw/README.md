@@ -1,9 +1,9 @@
-# Raw Knowledge
+# 原資料
 
-This directory holds original evidence and source material. Examples include specifications, PDFs, exported data, user-provided references, documentation snapshots, original text, and datasets.
+このディレクトリには、原証拠と原資料を保存します。例として、仕様書、PDF、エクスポートデータ、ユーザー提供資料、文書のスナップショット、原文、データセットがあります。
 
-Contents are private-first and ignored by Git by default. Before adding a source, use the knowledge-ingest Skill to assess provenance, confidentiality, personal data, secrets, copyright, license, format, and size.
+内容はプライベート優先で、既定ではGitの追跡対象外です。資料を追加する前にknowledge-ingest Skillを使用し、出典、機密性、個人データ、秘密情報、著作権、ライセンス、形式、サイズを評価します。
 
-Preserve an ingested source as received. Do not edit raw material to correct or summarize it; record interpretations and contradictions in knowledge/wiki/.
+取り込んだ資料は受領時のまま保存します。原資料を訂正または要約する目的で編集せず、解釈と矛盾をknowledge/wiki/へ記録します。
 
-Do not force-add raw files. Tracking any class of raw source requires an explicit policy change.
+rawファイルを強制追加しません。いずれかの原資料区分を追跡するには、明示的なポリシー変更が必要です。

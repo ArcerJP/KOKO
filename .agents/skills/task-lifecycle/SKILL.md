@@ -1,36 +1,36 @@
 ---
 name: task-lifecycle
-description: Use when creating, starting, handing off, closing, moving, or archiving a task through KOKO's work/inbox to work/notebook to work/outbox to work/archive lifecycle.
+description: KOKOのwork/inboxからwork/notebook、work/outbox、work/archiveへ至るライフサイクルで、タスクを作成、開始、引き渡し、終了、移動、アーカイブする際に使用します。
 ---
 
-# Task Lifecycle
+# タスクライフサイクル
 
-Maintain one task folder whose location represents its current state. Read work/AGENTS.md and work/WORKFLOW.md before changing task state.
+現在の状態を配置場所で表す、1つのタスクフォルダーを維持します。タスク状態を変更する前にwork/AGENTS.mdとwork/WORKFLOW.mdを読みます。
 
-## Identify the Task
+## タスクの識別
 
-Use TASK-YYYYMMDD-short-kebab-description. Confirm that no folder with the same task ID already exists in another state.
+TASK-YYYYMMDD-short-kebab-description形式を使用します。同じタスクIDのフォルダーが、別の状態にすでに存在していないことを確認します。
 
-Create only artifacts needed by the task. Use files from work/_templates/ rather than inventing competing formats.
+タスクに必要な成果物だけを作成します。競合する形式を独自に作成せず、work/_templates/のファイルを使用します。
 
-## State Transitions
+## 状態遷移
 
-1. Intake: create work/inbox/<task-id>/request.md and record the request, constraints, acceptance criteria, references, and unknowns.
-2. Start: move the same folder to work/notebook/<task-id>/. Update request status and add research/, plans/, or prs/ only when the work needs them.
-3. Handoff: after implementation and verification, add a handoff artifact and move the folder to work/outbox/<task-id>/.
-4. Archive: only after human acceptance or an explicit close decision, move it to work/archive/YYYY/<task-id>/.
+1. 受付：work/inbox/<task-id>/request.mdを作成し、依頼、制約、受入条件、参照資料、不明点を記録する。
+2. 開始：同じフォルダーをwork/notebook/<task-id>/へ移動する。requestの状態を更新し、作業で必要な場合に限りresearch/、plans/、prs/を追加する。
+3. 引き渡し：実装と検証の後に引き渡し成果物を追加し、フォルダーをwork/outbox/<task-id>/へ移動する。
+4. アーカイブ：人間による受入れまたは明示的な終了判断の後に限り、work/archive/YYYY/<task-id>/へ移動する。
 
-Move; do not copy a task between states. Never keep the same task active in more than one state.
+タスクは状態間で移動し、複製しません。同じタスクを複数状態で実行中にしません。
 
-## Boundaries
+## 境界
 
-- Do not copy active source code into work/.
-- Do not treat research, plans, or handoffs as current authoritative docs.
-- Do not create every optional subdirectory preemptively.
-- Do not overwrite an existing task folder; stop and resolve the collision.
-- Dynamic work content is local/private by default. Do not force-add it to Git or expose sensitive content in a PR.
-- If a task yields durable knowledge or an architecture decision, synthesize only the durable result into the appropriate wiki, docs, or ADR location.
+- 実行中のソースコードをwork/へ複製しません。
+- 調査、計画、引き渡しを、現在の正式なdocsとして扱いません。
+- 任意のサブディレクトリをすべて事前作成しません。
+- 既存のタスクフォルダーを上書きせず、停止して衝突を解消します。
+- 動的な作業内容は、既定ではローカル／非公開です。Gitへ強制追加したり、機微な内容をPRで公開したりしません。
+- タスクから永続的な知識またはアーキテクチャ決定が得られた場合は、永続的な結果だけを適切なwiki、docs、ADRへ統合します。
 
-## Verify
+## 検証
 
-Confirm the task exists in exactly one lifecycle state, its metadata matches that state, required handoff evidence exists, and no confidential content was staged.
+タスクがライフサイクル上の1状態だけに存在し、メタデータがその状態と一致し、必要な引き渡し証拠が存在し、機密内容がステージされていないことを確認します。

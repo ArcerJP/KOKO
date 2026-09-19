@@ -1,42 +1,42 @@
-# Workspace Extension Policy
+# ワークスペース拡張ポリシー
 
-## Purpose
+## 目的
 
-Extend KOKO without speculative structure, duplicated responsibility, instruction bloat, or unclear lifecycle.
+投機的な構造、責務の重複、指示の肥大化、不明確なライフサイクルを生じさせずにKOKOを拡張します。
 
-## Required Assessment
+## 必須評価
 
-Before creating or materially restructuring a persistent directory or architecture domain:
+永続ディレクトリまたはアーキテクチャ領域を作成、もしくは実質的に再構成する前に、次を実施します。
 
-1. Classify the information or implementation type.
-2. Check whether an existing directory already owns it.
-3. Establish why a new top-level directory is necessary now.
-4. Describe its responsibility in one unambiguous sentence.
-5. Define creation, active use, update, archival, and removal lifecycle.
-6. Identify its authoritative source and conflict rules.
-7. Identify who or what may write it.
-8. Define tracked, ignored, generated, or private-first Git policy.
-9. Review secrets, privacy, copyright, binary, and file-size risks.
-10. Decide whether unique subtree behavior justifies nested AGENTS.md.
-11. Decide whether a human README is useful rather than automatic.
-12. Update directory-map.md.
-13. Check for duplicated or overlapping responsibility.
-14. Update source-of-truth.md when authority changes.
+1. 情報または実装の種類を分類する。
+2. 既存ディレクトリがすでにその責務を持っていないか確認する。
+3. 新しいトップレベルディレクトリが現時点で必要な理由を明確にする。
+4. その責務を曖昧さのない1文で説明する。
+5. 作成、利用中、更新、アーカイブ、削除のライフサイクルを定義する。
+6. 正本となる情報源と競合時のルールを特定する。
+7. 書込みを許可する人または仕組みを特定する。
+8. 追跡対象、追跡対象外、生成物、プライベート優先のいずれかとしてGitポリシーを定義する。
+9. 秘密情報、プライバシー、著作権、バイナリ、ファイルサイズのリスクを確認する。
+10. サブツリー固有の振る舞いが、下位のAGENTS.mdを正当化するか判断する。
+11. 人間向けREADMEが実際に有用かを判断し、自動的には作成しない。
+12. directory-map.mdを更新する。
+13. 重複または競合する責務がないか確認する。
+14. 正本性が変わる場合はsource-of-truth.mdを更新する。
 
-Use the evolve-workspace Skill for this assessment. Use research-plan-implement and human approval when the change is Level 3 or materially changes established architecture.
+この評価にはevolve-workspace Skillを使用します。変更がLevel 3に該当する場合、または確立済みのアーキテクチャを実質的に変更する場合は、research-plan-implementと人間による承認を使用します。
 
-## Adding a Skill
+## Skillの追加
 
-Add a Skill only when the workflow is repeated, order-sensitive, project-specific, costly to perform incorrectly, too detailed for AGENTS.md, and expressible with a clear trigger. First attempt to extend an existing Skill. Do not create a Skill for a one-time task.
+ワークフローが反復され、順序に依存し、プロジェクト固有で、誤って実行した場合のコストが高く、AGENTS.mdに記載するには詳細すぎ、明確なトリガーで表現できる場合に限り、Skillを追加します。まず既存Skillの拡張を検討します。単発タスクのためにSkillを作成しません。
 
-A new Skill starts with only SKILL.md containing valid name and description frontmatter. Add scripts, references, assets, or UI metadata only for a demonstrated use.
+新しいSkillは、有効なnameとdescriptionのFront Matterを含むSKILL.mdだけで開始します。scripts、references、assets、UIメタデータは、実際の用途が確認された場合に限り追加します。
 
-## Naming
+## 命名
 
-Use lowercase kebab-case for ordinary directories and standard uppercase names for documented special files. Use YYYY-MM-DD-topic.md for dated artifacts and TASK-YYYYMMDD-short-kebab-description for tasks.
+通常のディレクトリには小文字のkebab-caseを、文書化された特殊ファイルには標準の大文字名を使用します。日付付き成果物にはYYYY-MM-DD-topic.mdを、タスクにはTASK-YYYYMMDD-short-kebab-descriptionを使用します。
 
-Do not create ambiguous buckets or faux versions such as misc/, other/, stuff/, temp2/, new/, old2/, final/, final-v2/, or final-final/. Git owns version history.
+misc/、other/、stuff/、temp2/、new/、old2/、final/、final-v2/、final-final/のような曖昧な入れ物や擬似的なバージョンを作成しません。バージョン履歴はGitで管理します。
 
-## Implementation Domains
+## 実装領域
 
-Do not pre-create src/, app/, apps/, frontend/, backend/, server/, client/, api/, services/, packages/, libs/, infra/, database/, mobile/, or web/. Introduce the smallest structure only after the product and technology decisions make its responsibility concrete.
+src/、app/、apps/、frontend/、backend/、server/、client/、api/、services/、packages/、libs/、infra/、database/、mobile/、web/を事前作成しません。プロダクトと技術の決定によって責務が具体化した後に限り、最小の構造を導入します。

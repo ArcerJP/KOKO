@@ -1,5 +1,5 @@
-# Archive
+# Archive（アーカイブ済み）
 
-This state contains confirmed closed task history under archive/YYYY/<task-id>/.
+この状態には、終了確認済みのタスク履歴をarchive/YYYY/<task-id>/配下へ置きます。
 
-Archived artifacts are historical, not current authoritative specifications. Dynamic task folders are ignored by Git and private by default.
+アーカイブ済みの成果物は過去の記録であり、現在の正式な仕様ではありません。動的なタスクフォルダーはGitの追跡対象外で、既定では非公開です。

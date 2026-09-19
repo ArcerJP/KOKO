@@ -1,35 +1,35 @@
-# Directory Map
+# ディレクトリマップ
 
-## Registry
+## 登録表
 
-| Path | Purpose | Category | Authority | Read timing | Write policy | Git policy | Lifecycle |
+| パス | 目的 | 区分 | 正本性 | 読込時点 | 書込ポリシー | Gitポリシー | ライフサイクル |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| AGENTS.md | Repository instruction and routing | Codex-native instruction | Authoritative for repository behavior | Automatic at repository-root discovery | Controlled, concise, repository-wide only | Tracked | Durable |
-| .agents/skills/ | Repeatable task workflows | Codex-native Skills | Authoritative for selected procedure | On trigger or explicit invocation | One focused Skill per justified workflow | Tracked | Durable, evolvable |
-| README.md | Human entrypoint | Orientation | Informative; links to formal docs | On onboarding | Concise overview, not architecture manual | Tracked | Durable |
-| SOUL.md | Collaboration values | KOKO context | Authoritative for values | On demand | Values only; no procedures | Tracked | Durable |
-| IDENTITY.md | Repository-local AI role | KOKO context | Authoritative for role boundary | On demand | No model-version binding | Tracked | Durable |
-| USER.md | Collaboration preferences | KOKO context | Authoritative for recorded preferences | On demand | Public-safe, no inferred personal facts | Tracked | Durable |
-| TOOLS.md | Tool guidance | KOKO context | Authoritative for repository tool policy | Before relevant tool work | No credentials or stale version claims | Tracked | Durable |
-| MEMORY.md | Project continuity | KOKO memory | Authoritative only for concise continuity | When prior context matters | Public-safe summaries and links | Tracked | Durable |
-| memory/ | Daily or temporary context | KOKO memory | Temporary | For relevant active context | Date/topic files; selectively promote | README tracked; dynamic entries ignored | Short-lived |
-| docs/AGENTS.md | Documentation-only behavior | Nested Codex instruction | Authoritative under docs/ | When CWD/path scope includes docs, or explicitly routed | Scoped rules only | Tracked | Durable |
-| docs/architecture/ | Current formal architecture | Normative docs | Authoritative for documented architecture | On architecture-dependent work | Update with implementation; avoid proposals as current state | Tracked | Durable |
-| docs/decisions/ | Architecture decision records | Normative decisions | Authoritative for accepted decisions | When rationale or alternatives matter | Append decisions; supersede explicitly | Tracked | Durable history |
-| knowledge/AGENTS.md | Knowledge-only behavior | Nested Codex instruction | Authoritative under knowledge/ | When CWD/path scope includes knowledge, or explicitly routed | Scoped rules only | Tracked | Durable |
-| knowledge/SCHEMA.md | Knowledge system rules | Normative schema | Authoritative for knowledge handling | Before ingestion or schema change | Controlled; update related guidance | Tracked | Durable |
-| knowledge/raw/ | Original evidence and sources | Evidence | Primary source | On demand for source claims | Import/append; normally immutable | README tracked; contents ignored/private-first | Durable when permitted |
-| knowledge/wiki/ | Reusable derived knowledge | Synthesis | Secondary to raw evidence and normative docs | On relevant research | Maintain canonical topic pages with provenance | Tracked when public-safe | Durable, revisable |
-| work/AGENTS.md | Work-only behavior | Nested Codex instruction | Authoritative under work/ | When CWD/path scope includes work, or explicitly routed | Scoped rules only | Tracked | Durable |
-| work/WORKFLOW.md | Task state model | Normative workflow | Authoritative for task states | Before state changes | Change only with lifecycle review | Tracked | Durable |
-| work/_templates/ | Task artifact templates | Template | Authoritative starting structure | When creating corresponding artifact | Adapt without changing category meaning | Tracked | Durable |
-| work/inbox/ | Received, unstarted tasks | Task state | Task folder location | At intake/triage | Create request; move to start | README tracked; tasks ignored/private-first | Pending |
-| work/notebook/ | Active task context | Task state | Task folder location | During active work | One active folder; no source copies | README tracked; tasks ignored/private-first | Active |
-| work/outbox/ | Codex-complete handoff | Task state | Task folder location | At review/handoff | Include evidence; await human disposition | README tracked; tasks ignored/private-first | Review pending |
-| work/archive/ | Confirmed historical tasks | Task history | Task folder location | On historical lookup | Move into YYYY/task-id after close | README tracked; tasks ignored/private-first | Archived |
-| .github/PULL_REQUEST_TEMPLATE.md | Pull request prompts | Collaboration template | Authoritative for default PR structure | When preparing a PR | Do not copy private task content | Tracked | Durable |
-| Future source tree | Actual product implementation | Source/runtime | Authoritative for implemented behavior | During product work | Created only after stack/shape decision | Tracked as later policy defines | Product lifecycle |
+| AGENTS.md | リポジトリの指示とルーティング | Codexネイティブ指示 | リポジトリの振る舞いに対する正本 | リポジトリルートの検出時に自動 | 管理された簡潔な内容。リポジトリ全体のみ | 追跡対象 | 永続 |
+| .agents/skills/ | 反復可能なタスクワークフロー | CodexネイティブSkills | 選択された手順に対する正本 | トリガー該当時または明示的な呼び出し時 | 正当化されたワークフローごとに、焦点を絞ったSkillを1つ | 追跡対象 | 永続、発展可能 |
+| README.md | 人間向けの入口 | 案内 | 参考情報。正式文書へリンク | オンボーディング時 | アーキテクチャ手引書ではなく簡潔な概要 | 追跡対象 | 永続 |
+| SOUL.md | 協働上の価値観 | KOKOコンテキスト | 価値観に対する正本 | 必要時 | 価値観のみ。手順は含めない | 追跡対象 | 永続 |
+| IDENTITY.md | リポジトリ内でのAIの役割 | KOKOコンテキスト | 役割境界に対する正本 | 必要時 | モデルバージョンに結び付けない | 追跡対象 | 永続 |
+| USER.md | 協働上の希望 | KOKOコンテキスト | 記録された希望に対する正本 | 必要時 | 公開可能。推測した個人的事実は含めない | 追跡対象 | 永続 |
+| TOOLS.md | ツールの指針 | KOKOコンテキスト | リポジトリのツールポリシーに対する正本 | 関連するツール作業前 | 認証情報や古いバージョンの断定を含めない | 追跡対象 | 永続 |
+| MEMORY.md | プロジェクトの継続情報 | KOKOメモリ | 簡潔な継続情報に限った正本 | 過去のコンテキストが関係する場合 | 公開可能な要約とリンク | 追跡対象 | 永続 |
+| memory/ | 日次または一時的なコンテキスト | KOKOメモリ | 一時情報 | 関連する実行中コンテキストがある場合 | 日付／トピック別ファイル。選別して昇格 | READMEは追跡対象、動的な記録は対象外 | 短期 |
+| docs/AGENTS.md | 文書に限った振る舞い | 下位のCodex指示 | docs/配下の正本 | CWDまたはパスの範囲にdocsが含まれる場合、または明示的なルーティング時 | 対象範囲を限定したルールのみ | 追跡対象 | 永続 |
+| docs/architecture/ | 現在の正式なアーキテクチャ | 規範的文書 | 文書化されたアーキテクチャに対する正本 | アーキテクチャに依存する作業時 | 実装とともに更新し、提案を現在の状態として記載しない | 追跡対象 | 永続 |
+| docs/decisions/ | アーキテクチャ決定記録 | 規範的決定 | 受理済みの決定に対する正本 | 根拠または代替案が関係する場合 | 決定を追記し、置換を明示 | 追跡対象 | 永続的な履歴 |
+| knowledge/AGENTS.md | 知識に限った振る舞い | 下位のCodex指示 | knowledge/配下の正本 | CWDまたはパスの範囲にknowledgeが含まれる場合、または明示的なルーティング時 | 対象範囲を限定したルールのみ | 追跡対象 | 永続 |
+| knowledge/SCHEMA.md | 知識システムのルール | 規範的スキーマ | 知識の取扱いに対する正本 | 取込みまたはスキーマ変更前 | 管理対象。関連する指針も更新 | 追跡対象 | 永続 |
+| knowledge/raw/ | 原証拠と原資料 | 証拠 | 一次資料 | 出典に関する主張で必要な場合 | 取込み／追記。通常は変更不可 | READMEは追跡対象、内容は対象外／プライベート優先 | 許可される限り永続 |
+| knowledge/wiki/ | 再利用可能な導出知識 | 統合知識 | 原証拠と規範的文書に対して二次的 | 関連する調査時 | 出典情報とともに正規のトピックページを保守 | 公開可能な場合に追跡 | 永続、改訂可能 |
+| work/AGENTS.md | 作業に限った振る舞い | 下位のCodex指示 | work/配下の正本 | CWDまたはパスの範囲にworkが含まれる場合、または明示的なルーティング時 | 対象範囲を限定したルールのみ | 追跡対象 | 永続 |
+| work/WORKFLOW.md | タスク状態モデル | 規範的ワークフロー | タスク状態に対する正本 | 状態変更前 | ライフサイクルレビューを伴う場合に限り変更 | 追跡対象 | 永続 |
+| work/_templates/ | タスク成果物のテンプレート | テンプレート | 正式な開始時構造 | 対応する成果物の作成時 | 区分の意味を変えずに調整 | 追跡対象 | 永続 |
+| work/inbox/ | 受領済みで未着手のタスク | タスク状態 | タスクフォルダーの配置場所 | 受付／トリアージ時 | 依頼を作成し、開始時に移動 | READMEは追跡対象、タスクは対象外／プライベート優先 | 保留中 |
+| work/notebook/ | 実行中タスクのコンテキスト | タスク状態 | タスクフォルダーの配置場所 | 作業中 | 実行中フォルダーは1つ。ソースを複製しない | READMEは追跡対象、タスクは対象外／プライベート優先 | 実行中 |
+| work/outbox/ | Codex側で完了した引き渡し | タスク状態 | タスクフォルダーの配置場所 | レビュー／引き渡し時 | 証拠を含め、人間の判断を待つ | READMEは追跡対象、タスクは対象外／プライベート優先 | レビュー待ち |
+| work/archive/ | 終了確認済みの過去タスク | タスク履歴 | タスクフォルダーの配置場所 | 過去の参照時 | 終了後にYYYY/task-idへ移動 | READMEは追跡対象、タスクは対象外／プライベート優先 | アーカイブ済み |
+| .github/PULL_REQUEST_TEMPLATE.md | Pull Requestの入力項目 | 協働テンプレート | 既定のPR構造に対する正本 | PR準備時 | 非公開のタスク内容を複製しない | 追跡対象 | 永続 |
+| 将来のソースツリー | 実際のプロダクト実装 | ソース／ランタイム | 実装済みの動作に対する正本 | プロダクト作業時 | スタック／構成の決定後に限り作成 | 将来のポリシー定義に従って追跡 | プロダクトライフサイクル |
 
-## Registry Maintenance
+## 登録表の保守
 
-Any persistent path added, removed, or materially repurposed must update this registry after following extension-policy.md. A path must have one clear responsibility, authority, read timing, write policy, Git policy, and lifecycle.
+永続パスを追加、削除、または実質的に用途変更する場合は、extension-policy.mdに従った後でこの登録表を更新します。各パスには、明確な責務、正本性、読込時点、書込ポリシー、Gitポリシー、ライフサイクルを1つずつ定義しなければなりません。

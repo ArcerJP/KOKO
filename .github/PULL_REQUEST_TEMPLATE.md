@@ -1,37 +1,37 @@
-# Summary
+# 概要
 
-<!-- What changed and why? -->
+<!-- 何を、なぜ変更したか。 -->
 
-## Related Task
+## 関連タスク
 
-<!-- Link the task ID or issue. Do not copy private task content into the PR. -->
+<!-- タスクIDまたはIssueへのリンク。非公開のタスク内容をPRへ複製しないこと。 -->
 
-## Research / Plan
+## 調査／計画
 
-<!-- Link public-safe research or plan artifacts when tracked; otherwise summarize only what reviewers need. -->
+<!-- 追跡対象の公開可能な調査・計画成果物があればリンクする。それ以外はレビューに必要な内容だけを要約すること。 -->
 
-## Changes
+## 変更内容
 
-- <!-- Describe each material change. -->
+- <!-- 重要な変更をそれぞれ記載する。 -->
 
-## Verification
+## 検証
 
-- [ ] Relevant checks completed and results recorded
-- [ ] Diff reviewed for unintended changes
+- [ ] 関連する確認を完了し、結果を記録した
+- [ ] 意図しない変更がないか差分をレビューした
 
-## Security Impact
+## セキュリティへの影響
 
-<!-- State the impact, or explain why there is none. Never include secret values. -->
+<!-- 影響を記載するか、影響がない理由を説明する。秘密の値は絶対に含めないこと。 -->
 
-## Breaking Changes
+## 破壊的変更
 
-<!-- State migration or compatibility impact, or write None. -->
+<!-- 移行または互換性への影響を記載する。該当しない場合は「なし」と記載する。 -->
 
-## Checklist
+## チェックリスト
 
-- [ ] Scope matches the request and approved plan
-- [ ] Tests or justified alternatives are documented
-- [ ] Documentation is consistent with current behavior
-- [ ] No secrets, credentials, personal data, or private task artifacts are included
-- [ ] No unrelated changes are included
-- [ ] Follow-up work and limitations are explicit
+- [ ] 範囲が依頼および承認済み計画と一致している
+- [ ] テストまたは正当化された代替手段が文書化されている
+- [ ] 文書が現在の動作と一致している
+- [ ] 秘密情報、認証情報、個人データ、非公開のタスク成果物が含まれていない
+- [ ] 無関係な変更が含まれていない
+- [ ] 後続作業と制約が明示されている

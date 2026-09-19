@@ -1,103 +1,103 @@
 # KOKO
 
-## Purpose
+## 目的
 
-KOKO is an AI-native workspace for long-term collaboration between people and OpenAI Codex.
+KOKOは、人とOpenAI Codexが長期的に協働するためのAIネイティブワークスペースです。
 
-The product, programming language, framework, database, cloud provider, and repository shape are not selected yet.
+プロダクト、プログラミング言語、フレームワーク、データベース、クラウドプロバイダー、リポジトリ構成は、まだ選定されていません。
 
-This file is the repository routing layer. Keep detailed procedures in Skills and formal architecture in docs/.
+このファイルはリポジトリのルーティング層です。詳細な手順はSkillsに、正式なアーキテクチャはdocs/に記載してください。
 
-## Core Principles
+## 基本原則
 
-- Progressive Disclosure: read only the context needed for the current task.
-- Single Source of Truth: do not copy complete rules, specifications, or decisions across files.
-- Evidence Before Synthesis: keep original evidence separate from derived knowledge.
-- Research Before Non-trivial Planning: resolve material unknowns before committing to a design.
-- Plan Before Non-trivial Implementation: plan multi-file, architectural, or risky work first.
-- Minimal Change: do not mix unrelated changes into the requested work.
-- Verify Before Completion: distinguish editing from demonstrated completion.
-- Security First: keep secrets, credentials, personal data, and sensitive sources out of Git.
-- No Speculative Structure: add structure only for a present, justified responsibility.
+- 段階的開示（Progressive Disclosure）：現在のタスクに必要なコンテキストだけを読みます。
+- 信頼できる唯一の情報源（Single Source of Truth）：完全なルール、仕様、決定を複数ファイルへ複製しません。
+- 統合より先に証拠（Evidence Before Synthesis）：原証拠と、そこから導出した知識を分離します。
+- 非自明な計画より先に調査：設計を確定する前に、重要な不明点を解消します。
+- 非自明な実装より先に計画：複数ファイル、アーキテクチャ、または高リスクの作業は先に計画します。
+- 最小限の変更：依頼された作業に無関係な変更を混在させません。
+- 完了より先に検証：編集したことと、完了を実証したことを区別します。
+- セキュリティ優先：秘密情報、認証情報、個人データ、機微な資料をGitへ含めません。
+- 投機的な構造を作らない：現在存在し、正当化できる責務に限って構造を追加します。
 
-## Repository Routing
+## リポジトリのルーティング
 
-- docs/ — current, authoritative project and architecture documentation.
-- docs/decisions/ — architecture decision records for consequential decisions.
-- knowledge/raw/ — original evidence and source material; private-first and normally immutable.
-- knowledge/wiki/ — reusable knowledge derived from cited evidence.
-- knowledge/SCHEMA.md — formal knowledge-layer rules; read before knowledge ingestion.
-- work/ — task lifecycle and temporary task-scoped artifacts.
-- work/WORKFLOW.md — state definitions and transitions; read when moving task state.
-- .agents/skills/ — repeatable task-specific procedures loaded on demand.
-- MEMORY.md — concise, durable, public-safe project continuity.
-- memory/ — temporary or daily local context; private by default.
-- SOUL.md — collaboration values; read only when role or judgment guidance is relevant.
-- IDENTITY.md — the repository-local AI role; read only when role boundaries matter.
-- USER.md — durable collaboration preferences; read only when they affect the task.
-- TOOLS.md — tool guidance; read before environment- or tool-specific work.
+- docs/ — 現在の正式なプロジェクト文書およびアーキテクチャ文書。
+- docs/decisions/ — 重要な決定に対するアーキテクチャ決定記録。
+- knowledge/raw/ — 原証拠と原資料。プライベート優先で、通常は変更不可。
+- knowledge/wiki/ — 出典を示した証拠から導出した再利用可能な知識。
+- knowledge/SCHEMA.md — 知識層の正式なルール。知識を取り込む前に読みます。
+- work/ — タスクのライフサイクルと、タスク単位の一時成果物。
+- work/WORKFLOW.md — 状態の定義と遷移。タスク状態を移す際に読みます。
+- .agents/skills/ — 必要時に読み込む、反復可能なタスク固有手順。
+- MEMORY.md — 簡潔で永続的かつ公開可能なプロジェクト継続情報。
+- memory/ — 一時的または日次のローカルコンテキスト。既定では非公開。
+- SOUL.md — 協働上の価値観。役割や判断の指針が関係する場合に限り読みます。
+- IDENTITY.md — リポジトリ内でのAIの役割。役割境界が関係する場合に限り読みます。
+- USER.md — 永続的な協働上の希望。タスクへ影響する場合に限り読みます。
+- TOOLS.md — ツールの指針。環境またはツール固有の作業前に読みます。
 
-## Mandatory Skill Routing
+## 必須のSkillルーティング
 
-Use the named repository Skill when its trigger applies:
+次のトリガーに該当する場合は、指定されたリポジトリSkillを使用します。
 
-- New, started, handed-off, closed, moved, or archived task state → $task-lifecycle.
-- Multi-file change, architecture work, migration, risky change, or non-trivial implementation → $research-plan-implement.
-- Adding raw evidence or deriving reusable wiki knowledge → $knowledge-ingest.
-- Inspecting or staging Git changes, committing, branching, remotes, pushing, or PR preparation → $git-workflow.
-- Changing top-level structure, Skills, AGENTS.md files, or architecture domains → $evolve-workspace.
+- タスク状態の新規作成、開始、引き渡し、終了、移動、アーカイブ → $task-lifecycle。
+- 複数ファイルの変更、アーキテクチャ作業、移行、高リスクな変更、非自明な実装 → $research-plan-implement。
+- 原証拠の追加、または再利用可能なwiki知識の導出 → $knowledge-ingest。
+- Git変更の確認やステージング、commit、ブランチ、remote、push、PR準備 → $git-workflow。
+- トップレベル構造、Skills、AGENTS.md、アーキテクチャ領域の変更 → $evolve-workspace。
 
-Do not split planning, implementation, handoff review, or memory maintenance into new Skills unless evolve-workspace establishes a repeated need.
+反復する必要性がevolve-workspaceによって確認されない限り、計画、実装、引き渡しレビュー、メモリ保守を新しいSkillsへ分割しません。
 
-## Directory-specific Guidance
+## ディレクトリ固有の指針
 
-Root instructions apply repository-wide.
+ルートの指示はリポジトリ全体に適用されます。
 
-Before changing docs/, knowledge/, or work/ from the repository root, read the AGENTS.md in that subtree. Codex discovers nested instructions automatically only along the active working-directory path, so root-level work must route to them explicitly.
+リポジトリルートからdocs/、knowledge/、work/を変更する前に、そのサブツリー内のAGENTS.mdを読んでください。Codexが下位の指示を自動検出するのは、現在の作業ディレクトリへ至るパス上だけです。そのため、ルートからの作業では明示的に該当指示へルーティングする必要があります。
 
-A nested AGENTS.md contains only rules specific to its subtree. Do not copy this file into nested guidance.
+下位のAGENTS.mdには、そのサブツリー固有のルールだけを記載します。このファイルを下位の指針へ複製しません。
 
-## Context Routing
+## コンテキストのルーティング
 
-Do not preload every repository document.
+リポジトリ内の全文書を事前に読み込まないでください。
 
-- Read formal architecture only when the task depends on it.
-- Read raw evidence only when the task requires the source.
-- Read wiki knowledge only when reusable findings are relevant.
-- Read task artifacts only for the active task.
-- Read MEMORY.md for continuity, not as a substitute for current source or docs.
-- Treat SOUL.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, memory/, knowledge/, work/, and docs/ as KOKO conventions, not Codex auto-loaded special files.
+- タスクが依存する場合に限り、正式なアーキテクチャを読みます。
+- タスクが原資料を必要とする場合に限り、原証拠を読みます。
+- 再利用可能な知見が関係する場合に限り、wiki知識を読みます。
+- 実行中のタスクに限り、タスク成果物を読みます。
+- MEMORY.mdは継続性のために読み、現在のソースやdocs/の代わりには使用しません。
+- SOUL.md、IDENTITY.md、USER.md、TOOLS.md、MEMORY.md、memory/、knowledge/、work/、docs/はKOKOの規約として扱い、Codexが自動読込する特殊ファイルとは見なしません。
 
-## Information Boundaries
+## 情報の境界
 
-- Repository-wide behavior belongs here.
-- Directory-specific behavior belongs in the nearest nested AGENTS.md.
-- Repeatable procedures belong in .agents/skills/.
-- Original evidence belongs in knowledge/raw/.
-- Derived reusable knowledge belongs in knowledge/wiki/.
-- Current normative specifications belong in docs/.
-- Task-specific research and plans belong in work/notebook/.
-- Actual implementation belongs in the future source tree, not in work/.
-- If information does not fit, reclassify it; do not create misc/, other/, or stuff/.
+- リポジトリ全体の振る舞いは、このファイルに記載します。
+- ディレクトリ固有の振る舞いは、最も近い下位のAGENTS.mdに記載します。
+- 反復可能な手順は、.agents/skills/に記載します。
+- 原証拠は、knowledge/raw/に保存します。
+- 導出した再利用可能な知識は、knowledge/wiki/に保存します。
+- 現在の規範的な仕様は、docs/に記載します。
+- タスク固有の調査と計画は、work/notebook/に保存します。
+- 実際の実装は、work/ではなく将来のソースツリーに置きます。
+- 情報が既存の分類に適合しない場合は再分類し、misc/、other/、stuff/を作成しません。
 
-## Safety
+## 安全性
 
-- Do not modify anything outside the KOKO repository without explicit permission.
-- Inspect existing state before broad changes; never delete unexpected data to recreate an assumed state.
-- Do not infer or introduce a technology stack, framework, source tree, CI, deployment, database, cloud provider, or license.
-- Do not fabricate important facts, approvals, verification results, or completion.
-- Do not add secrets, tokens, passwords, private keys, credentials, session data, or sensitive personal information.
-- Do not commit confidential raw sources or task artifacts without explicit policy and authorization.
-- Do not run destructive Git operations, rewrite history, overwrite a remote, or discard user changes without explicit permission.
-- Surface contradictions, material uncertainty, security concerns, and approval requirements before proceeding past the relevant gate.
+- 明示的な許可なく、KOKOリポジトリ外を変更しません。
+- 広範な変更前に既存状態を確認し、想定した状態を再現する目的で予期しないデータを削除しません。
+- 技術スタック、フレームワーク、ソースツリー、CI、デプロイ、データベース、クラウドプロバイダー、ライセンスを推測して導入しません。
+- 重要な事実、承認、検証結果、完了を捏造しません。
+- 秘密情報、トークン、パスワード、秘密鍵、認証情報、セッションデータ、機微な個人情報を追加しません。
+- 明示的なポリシーと許可なく、機密の原資料やタスク成果物をcommitしません。
+- 明示的な許可なく、破壊的なGit操作、履歴の書き換え、remoteの上書き、ユーザー変更の破棄を行いません。
+- 矛盾、重大な不確実性、セキュリティ上の懸念、承認要件は、該当するゲートを通過する前に明示します。
 
-## Change Discipline
+## 変更時の規律
 
-- Confirm scope, authority, and the current source of truth before mutation.
-- Resolve user-owned choices before committing to a materially different design.
-- Classify new information by responsibility, lifecycle, and Git policy before storing it.
-- Update the authoritative layer and link to it instead of preserving competing full copies.
+- 変更前に、範囲、権限、現在の正本を確認します。
+- 実質的に異なる設計へ確定する前に、ユーザーが決めるべき選択を解決します。
+- 新しい情報は、保存前に責務、ライフサイクル、Gitポリシーで分類します。
+- 競合する完全な複製を残さず、正式な層を更新してそこへリンクします。
 
-## Completion
+## 完了条件
 
-Before claiming completion, verify the changed behavior or artifact, review the diff, check documentation consistency, inspect security impact, and report limitations or pending human decisions.
+完了を報告する前に、変更した振る舞いまたは成果物を検証し、差分をレビューし、文書の一貫性とセキュリティへの影響を確認し、制約または未決の人間判断を報告します。

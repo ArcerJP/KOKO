@@ -1,67 +1,67 @@
-# Work Lifecycle
+# 作業ライフサイクル
 
-## Purpose
+## 目的
 
-The location of one task folder expresses its current state:
+1つのタスクフォルダーの配置場所によって、現在の状態を表します。
 
 ~~~text
 INBOX → ACTIVE / NOTEBOOK → OUTBOX → ARCHIVED
 ~~~
 
-State changes move the folder; they do not copy it. A task must exist in only one state.
+状態変更ではフォルダーを移動し、複製しません。1つのタスクは、必ず1つの状態だけに存在します。
 
-## INBOX
+## INBOX（未着手）
 
-Path: work/inbox/<task-id>/
+パス：work/inbox/<task-id>/
 
-Meaning: the request has been received but work has not started.
+意味：依頼を受領済みですが、作業は開始していません。
 
-Minimum artifact: request.md with the goal, requirements, constraints, acceptance criteria, references, and known unknowns.
+最小成果物：目標、要件、制約、受入条件、参照資料、既知の不明点を記載したrequest.md。
 
-Exit condition: the task is intentionally started, declined, or otherwise dispositioned.
+終了条件：タスクを意図的に開始、辞退、またはその他の方法で処理した状態。
 
-## ACTIVE / NOTEBOOK
+## ACTIVE／NOTEBOOK（実行中）
 
-Path: work/notebook/<task-id>/
+パス：work/notebook/<task-id>/
 
-Meaning: the task is actively being researched, planned, implemented, or verified.
+意味：タスクを現在、調査、計画、実装、または検証しています。
 
-Possible artifacts:
+作成可能な成果物：
 
-- request.md;
-- research/YYYY-MM-DD-topic.md;
-- plans/YYYY-MM-DD-topic.md;
-- prs/ review artifacts;
-- a handoff draft.
+- request.md。
+- research/YYYY-MM-DD-topic.md。
+- plans/YYYY-MM-DD-topic.md。
+- prs/のレビュー成果物。
+- 引き渡し文書の下書き。
 
-Create only needed paths. Do not store copies of active source files here.
+必要なパスだけを作成します。実行中のソースファイルのコピーを、ここへ保存しません。
 
-Exit condition: scoped implementation and verification are complete enough for human handoff, or the task is explicitly cancelled/closed.
+終了条件：対象範囲の実装と検証が人間への引き渡しに十分な状態まで完了したか、タスクが明示的に取消し／終了された状態。
 
-## OUTBOX
+## OUTBOX（引き渡し済み）
 
-Path: work/outbox/<task-id>/
+パス：work/outbox/<task-id>/
 
-Meaning: Codex-side work is complete and presented for human review, acceptance, or next action. This does not imply human acceptance.
+意味：Codex側の作業が完了し、人間のレビュー、受入れ、または次の対応のために提示されています。人間が受け入れたことは意味しません。
 
-Required evidence should state what was requested and completed, changed files, verification and tests, security review, limitations, risks, follow-up, related research/plan, and commit or PR status.
+必要な証拠には、依頼内容と完了内容、変更ファイル、検証とテスト、セキュリティレビュー、制約、リスク、後続対応、関連する調査／計画、commitまたはPRの状態を記載します。
 
-Exit condition: a human accepts, closes, returns, or redirects the task.
+終了条件：人間がタスクを受け入れ、終了し、差し戻し、または別の処理へ変更した状態。
 
-## ARCHIVED
+## ARCHIVED（アーカイブ済み）
 
-Path: work/archive/YYYY/<task-id>/
+パス：work/archive/YYYY/<task-id>/
 
-Meaning: the task is confirmed closed and retained as historical task context.
+意味：タスクの終了が確認され、過去のタスクコンテキストとして保持されています。
 
-Archive only after explicit human acceptance or close disposition. Archived task artifacts remain historical and do not become current specifications.
+人間による明示的な受入れまたは終了判断の後に限り、アーカイブします。アーカイブ済みのタスク成果物は過去の記録であり、現在の仕様にはなりません。
 
-## Task IDs
+## タスクID
 
-Use TASK-YYYYMMDD-short-kebab-description, for example TASK-20260919-bootstrap-koko. The date is the intake date. The description must identify the task; do not use an unexplained number alone.
+TASK-YYYYMMDD-short-kebab-description形式を使用します。例：TASK-20260919-bootstrap-koko。日付は受付日とします。説明部分でタスクを識別できるようにし、説明のない番号だけを使用しません。
 
-## Privacy and Git
+## プライバシーとGit
 
-Dynamic contents under inbox/, notebook/, outbox/, and archive/ are local/private by default and ignored by Git. Only the state README files and templates are tracked initially.
+inbox/、notebook/、outbox/、archive/配下の動的な内容は、既定ではローカル／非公開で、Gitの追跡対象外です。初期状態では、各状態のREADMEファイルとテンプレートだけを追跡します。
 
-If a team later needs task artifacts in Git, change the policy explicitly after privacy, security, history, and collaboration review. Never force-add private content under the current policy.
+将来チームがタスク成果物をGitで管理する必要が生じた場合は、プライバシー、セキュリティ、履歴、協働方法をレビューしたうえで、ポリシーを明示的に変更します。現在のポリシーでは、非公開内容を強制追加してはいけません。

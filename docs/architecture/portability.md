@@ -1,30 +1,30 @@
-# AI Environment Portability
+# AI環境の可搬性
 
-## Current Position
+## 現在の方針
 
-OpenAI Codex is the primary AI development environment. The Codex-native configuration is the canonical implementation, using AGENTS.md and .agents/skills/.
+OpenAI Codexを主要なAI開発環境とします。AGENTS.mdと.agents/skills/を使用するCodexネイティブな構成を、正式な実装とします。
 
-No CLAUDE.md, .claude/ directory, Anthropic-specific configuration, or other unused AI IDE adapter is part of the bootstrap.
+初期構築には、CLAUDE.md、.claude/ディレクトリ、Anthropic固有の設定、その他の未使用AI IDE用アダプターを含めません。
 
-## Portability Principle
+## 可搬性の原則
 
-Portability means keeping responsibilities, information categories, lifecycles, evidence boundaries, source-of-truth rules, and workspace structure understandable without depending excessively on one vendor's file names. It does not mean pre-creating compatibility files for tools that are not in use.
+可搬性とは、責務、情報区分、ライフサイクル、証拠の境界、正本のルール、ワークスペース構造を、特定ベンダーのファイル名へ過度に依存せず理解可能に保つことです。使用していないツール用の互換ファイルを事前作成することではありません。
 
-Currently, the Codex-native structure is the canonical implementation. If KOKO later migrates to another AI IDE, verify that target IDE's official specification at that time before designing an adapter or migration.
+現在は、Codexネイティブな構造を正式な実装とします。将来KOKOを別のAI IDEへ移行する場合は、アダプターまたは移行を設計する前に、その時点における対象IDEの公式仕様を確認します。
 
-## Future Migration Procedure
+## 将来の移行手順
 
-Only after an actual migration request:
+実際の移行依頼があった後に限り、次を実施します。
 
-1. Verify the target IDE's current official documentation.
-2. Research the current KOKO architecture and instruction hierarchy.
-3. Preserve semantic responsibilities and information classification.
-4. Design the smallest necessary target-specific instruction layer.
-5. Avoid duplicated canonical instructions between AGENTS.md and the adapter.
-6. Verify current compatibility of any Skill standard or translate intentionally.
-7. Record the migration or adapter decision in an ADR.
-8. Update directory-map.md and source-of-truth.md.
-9. Remove obsolete adapters when migration makes them unnecessary.
-10. Verify instruction discovery, precedence, workflow behavior, and context cost in the target environment.
+1. 対象IDEの最新公式文書を確認する。
+2. 現在のKOKOアーキテクチャと指示階層を調査する。
+3. 意味上の責務と情報分類を維持する。
+4. 必要最小限の対象固有指示レイヤーを設計する。
+5. AGENTS.mdとアダプター間で正式な指示が重複しないようにする。
+6. Skill標準の現行互換性を確認するか、意図的に変換する。
+7. 移行またはアダプターに関する決定をADRへ記録する。
+8. directory-map.mdとsource-of-truth.mdを更新する。
+9. 移行によって不要になったアダプターを削除する。
+10. 対象環境で、指示の検出、優先順位、ワークフロー動作、コンテキストコストを検証する。
 
-Do not freeze today's Claude Code, Gemini CLI, Cursor, or other vendor behavior into this repository. Re-check it when migration becomes real.
+現在のClaude Code、Gemini CLI、Cursor、その他ベンダーの動作を、このリポジトリへ固定化しません。移行が実際に必要になった時点で再確認します。

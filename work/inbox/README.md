@@ -1,5 +1,5 @@
-# Inbox
+# Inbox（未着手）
 
-This state contains received but unstarted tasks. Create work/inbox/<task-id>/request.md from the request template, then move the same task folder to notebook/ when work starts.
+この状態には、受領済みで未着手のタスクを置きます。依頼テンプレートからwork/inbox/<task-id>/request.mdを作成し、作業開始時に同じタスクフォルダーをnotebook/へ移動します。
 
-Dynamic task folders are ignored by Git and private by default.
+動的なタスクフォルダーはGitの追跡対象外で、既定では非公開です。

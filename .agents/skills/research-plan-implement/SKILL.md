@@ -1,53 +1,53 @@
 ---
 name: research-plan-implement
-description: Use for non-trivial implementation work, multi-file changes, architecture changes, migrations, risky changes, or tasks that require understanding the current repository before editing. Guides research, planning, implementation, verification, and handoff.
+description: 非自明な実装、複数ファイルの変更、アーキテクチャ変更、移行、高リスクな変更、または編集前に現在のリポジトリを理解する必要があるタスクで使用します。調査、計画、実装、検証、引き渡しを案内します。
 ---
 
-# Research, Plan, Implement
+# 調査、計画、実装
 
-Scale the workflow to risk. Do not create ceremony that does not improve a small task, and do not skip evidence or approval where failure would be consequential.
+リスクに応じてワークフローの規模を調整します。小規模なタスクを改善しない形式的な作業を増やさず、失敗の影響が大きい場合に証拠や承認を省略しません。
 
-## Phase A — Scope
+## フェーズA — 範囲
 
-Restate the objective, acceptance criteria, in-scope and out-of-scope work, authorization boundaries, and material unknowns. Classify risk:
+目的、受入条件、対象範囲と対象外、権限の境界、重大な不明点を改めて明示します。リスクを次のように分類します。
 
-- Level 0: read-only explanation or light investigation; a task folder is optional.
-- Level 1: clear, local, low-risk change; formal research and plan may be omitted.
-- Level 2: normal feature, bug fix, multi-file change, or non-trivial refactor; plan by default and research unknowns.
-- Level 3: architecture, authentication, security, migration, destructive or breaking change, infrastructure, permissions, secrets, or production data; research, plan, human approval, and verification are required.
+- Level 0：読取り専用の説明または軽い調査。タスクフォルダーは任意。
+- Level 1：明確でローカルな低リスク変更。正式な調査と計画は省略可能。
+- Level 2：通常の機能、バグ修正、複数ファイルの変更、非自明なリファクタリング。原則として計画を作成し、不明点を調査。
+- Level 3：アーキテクチャ、認証、セキュリティ、移行、破壊的変更または互換性を壊す変更、インフラストラクチャ、権限、秘密情報、本番データ。調査、計画、人間による承認、検証が必須。
 
-Do not inflate the risk level without a concrete reason.
+具体的な理由なくリスクレベルを引き上げません。
 
-## Phase B — Research
+## フェーズB — 調査
 
-Read the request, applicable AGENTS.md files, relevant source, current docs, and relevant knowledge. Observe current behavior when useful. Record evidence paths, facts, inferences, constraints, contradictions, and unknowns without prematurely choosing the solution.
+依頼、適用されるAGENTS.md、関連ソース、現在のdocs、関連知識を読みます。有用な場合は現在の動作を観測します。解決策を早まって選ばず、証拠のパス、事実、推論、制約、矛盾、不明点を記録します。
 
-For substantial task-specific research, use work/notebook/<task-id>/research/YYYY-MM-DD-topic.md based on work/_templates/research.md. Promote findings to knowledge/wiki/ only if they are reusable beyond the task.
+重要なタスク固有調査には、work/_templates/research.mdに基づくwork/notebook/<task-id>/research/YYYY-MM-DD-topic.mdを使用します。調査結果をknowledge/wiki/へ昇格するのは、タスクを越えて再利用できる場合に限ります。
 
-### Optional Parallel Investigation
+### 任意の並行調査
 
-Use subagents only when the capability is available and the task is complex enough to benefit from independent, parallel research or verification. Give each agent a bounded, non-overlapping assignment; do not let multiple agents compete to edit the same file. The main agent remains responsible for synthesis and must verify subagent findings before treating them as facts. Parallelization is optional, not a completion requirement.
+サブエージェントを使用するのは、その機能を利用でき、独立した並行調査または検証の効果が得られるほどタスクが複雑な場合に限ります。各エージェントには、範囲を限定した重複しない担当を割り当て、複数のエージェントに同じファイルを競合して編集させません。統合の責任はメインエージェントが負い、サブエージェントの調査結果を事実として扱う前に検証しなければなりません。並行化は任意であり、完了要件ではありません。
 
-## Phase C — Plan
+## フェーズC — 計画
 
-Define the desired state, scope, files to create/modify/delete, ordered phases, verification, tests, documentation, security, compatibility, rollback, risks, and open questions. Use work/_templates/plan.md when a durable task plan adds value.
+目標状態、範囲、作成／変更／削除するファイル、順序付けたフェーズ、検証、テスト、文書、セキュリティ、互換性、ロールバック、リスク、未解決の問いを定義します。永続的なタスク計画に価値がある場合は、work/_templates/plan.mdを使用します。
 
-A plan is intended future work, not the current authoritative specification.
+計画は将来予定する作業であり、現在の正式な仕様ではありません。
 
-## Phase D — Approval Gate
+## フェーズD — 承認ゲート
 
-Obtain human approval before Level 3 implementation or whenever the plan requires a material user choice, destructive action, new authority, or meaningful scope expansion. Never mark a Level 3 plan approved on the user's behalf. A user-provided approved specification may satisfy this gate for the scope it explicitly authorizes.
+Level 3の実装前、または計画に重大なユーザー選択、破壊的操作、新しい権限、実質的な範囲拡大が必要な場合は、必ず人間の承認を得ます。ユーザーに代わってLevel 3の計画を承認済みにしてはいけません。ユーザーが提供した承認済み仕様は、明示的に許可された範囲についてこのゲートを満たす場合があります。
 
-## Phase E — Implementation
+## フェーズE — 実装
 
-Implement only the approved scope in coherent phases. Preserve existing conventions and user changes. Avoid unrelated refactors. If evidence invalidates the plan or requires a large deviation, stop, update the plan, and re-evaluate approval.
+承認済み範囲だけを、一貫したフェーズに分けて実装します。既存の規約とユーザー変更を維持します。無関係なリファクタリングを避けます。証拠によって計画が無効になった場合、または大幅な逸脱が必要になった場合は停止し、計画を更新して承認を再評価します。
 
-Keep implementation in the actual source tree; never store a duplicate source snapshot in work/.
+実装は実際のソースツリーに保持し、ソースの重複スナップショットをwork/へ保存しません。
 
-## Phase F — Verification
+## フェーズF — 検証
 
-Run checks proportionate to the change: relevant tests, lint, formatting, type checks, build, runtime behavior, security checks, documentation consistency, diff review, and Git status. Do not invent commands for tooling that does not exist. Record exact results and distinguish passed, failed, skipped, and unavailable checks.
+変更に応じた確認を実行します。対象には、関連テスト、lint、format、型チェック、build、ランタイム動作、セキュリティ確認、文書の一貫性、差分レビュー、Git状態が含まれます。存在しないツールのコマンドを作り出しません。正確な結果を記録し、成功、失敗、省略、利用不可を区別します。
 
-## Phase G — Handoff
+## フェーズG — 引き渡し
 
-Use work/_templates/handoff.md when a durable handoff is needed. Report requested and completed work, changed files, verification and test results, security review, limitations, risks, follow-up, related research/plan, and commit or PR state. Do not claim completion beyond the evidence.
+永続的な引き渡しが必要な場合は、work/_templates/handoff.mdを使用します。依頼内容と完了内容、変更ファイル、検証とテストの結果、セキュリティレビュー、制約、リスク、後続対応、関連する調査／計画、commitまたはPRの状態を報告します。証拠を超えて完了を主張しません。

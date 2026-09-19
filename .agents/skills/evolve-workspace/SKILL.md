@@ -1,35 +1,35 @@
 ---
 name: evolve-workspace
-description: Use before adding or restructuring top-level directories, repository-wide instructions, nested AGENTS.md files, Skills, architecture domains, or other persistent KOKO workspace structures.
+description: トップレベルディレクトリ、リポジトリ全体の指示、下位のAGENTS.md、Skills、アーキテクチャ領域、その他の永続的なKOKOワークスペース構造を追加または再構成する前に使用します。
 ---
 
-# Evolve the Workspace
+# ワークスペースの発展
 
-Evolve KOKO only for a present, evidenced responsibility. Read docs/AGENTS.md, docs/architecture/directory-map.md, docs/architecture/source-of-truth.md, and docs/architecture/extension-policy.md before editing persistent architecture.
+KOKOを発展させるのは、現在存在し、証拠で裏付けられた責務のために限ります。永続的なアーキテクチャを編集する前に、docs/AGENTS.md、docs/architecture/directory-map.md、docs/architecture/source-of-truth.md、docs/architecture/extension-policy.mdを読みます。
 
-## Workflow
+## ワークフロー
 
-1. State the requirement and the concrete problem the proposed structure solves.
-2. Inspect the current directory map and actual repository state.
-3. Identify the authoritative source for the information or behavior.
-4. Test whether an existing category already fits.
-5. Check for overlapping or duplicated responsibility.
-6. Define lifecycle: creation, active use, update, archival, and removal.
-7. Classify privacy, secret, copyright, and data-handling risks.
-8. Define tracked, ignored, generated, or private-first Git policy.
-9. Estimate Codex context cost and preserve progressive disclosure.
-10. Justify any new top-level directory in one unambiguous sentence.
-11. Add nested AGENTS.md only when the subtree needs behavior not already covered by its parent.
-12. Add a Skill only for a repeated, order-sensitive, project-specific workflow with a clear trigger and meaningful error cost; first test whether an existing Skill can own it.
-13. Identify directory-map, source-of-truth, architecture, README, ADR, and cross-reference impacts.
-14. For non-trivial or Level 3 changes, research, plan, obtain required approval, and then implement the minimal coherent change.
-15. Audit structure, naming, responsibilities, instruction hierarchy, cross-references, privacy, Git policy, and absence of obsolete architecture.
+1. 要件と、提案する構造が解決する具体的な問題を明示する。
+2. 現在のディレクトリマップと実際のリポジトリ状態を確認する。
+3. 情報または振る舞いの正本を特定する。
+4. 既存の区分がすでに適合しないか検証する。
+5. 重複または競合する責務がないか確認する。
+6. 作成、利用中、更新、アーカイブ、削除のライフサイクルを定義する。
+7. プライバシー、秘密情報、著作権、データ取扱いのリスクを分類する。
+8. 追跡対象、追跡対象外、生成物、プライベート優先のいずれかとしてGitポリシーを定義する。
+9. Codexのコンテキストコストを見積もり、段階的開示を維持する。
+10. 新しいトップレベルディレクトリを、曖昧さのない1文で正当化する。
+11. 親の指示でまだ扱われていない振る舞いがサブツリーに必要な場合に限り、下位のAGENTS.mdを追加する。
+12. 明確なトリガーと無視できない失敗コストを持つ、反復的、順序依存、プロジェクト固有のワークフローに限りSkillを追加する。まず既存Skillがその責務を持てないか検証する。
+13. directory-map、source-of-truth、アーキテクチャ、README、ADR、相互参照への影響を特定する。
+14. 非自明またはLevel 3の変更では、調査、計画、必要な承認の取得後に、最小限で一貫した変更を実装する。
+15. 構造、命名、責務、指示階層、相互参照、プライバシー、Gitポリシー、および古いアーキテクチャが残っていないことを監査する。
 
-## Constraints
+## 制約
 
-- Do not create structure because it might be convenient someday.
-- Do not create misc/, other/, stuff/, new/, old2/, final/, or final-final/.
-- Do not add empty scripts/, references/, assets/, source, application, infrastructure, or adapter directories without a current use.
-- Do not duplicate complete procedures between AGENTS.md, Skills, README files, and architecture docs.
-- Record consequential, hard-to-reverse architecture choices in an ADR.
-- When a real migration to another AI IDE is requested, verify that IDE's current official specification before designing the smallest adapter or migration.
+- 将来便利になるかもしれないという理由で構造を作成しません。
+- misc/、other/、stuff/、new/、old2/、final/、final-final/を作成しません。
+- 現在の用途がない空のscripts/、references/、assets/、ソース、アプリケーション、インフラストラクチャ、アダプター用ディレクトリを追加しません。
+- 完全な手順をAGENTS.md、Skills、READMEファイル、アーキテクチャ文書の間で複製しません。
+- 重大で元に戻しにくいアーキテクチャ選択は、ADRへ記録します。
+- 別のAI IDEへの実際の移行が依頼された場合は、最小限のアダプターまたは移行を設計する前に、そのIDEの最新公式仕様を確認します。

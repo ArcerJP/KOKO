@@ -1,13 +1,13 @@
-# Architecture Decision Records
+# アーキテクチャ決定記録
 
-Use an ADR for important, cross-cutting, disputed, security-sensitive, compatibility-sensitive, or difficult-to-reverse architecture decisions.
+重要、横断的、議論の余地がある、セキュリティまたは互換性に影響する、あるいは元に戻しにくいアーキテクチャ決定にはADRを使用します。
 
-## Naming
+## 命名
 
-Use sequential names in the form ADR-XXXX-short-kebab-title.md. Reserve ADR-0000-template.md as the template and do not treat it as an accepted decision.
+ADR-XXXX-short-kebab-title.md形式の連番名を使用します。ADR-0000-template.mdはテンプレート専用とし、受理済みの決定として扱いません。
 
-## Status
+## 状態
 
-Use Proposed, Accepted, Superseded, or Deprecated. A superseding ADR must link to the decision it replaces, and the replaced ADR must link forward without rewriting historical rationale.
+Proposed、Accepted、Superseded、Deprecatedのいずれかを使用します。置換するADRは置換対象の決定へリンクし、置換されたADRは過去の根拠を書き換えず、後継ADRへリンクしなければなりません。
 
-ADRs explain why a decision was made. Current formal architecture remains in docs/architecture/, which should link to the governing ADR when relevant.
+ADRは、決定した理由を説明します。現在の正式なアーキテクチャは引き続きdocs/architecture/に記載し、該当する場合は根拠となるADRへリンクします。

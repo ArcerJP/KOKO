@@ -1,5 +1,5 @@
-# Outbox
+# Outbox（引き渡し済み）
 
-This state contains Codex-complete tasks awaiting human review, acceptance, or disposition. Outbox means handed off, not accepted.
+この状態には、Codex側で完了し、人間によるレビュー、受入れ、または処理を待つタスクを置きます。Outboxは引き渡し済みを意味し、受入れ済みを意味しません。
 
-Include verification evidence and known limitations, then move the same folder to archive/YYYY/ only after explicit close or acceptance. Dynamic task folders are ignored by Git and private by default.
+検証証拠と既知の制約を含め、明示的な終了または受入れの後に限り、同じフォルダーをarchive/YYYY/へ移動します。動的なタスクフォルダーはGitの追跡対象外で、既定では非公開です。

@@ -1,7 +1,7 @@
-# Temporary Memory
+# 一時メモリ
 
-This directory is for daily or short-lived local context such as investigation state, unresolved temporary notes, and near-term decisions.
+このディレクトリには、調査状態、未解決の一時メモ、近日中の決定など、日次または短期間のローカルコンテキストを保存します。
 
-Use YYYY-MM-DD-topic.md names when an entry is needed. Dynamic entries are ignored by Git by default because they may contain personal or sensitive context.
+記録が必要な場合は、YYYY-MM-DD-topic.md形式の名前を使用します。動的な記録には個人的または機微なコンテキストが含まれる可能性があるため、既定ではGitの追跡対象外です。
 
-Promote only durable, public-safe continuity to the root MEMORY.md. Do not copy every daily note into durable memory.
+永続的かつ公開可能な継続情報だけを、ルートのMEMORY.mdへ昇格します。すべての日次メモを永続メモリへ複製しません。

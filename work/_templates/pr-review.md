@@ -1,19 +1,19 @@
-# PR Review
+# PRレビュー
 
-## Scope Match
+## 範囲の一致
 
-## Correctness
+## 正確性
 
-## Tests
+## テスト
 
-## Security
+## セキュリティ
 
-## Documentation
+## 文書
 
-## Compatibility
+## 互換性
 
-## Unintended Changes
+## 意図しない変更
 
-## Findings
+## 指摘事項
 
-## Result
+## 結果

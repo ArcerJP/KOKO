@@ -1,12 +1,12 @@
-# Knowledge Index
+# 知識索引
 
-No derived knowledge topics have been added yet.
+導出知識のトピックは、まだ追加されていません。
 
-When a public-safe reusable topic is created, add one concise entry with:
+公開可能で再利用可能なトピックを作成した場合は、次を含む簡潔な項目を1つ追加します。
 
-- the canonical page link;
-- the topic's responsibility;
-- the primary evidence category;
-- current, provisional, or superseded status when relevant.
+- 正規ページへのリンク。
+- トピックの責務。
+- 主要な証拠区分。
+- 該当する場合は、現行、暫定、置換済みの状態。
 
-Do not copy the page's full summary into this index.
+ページの完全な要約をこの索引へ複製しません。

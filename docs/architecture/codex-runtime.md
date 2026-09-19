@@ -1,52 +1,52 @@
-# Codex Runtime and KOKO Conventions
+# CodexランタイムとKOKO規約
 
-## Purpose
+## 目的
 
-This document distinguishes behavior implemented by OpenAI Codex from information architecture conventions implemented by KOKO.
+この文書では、OpenAI Codexが実装する動作と、KOKOが実装する情報アーキテクチャ規約を区別します。
 
-## Codex-native Mechanisms
+## Codexネイティブの仕組み
 
-KOKO uses these Codex-native mechanisms:
+KOKOは、次のCodexネイティブな仕組みを使用します。
 
-- Root AGENTS.md for repository-wide instructions and routing.
-- Nested AGENTS.md files for rules scoped to docs/, knowledge/, and work/.
-- .agents/skills/<skill-name>/SKILL.md for repository-specific repeatable workflows.
+- ルートのAGENTS.md：リポジトリ全体の指示とルーティング。
+- 下位のAGENTS.md：docs/、knowledge/、work/に限定したルール。
+- .agents/skills/<skill-name>/SKILL.md：リポジトリ固有の反復可能なワークフロー。
 
-According to the official OpenAI documentation verified on 2026-09-19, Codex builds its project instruction chain from the repository root to the active working directory, with deeper instructions taking precedence. It scans repository Skill locations under .agents/skills from the active working directory upward to the repository root. A Skill requires SKILL.md frontmatter containing name and description; optional resources are loaded only when needed.
+2026-09-19に確認したOpenAI公式文書によると、Codexはリポジトリルートから現在の作業ディレクトリまでをたどってプロジェクト指示チェーンを構築し、より深い階層の指示を優先します。また、現在の作業ディレクトリからリポジトリルートへ向かって、.agents/skills配下のリポジトリSkillを探索します。Skillには、nameとdescriptionを含むSKILL.mdのFront Matterが必要です。任意のリソースは、必要な場合に限り読み込まれます。
 
-The official Skill documentation states that standalone Skills are available in Codex CLI and the Codex IDE extension. KOKO therefore uses the same repository Skill path for both environments rather than maintaining interface-specific copies.
+公式のSkill文書では、独立したSkillsをCodex CLIとCodex IDE拡張機能の両方で利用できると説明されています。そのためKOKOでは、インターフェース別の複製を保守せず、両環境で同じリポジトリSkillパスを使用します。
 
-Because instruction discovery follows the active working-directory path, a Codex session started at the repository root does not thereby load every descendant AGENTS.md. Root routing therefore requires reading the applicable nested guidance before changing a scoped subtree from the root.
+指示の検出は現在の作業ディレクトリへ至るパスに従うため、リポジトリルートで開始したCodexセッションが、すべての子孫AGENTS.mdを自動的に読み込むわけではありません。そのため、ルートから対象サブツリーを変更する前に、ルートのルーティングに従って該当する下位指針を読む必要があります。
 
-Official references:
+公式資料：
 
-- [Custom instructions with AGENTS.md](https://developers.openai.com/ja-JP/docs/agent-configuration/agents-md)
-- [Build skills](https://developers.openai.com/ja-JP/docs/build-skills)
+- [AGENTS.mdによるカスタム指示](https://developers.openai.com/ja-JP/docs/agent-configuration/agents-md)
+- [Skillsの作成](https://developers.openai.com/ja-JP/docs/build-skills)
 
-## KOKO Architecture Conventions
+## KOKOのアーキテクチャ規約
 
-The following are ordinary repository files and directories whose meaning is defined by KOKO:
+次の項目は、KOKOが意味を定義する通常のリポジトリファイルおよびディレクトリです。
 
-- SOUL.md — collaboration values.
-- IDENTITY.md — repository-local AI role.
-- USER.md — durable user collaboration context.
-- TOOLS.md — tool and environment guidance.
-- MEMORY.md — concise durable project continuity.
-- memory/ — temporary local memory.
-- knowledge/ — evidence and derived knowledge.
-- work/ — task lifecycle and task artifacts.
-- docs/ — authoritative project documentation.
+- SOUL.md — 協働上の価値観。
+- IDENTITY.md — リポジトリ内でのAIの役割。
+- USER.md — 永続的なユーザー協働コンテキスト。
+- TOOLS.md — ツールと環境の指針。
+- MEMORY.md — 簡潔で永続的なプロジェクト継続情報。
+- memory/ — 一時的なローカルメモリ。
+- knowledge/ — 証拠と導出した知識。
+- work/ — タスクライフサイクルとタスク成果物。
+- docs/ — 正式なプロジェクト文書。
 
-These paths do not gain automatic instruction semantics merely by existing. AGENTS.md or a selected Skill routes Codex to them when the task needs their contents.
+これらのパスは、存在するだけで自動的に指示としての意味を持つわけではありません。タスクで内容が必要になった場合に、AGENTS.mdまたは選択されたSkillがCodexを該当パスへ案内します。
 
-## Context Loading Philosophy
+## コンテキスト読込の方針
 
-1. Load repository-wide behavior through root AGENTS.md.
-2. Load scoped rules only for the subtree being changed.
-3. Load a Skill only when its description or explicit invocation matches the task.
-4. Load detailed docs, evidence, wiki knowledge, task artifacts, or memory only when relevant.
-5. Prefer links and routing over copying source text into always-on instructions.
+1. リポジトリ全体の振る舞いは、ルートのAGENTS.mdから読み込みます。
+2. 対象範囲を限定したルールは、変更するサブツリーについてだけ読み込みます。
+3. 説明または明示的な呼び出しがタスクと一致する場合に限り、Skillを読み込みます。
+4. 詳細なdocs、証拠、wiki知識、タスク成果物、メモリは、関連する場合に限り読み込みます。
+5. 原文を常時有効な指示へ複製せず、リンクとルーティングを優先します。
 
-## No Fake Auto-loading
+## 存在しない自動読込を記述しない
 
-Documentation and prompts must not describe SOUL.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, or KOKO directories as Codex special files. If future Codex behavior changes, verify the current official specification before updating this document and the routing architecture.
+文書やプロンプトでは、SOUL.md、IDENTITY.md、USER.md、TOOLS.md、MEMORY.md、KOKOの各ディレクトリを、Codexの特殊ファイルとして説明してはいけません。将来Codexの動作が変わった場合は、この文書とルーティングアーキテクチャを更新する前に、その時点の公式仕様を確認します。

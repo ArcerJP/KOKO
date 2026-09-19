@@ -1,44 +1,46 @@
 ---
 name: git-workflow
-description: Use when inspecting Git changes, staging files, creating commits, preparing branches, configuring or checking remotes, pushing changes, or preparing GitHub pull requests.
+description: Git変更の確認、ファイルのステージング、commitの作成、ブランチの準備、remoteの設定または確認、変更のpush、GitHub Pull Requestの準備を行う際に使用します。
 ---
 
-# Git Workflow
+# Gitワークフロー
 
-Preserve user work, keep operations reviewable, and never expose credentials.
+ユーザーの作業を保護し、操作をレビュー可能に保ち、認証情報を決して公開しません。
 
-## Inspect
+## 確認
 
-1. Confirm the repository root, current branch, worktree status, and applicable task scope.
-2. Inspect unstaged and staged diffs before deciding what belongs together.
-3. Identify unrelated, generated, sensitive, unexpectedly large, or ignored files. Do not discard or absorb unrelated user changes.
+1. リポジトリルート、現在のブランチ、作業ツリーの状態、適用されるタスク範囲を確認する。
+2. どの変更をまとめるか決める前に、未ステージとステージ済みの差分を確認する。
+3. 無関係、生成済み、機微、予想外に大きい、または追跡対象外のファイルを特定する。無関係なユーザー変更を破棄したり取り込んだりしない。
 
-## Stage
+## ステージング
 
-Stage explicit intended paths. Do not mechanically use git add . when narrower path selection is possible. Never force-add secrets, private raw sources, private task artifacts, or ignored local context.
+意図したパスを明示してステージします。より限定したパスを選べる場合に、機械的にgit add .を使用しません。秘密情報、非公開の原資料、非公開のタスク成果物、追跡対象外のローカルコンテキストを強制追加しません。
 
-After staging, review git diff --cached and run git diff --cached --check. Recheck status and remove unintended paths from the index without deleting the working copy.
+ステージング後にgit diff --cachedをレビューし、git diff --cached --checkを実行します。状態を再確認し、作業コピーを削除せずに意図しないパスをindexから除外します。
 
-## Commit
+## コミット
 
-Confirm Git identity without changing it. If identity is missing, ask the user for user.name, user.email, and local or global scope; never change global configuration without explicit permission.
+Gitのユーザー情報を変更せずに確認します。ユーザー情報がない場合は、user.name、user.email、ローカルまたはグローバルの適用範囲をユーザーへ確認します。明示的な許可なくグローバル設定を変更しません。
 
-Use a clear Conventional Commit type such as feat, fix, docs, refactor, test, or chore. Keep commits coherent by meaning. After committing, inspect status and recent log before claiming success.
+commitメッセージは、`MMDD 苗字 接頭辞: 説明`の形式にします。日付にはcommit時点の月日4桁を使用し、苗字には実際の作業者を記載します。接頭辞にはfeature、feat、fix、refactor、docs、chore、test、perfなど、変更内容を明確に表す種類を使用します。例：`0811 iijima feat: 模擬店ページ作成`。
 
-## Branches, Remotes, Pushes, and PRs
+この形式は、履歴を見返した際に、いつ、誰が、どの種類の変更を積み重ねたかを素早く把握できるようにするためのものです。意味のまとまりごとにcommitを一貫させます。commit後は、成功を報告する前に状態と直近のログを確認します。
 
-Inspect existing branches and remotes before mutation. Creating a GitHub repository requires an explicit owner and visibility. Pushing, opening a PR, changing a remote, or deleting a branch changes external state and must be within the user's requested scope.
+## ブランチ、Remote、Push、PR
 
-Use gh auth status for authentication checks when GitHub CLI is available; never use a token-printing option or expose credential files.
+変更前に既存のブランチとremoteを確認します。GitHubリポジトリの作成には、所有者と公開範囲の明示が必要です。push、PRの作成、remoteの変更、ブランチの削除は外部状態を変更するため、ユーザーが依頼した範囲内でなければなりません。
 
-## Prohibited Without Explicit Permission
+GitHub CLIを利用できる場合は、認証確認にgh auth statusを使用します。トークンを表示するオプションを使用したり、認証情報ファイルを公開したりしません。
+
+## 明示的な許可がない場合の禁止事項
 
 - git reset --hard
-- git clean -fd or git clean -fdx
-- force push, including force-with-lease
-- interactive history rewrite
-- branch, tag, remote, or repository deletion
-- overwriting an existing remote
-- discarding existing changes
+- git clean -fd または git clean -fdx
+- force-with-leaseを含むforce push
+- 対話的な履歴書き換え
+- ブランチ、tag、remote、リポジトリの削除
+- 既存remoteの上書き
+- 既存変更の破棄
 
-If a command partially succeeds or times out, verify local and remote state before retrying.
+コマンドが部分的に成功した場合またはタイムアウトした場合は、再試行前にローカルとremoteの状態を確認します。

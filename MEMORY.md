@@ -1,12 +1,12 @@
-# Durable Project Memory
+# 永続的なプロジェクトメモリ
 
-- KOKO itself is the repository root; do not create a nested KOKO/KOKO root.
-- OpenAI Codex is the primary AI development environment.
-- KOKO adopts the five-pattern workspace architecture documented in docs/architecture/five-patterns.md.
-- The technology stack and product shape are not selected.
-- knowledge/raw/ holds evidence; knowledge/wiki/ holds derived knowledge.
-- Task state moves through work/inbox/, work/notebook/, work/outbox/, and work/archive/.
-- Codex-native repository instructions use AGENTS.md and repository Skills use .agents/skills/.
-- Other AI IDE compatibility is deferred until a real migration is requested.
+- KOKO自体がリポジトリルートです。入れ子のKOKO/KOKOルートを作成しません。
+- OpenAI Codexを主要なAI開発環境とします。
+- KOKOは、docs/architecture/five-patterns.mdに記載された5パターンのワークスペースアーキテクチャを採用します。
+- 技術スタックとプロダクト構成は未選定です。
+- knowledge/raw/には証拠を、knowledge/wiki/には導出した知識を保存します。
+- タスク状態はwork/inbox/、work/notebook/、work/outbox/、work/archive/の順に移動します。
+- Codexネイティブなリポジトリ指示にはAGENTS.mdを、リポジトリSkillsには.agents/skills/を使用します。
+- 他のAI IDEとの互換性は、実際の移行が依頼されるまで保留します。
 
-Keep this file brief and public-safe. Put detailed current architecture in docs/, task context in work/, and temporary context in memory/.
+このファイルは簡潔かつ公開可能な内容に保ちます。現在の詳細なアーキテクチャはdocs/、タスクコンテキストはwork/、一時的なコンテキストはmemory/に保存します。

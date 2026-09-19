@@ -1,14 +1,14 @@
-# Knowledge Guidance
+# 知識管理の指針
 
-These rules apply only under knowledge/.
+次のルールはknowledge/配下にだけ適用します。
 
-- Read knowledge/SCHEMA.md before ingesting sources or changing the knowledge model.
-- Keep raw evidence and wiki synthesis separate.
-- Do not edit a raw source to correct, normalize, summarize, or reinterpret it.
-- Cite source paths or authoritative external sources for wiki claims whenever possible.
-- Label inference, uncertainty, and contradiction; do not present them as source facts.
-- Check copyright, confidentiality, privacy, secrets, binary content, and file size before storage.
-- Do not force-add confidential or otherwise ignored raw material to Git.
-- Prefer updating the canonical wiki topic over creating duplicate summaries.
+- 資料の取込みまたは知識モデルの変更前に、knowledge/SCHEMA.mdを読みます。
+- 原証拠とwikiの統合知識を分離します。
+- 原資料を、訂正、正規化、要約、再解釈する目的で編集しません。
+- wiki上の主張には、可能な限り資料パスまたは正式な外部資料を引用します。
+- 推論、不確実性、矛盾には明示的なラベルを付け、原資料の事実として提示しません。
+- 保存前に、著作権、機密性、プライバシー、秘密情報、バイナリ内容、ファイルサイズを確認します。
+- 機密資料またはその他の追跡対象外の原資料を、Gitへ強制追加しません。
+- 重複する要約を作成せず、正規のwikiトピックを更新します。
 
-Use the knowledge-ingest Skill for the ingestion workflow.
+取込みワークフローにはknowledge-ingest Skillを使用します。

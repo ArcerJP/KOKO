@@ -1,25 +1,25 @@
-# Handoff
+# 引き渡し
 
-## Requested
+## 依頼内容
 
-## Completed
+## 完了内容
 
-## Changed Files
+## 変更ファイル
 
-## Verification
+## 検証
 
-## Tests
+## テスト
 
-## Security Review
+## セキュリティレビュー
 
-## Known Limitations
+## 既知の制約
 
-## Risks
+## リスク
 
-## Follow-up
+## 後続対応
 
-## Related Research
+## 関連する調査
 
-## Related Plan
+## 関連する計画
 
-## Commit / PR
+## Commit／PR

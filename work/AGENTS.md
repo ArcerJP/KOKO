@@ -1,14 +1,14 @@
-# Work Guidance
+# 作業管理の指針
 
-These rules apply only under work/.
+次のルールはwork/配下にだけ適用します。
 
-- Read work/WORKFLOW.md before creating or changing task state.
-- Preserve the meanings of inbox, notebook, outbox, and archive.
-- Represent state by moving one task folder; never duplicate it across states.
-- Do not copy active source code into work/.
-- Keep task artifacts distinct from current authoritative docs.
-- Create only the task directories and artifacts actually needed.
-- Do not force-add ignored task contents or expose sensitive task details in commits or pull requests.
-- Verify state metadata, location, and handoff evidence after a transition.
+- タスク状態を作成または変更する前にwork/WORKFLOW.mdを読みます。
+- inbox、notebook、outbox、archiveの意味を維持します。
+- 1つのタスクフォルダーを移動して状態を表し、複数状態へ複製しません。
+- 実行中のソースコードをwork/へ複製しません。
+- タスク成果物を、現在の正式なdocsと区別します。
+- 実際に必要なタスクディレクトリと成果物だけを作成します。
+- 追跡対象外のタスク内容を強制追加したり、機微なタスク詳細をcommitやPull Requestで公開したりしません。
+- 遷移後に、状態メタデータ、配置場所、引き渡し証拠を検証します。
 
-Use the task-lifecycle Skill for state changes and research-plan-implement for non-trivial work.
+状態変更にはtask-lifecycle Skillを、非自明な作業にはresearch-plan-implementを使用します。

@@ -1,13 +1,13 @@
-# Collaboration Context
+# 協働コンテキスト
 
-Store only durable, project-relevant collaboration preferences here.
+ここには、永続的かつプロジェクトに関係する協働上の希望だけを保存します。
 
-Current preferences:
+現在の希望：
 
-- Values internal consistency and scalable architecture.
-- Prefers current primary sources and explicit source provenance.
-- Expects uncertainty, contradictions, security concerns, and incomplete verification to be stated.
-- Prefers concise, structured, visually scannable documentation.
-- Does not want technology choices or important identity decisions inferred without evidence.
+- 内部の一貫性と拡張可能なアーキテクチャを重視する。
+- 最新の一次資料と、明示された出典情報を優先する。
+- 不確実性、矛盾、セキュリティ上の懸念、未完了の検証が明示されることを期待する。
+- 簡潔で構造化され、一目で把握しやすい文書を好む。
+- 技術選定や重要なアイデンティティ上の決定を、根拠なく推測されることを望まない。
 
-Do not store secrets, credentials, addresses, sensitive personal information, or inferred personal facts. Create no private companion file until a real need is approved.
+秘密情報、認証情報、住所、機微な個人情報、推測した個人的事実を保存しません。実際の必要性が承認されるまでは、非公開の補助ファイルを作成しません。

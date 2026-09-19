@@ -1,5 +1,5 @@
-# Knowledge Wiki
+# 知識wiki
 
-This directory contains reusable knowledge derived from cited evidence. It is secondary to raw sources and must remain distinct from normative documentation in docs/ and task research in work/.
+このディレクトリには、引用した証拠から導出した再利用可能な知識を保存します。これは原資料に対する二次情報であり、docs/の規範的文書およびwork/のタスク調査と区別しなければなりません。
 
-Use index.md to find canonical topics and log.md to record material knowledge changes. Prefer updating the existing topic owner over creating another summary of the same evidence.
+正規のトピックを探すにはindex.mdを使用し、重要な知識変更の記録にはlog.mdを使用します。同じ証拠に対する別の要約を作成せず、既存のトピック所有ページを更新します。

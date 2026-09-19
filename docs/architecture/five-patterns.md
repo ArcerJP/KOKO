@@ -1,71 +1,71 @@
-# Five-Pattern Architecture
+# 5パターン・アーキテクチャ
 
-## Purpose
+## 目的
 
-KOKO combines five information and workflow patterns so Codex and people can locate the right context without conflating instructions, evidence, synthesis, plans, implementation, memory, or state.
+KOKOは5つの情報・ワークフローパターンを組み合わせ、Codexと人が、指示、証拠、統合知識、計画、実装、メモリ、状態を混同せずに、適切なコンテキストを見つけられるようにします。
 
-The existence of every layer does not mean every layer belongs in every prompt. Progressive disclosure remains the controlling principle.
+すべての層が存在していても、すべてのプロンプトに全層を含めるわけではありません。段階的開示を基本原則とします。
 
-## Pattern 1 — Instruction Layering
+## パターン1 — 指示の階層化
 
-| Attribute | Definition |
+| 属性 | 定義 |
 | --- | --- |
-| Purpose | Place stable behavior at the narrowest scope where it applies. |
-| Problem solved | Prevents one oversized instruction file and irrelevant context. |
-| KOKO mapping | Root AGENTS.md → nested AGENTS.md → .agents/skills/. |
-| Read timing | Root at repository/session discovery; nested guidance for its subtree; Skills only when triggered. |
-| Write policy | Repository-wide rules at root, subtree-only rules nested, repeatable procedures in Skills. |
-| Source of truth | The nearest applicable Codex-native instruction or selected Skill. |
-| Lifecycle | Durable, revised when repository responsibilities or repeatable workflows change. |
+| 目的 | 安定した振る舞いを、それが適用される最も狭い範囲へ配置する。 |
+| 解決する問題 | 1つの指示ファイルの肥大化と、無関係なコンテキストを防ぐ。 |
+| KOKOでの対応 | ルートAGENTS.md → 下位AGENTS.md → .agents/skills/。 |
+| 読込時点 | リポジトリ／セッション検出時にルート、対象サブツリーで下位指針、トリガー該当時のみSkills。 |
+| 書込ポリシー | リポジトリ全体のルールはルート、サブツリー限定のルールは下位、反復可能な手順はSkills。 |
+| 正本 | 適用可能な最も近いCodexネイティブ指示、または選択されたSkill。 |
+| ライフサイクル | 永続。リポジトリの責務または反復可能なワークフローが変わる際に改訂。 |
 
-## Pattern 2 — Raw Evidence / Derived Knowledge
+## パターン2 — 原証拠／導出知識
 
-| Attribute | Definition |
+| 属性 | 定義 |
 | --- | --- |
-| Purpose | Preserve provenance while making evidence reusable. |
-| Problem solved | Prevents summaries, interpretations, and source material from becoming indistinguishable. |
-| KOKO mapping | knowledge/raw/ for evidence; knowledge/wiki/ for synthesis. |
-| Read timing | On demand for the question being researched; raw consulted for source claims. |
-| Write policy | Raw is imported or appended and normally immutable; wiki is maintained with source references. |
-| Source of truth | Raw evidence outranks derived wiki content for claims about the source. |
-| Lifecycle | Raw remains durable while permitted; wiki evolves as evidence changes. |
+| 目的 | 出典情報を保持しながら、証拠を再利用可能にする。 |
+| 解決する問題 | 要約、解釈、原資料が区別できなくなることを防ぐ。 |
+| KOKOでの対応 | 証拠はknowledge/raw/、統合知識はknowledge/wiki/。 |
+| 読込時点 | 調査対象の問いに応じて必要時に読み、原資料に関する主張ではrawを参照。 |
+| 書込ポリシー | rawは取り込みまたは追記とし、通常は変更不可。wikiは出典参照とともに保守。 |
+| 正本 | 原資料に関する主張では、原証拠を導出済みwiki内容より優先。 |
+| ライフサイクル | rawは許可される限り永続。wikiは証拠の変化に応じて更新。 |
 
-## Pattern 3 — Research → Plan → Implement → Verify → Review
+## パターン3 — 調査 → 計画 → 実装 → 検証 → レビュー
 
-| Attribute | Definition |
+| 属性 | 定義 |
 | --- | --- |
-| Purpose | Make non-trivial work evidence-led, reviewable, and demonstrably complete. |
-| Problem solved | Prevents premature design, scope drift, and unsupported completion claims. |
-| KOKO mapping | work/notebook/<task-id>/ for task artifacts; actual changes in the real source tree; handoff in work/outbox/. |
-| Read timing | For Level 2 work by default and Level 3 work mandatorily; scaled down for Levels 0–1. |
-| Write policy | Research records current evidence, plans record intended change, verification records observed results. |
-| Source of truth | Actual runtime/source for behavior; docs for current specification; task artifacts for task history only. |
-| Lifecycle | Active artifacts move with the task and eventually archive; durable results are synthesized elsewhere. |
+| 目的 | 非自明な作業を証拠主導にし、レビュー可能かつ完了を実証できるようにする。 |
+| 解決する問題 | 時期尚早な設計、スコープ逸脱、根拠のない完了報告を防ぐ。 |
+| KOKOでの対応 | タスク成果物はwork/notebook/<task-id>/、実際の変更は実ソースツリー、引き渡しはwork/outbox/。 |
+| 読込時点 | Level 2では原則として使用し、Level 3では必須。Level 0〜1では縮小。 |
+| 書込ポリシー | 調査には現在の証拠、計画には予定する変更、検証には観測した結果を記録。 |
+| 正本 | 動作は実ランタイム／ソース、現在の仕様はdocs、タスク成果物はタスク履歴に限る。 |
+| ライフサイクル | 実行中の成果物はタスクとともに移動し、最終的にアーカイブ。永続的な結果は別の適切な場所へ統合。 |
 
-## Pattern 4 — Identity / User / Tools / Memory Separation
+## パターン4 — Identity／User／Tools／Memoryの分離
 
-| Attribute | Definition |
+| 属性 | 定義 |
 | --- | --- |
-| Purpose | Keep values, role, collaboration preferences, tool guidance, and continuity independently maintainable. |
-| Problem solved | Prevents preferences, procedures, credentials, and project facts from accumulating in one pseudo-prompt. |
-| KOKO mapping | SOUL.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, and memory/. |
-| Read timing | On demand when a task depends on the relevant category; these files are not Codex auto-loaded special files. |
-| Write policy | Store only category-appropriate, minimal, public-safe durable content; temporary content goes to ignored memory/. |
-| Source of truth | Each file owns its named category; formal specifications remain in docs/. |
-| Lifecycle | Root context files are durable; memory/ entries are temporary and selectively promoted. |
+| 目的 | 価値観、役割、協働上の希望、ツール指針、継続情報をそれぞれ独立して保守可能にする。 |
+| 解決する問題 | 希望、手順、認証情報、プロジェクトの事実が1つの擬似プロンプトへ蓄積することを防ぐ。 |
+| KOKOでの対応 | SOUL.md、IDENTITY.md、USER.md、TOOLS.md、MEMORY.md、memory/。 |
+| 読込時点 | タスクが該当区分に依存する場合に必要時に読む。これらはCodexが自動読込する特殊ファイルではない。 |
+| 書込ポリシー | 区分に適合する最小限の公開可能な永続内容だけを保存。一時内容は追跡対象外のmemory/へ保存。 |
+| 正本 | 各ファイルがその名称に対応する区分を所有し、正式な仕様はdocs/に保持。 |
+| ライフサイクル | ルートのコンテキストファイルは永続。memory/の記録は一時的で、選別して昇格。 |
 
-## Pattern 5 — Inbox → Notebook → Outbox → Archive
+## パターン5 — Inbox → Notebook → Outbox → Archive
 
-| Attribute | Definition |
+| 属性 | 定義 |
 | --- | --- |
-| Purpose | Make task state explicit from location. |
-| Problem solved | Prevents duplicate task copies and ambiguous active/completed state. |
-| KOKO mapping | work/inbox/ → work/notebook/ → work/outbox/ → work/archive/YYYY/. |
-| Read timing | Only for the active or reviewed task. |
-| Write policy | Move one task folder between states; create only artifacts the task needs. |
-| Source of truth | The task folder's single current location and its state metadata. |
-| Lifecycle | Received → active → Codex-complete/handoff → human-confirmed historical. |
+| 目的 | 配置場所によってタスク状態を明示する。 |
+| 解決する問題 | タスクの重複コピーと、実行中／完了状態の曖昧さを防ぐ。 |
+| KOKOでの対応 | work/inbox/ → work/notebook/ → work/outbox/ → work/archive/YYYY/。 |
+| 読込時点 | 実行中またはレビュー対象のタスクに限る。 |
+| 書込ポリシー | 1つのタスクフォルダーを状態間で移動し、そのタスクに必要な成果物だけを作成。 |
+| 正本 | タスクフォルダーの現在の配置場所1か所と、その状態メタデータ。 |
+| ライフサイクル | 受領済み → 実行中 → Codex側完了／引き渡し → 人間が確認した履歴。 |
 
-## Combined Invariant
+## 全体の不変条件
 
-No layer substitutes for another: evidence is not a specification, a plan is not current state, a handoff is not acceptance, memory is not detailed architecture, and a KOKO convention is not automatically a Codex runtime mechanism.
+いずれの層も別の層を代替しません。証拠は仕様ではなく、計画は現在の状態ではなく、引き渡しは受入れではなく、メモリは詳細なアーキテクチャではなく、KOKOの規約は自動的にCodexのランタイム機構になるものではありません。

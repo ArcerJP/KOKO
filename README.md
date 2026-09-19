@@ -1,71 +1,71 @@
 # KOKO
 
-## Overview
+## 概要
 
-KOKO is a Codex-native workspace foundation designed to keep instructions, evidence, knowledge, plans, implementation, memory, and task state distinct as the project grows.
+KOKOは、プロジェクトの成長後も指示、証拠、知識、計画、実装、メモリ、タスク状態を区別して管理するための、Codexネイティブなワークスペース基盤です。
 
-## Current Status
+## 現在の状態
 
-The repository currently contains only the AI-native workspace architecture. The product purpose, technology stack, application structure, database, infrastructure, and deployment model remain undecided.
+このリポジトリには現在、AIネイティブなワークスペースアーキテクチャだけが含まれています。プロダクトの目的、技術スタック、アプリケーション構成、データベース、インフラストラクチャ、デプロイモデルは未決定です。
 
-## Primary AI Environment
+## 主要なAI環境
 
-OpenAI Codex is the canonical AI development environment across Codex CLI and the Codex IDE extension. Repository instructions use AGENTS.md and repeatable workflows use repository Skills under .agents/skills/.
+OpenAI Codexを、Codex CLIとCodex IDE拡張機能に共通する正式なAI開発環境とします。リポジトリの指示にはAGENTS.mdを使用し、反復可能なワークフローには.agents/skills/配下のリポジトリSkillsを使用します。
 
-## Design Philosophy
+## 設計思想
 
-KOKO combines five patterns:
+KOKOは次の5つのパターンを組み合わせます。
 
-1. Layered repository, directory, and task instructions.
-2. Separation of raw evidence from derived knowledge.
-3. Research, plan, implement, verify, and review for non-trivial work.
-4. Separation of AI values, role, user context, tools, and memory.
-5. An inbox, notebook, outbox, and archive task lifecycle.
+1. リポジトリ、ディレクトリ、タスクにまたがる指示の階層化。
+2. 原証拠と導出した知識の分離。
+3. 非自明な作業における、調査、計画、実装、検証、レビュー。
+4. AIの価値観、役割、ユーザーコンテキスト、ツール、メモリの分離。
+5. inbox、notebook、outbox、archiveによるタスクライフサイクル。
 
-The architecture uses progressive disclosure: the structures exist, but Codex reads them only when relevant.
+このアーキテクチャは段階的開示を採用しています。各構造は存在しますが、Codexが読み込むのは関連する場合だけです。
 
-## Directory Overview
+## ディレクトリ概要
 
 ~~~text
 KOKO/
-├── AGENTS.md              Repository-wide Codex routing
-├── .agents/skills/        Repeatable Codex workflows
-├── docs/                  Authoritative documentation and ADRs
-├── knowledge/raw/         Original evidence, private-first
-├── knowledge/wiki/        Derived reusable knowledge
-├── work/                  Task lifecycle artifacts, private-first
-├── memory/                Temporary local memory, private-first
-└── MEMORY.md              Durable public-safe continuity
+├── AGENTS.md              リポジトリ全体のCodexルーティング
+├── .agents/skills/        反復可能なCodexワークフロー
+├── docs/                  正式な文書とADR
+├── knowledge/raw/         原証拠（プライベート優先）
+├── knowledge/wiki/        導出した再利用可能な知識
+├── work/                  タスクライフサイクル成果物（プライベート優先）
+├── memory/                一時的なローカルメモリ（プライベート優先）
+└── MEMORY.md              永続的で公開可能な継続情報
 ~~~
 
-See docs/architecture/directory-map.md for the formal registry.
+正式な登録情報はdocs/architecture/directory-map.mdを参照してください。
 
-## Knowledge Lifecycle
+## 知識のライフサイクル
 
-Original source material enters knowledge/raw/. Reusable synthesis belongs in knowledge/wiki/ with provenance. Raw evidence has authority over derived summaries.
+原資料はknowledge/raw/へ取り込みます。再利用可能な統合知識は、出典情報とともにknowledge/wiki/へ記載します。原証拠は、そこから導出した要約よりも優先されます。
 
-## Work Lifecycle
+## 作業のライフサイクル
 
-Tasks move rather than copy through:
+タスクは複製せず、次の順に移動します。
 
 ~~~text
 inbox → notebook → outbox → archive
 ~~~
 
-Dynamic task contents are local and ignored by Git by default.
+動的なタスク内容はローカルに保持し、既定ではGitの追跡対象外です。
 
-## Codex Instructions
+## Codexへの指示
 
-AGENTS.md provides concise repository routing. Nested AGENTS.md files add subtree-only rules. The five Skills under .agents/skills/ provide task-specific procedures.
+AGENTS.mdは簡潔なリポジトリルーティングを提供します。下位のAGENTS.mdは、そのサブツリーに限ったルールを追加します。.agents/skills/配下の5つのSkillsは、タスク固有の手順を提供します。
 
 ## Git / GitHub
 
-The default branch is main and commits follow Conventional Commits where practical. Secrets and private working material must not be committed. GitHub owner and visibility are explicit user decisions.
+既定ブランチはmainとします。commitメッセージは.agents/skills/git-workflow/SKILL.mdに定めたプロジェクト固有の形式に従います。秘密情報や非公開の作業資料をcommitしてはいけません。GitHubの所有者と公開範囲は、ユーザーが明示的に決定します。
 
-## Extending KOKO
+## KOKOの拡張
 
-Before adding a top-level directory, instruction layer, or Skill, follow .agents/skills/evolve-workspace/SKILL.md and docs/architecture/extension-policy.md.
+トップレベルディレクトリ、指示レイヤー、Skillを追加する前に、.agents/skills/evolve-workspace/SKILL.mdとdocs/architecture/extension-policy.mdに従ってください。
 
-## Portability
+## 可搬性
 
-KOKO is currently Codex-native. Other AI IDE adapters are intentionally absent and should be designed only when a real migration is requested. See docs/architecture/portability.md.
+現在のKOKOはCodexネイティブです。他のAI IDE用アダプターは意図的に含めておらず、実際の移行依頼があった場合に限り設計します。docs/architecture/portability.mdを参照してください。

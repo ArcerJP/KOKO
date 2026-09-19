@@ -1,27 +1,27 @@
-# ADR-XXXX: Title
+# ADR-XXXX: タイトル
 
-## Status
+## 状態
 
 Proposed
 
-Allowed values: Proposed, Accepted, Superseded, Deprecated.
+使用可能な値：Proposed、Accepted、Superseded、Deprecated。
 
-## Context
+## 背景
 
-What forces, evidence, constraints, and problem make a decision necessary?
+どのような要因、証拠、制約、問題によって決定が必要になったか。
 
-## Decision
+## 決定
 
-What was decided, within what scope, and when does it apply?
+何を、どの範囲で決定し、いつ適用するか。
 
-## Alternatives Considered
+## 検討した代替案
 
-What credible alternatives were evaluated, and why were they not selected?
+どのような有力な代替案を評価し、なぜ採用しなかったか。
 
-## Consequences
+## 影響
 
-What positive, negative, operational, security, compatibility, and migration consequences follow?
+肯定的、否定的、運用上、セキュリティ上、互換性上、移行上のどのような影響が生じるか。
 
-## References
+## 参照資料
 
-Link relevant evidence, research, plans, specifications, issues, and superseded or superseding ADRs without copying their full contents.
+関連する証拠、調査、計画、仕様、Issue、置換されたADR、置換するADRへ、全文を複製せずリンクします。

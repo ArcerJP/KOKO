@@ -1,15 +1,15 @@
-# Documentation Guidance
+# 文書作成の指針
 
-These rules apply only under docs/.
+次のルールはdocs/配下にだけ適用します。
 
-- Use Markdown unless another format is explicitly required.
-- Separate verified facts from inference, proposals, and unresolved questions.
-- Separate current authoritative state from future possibilities.
-- Keep each rule, specification, and decision in one authoritative location; link rather than copy.
-- Do not mix normative project documentation with derived knowledge from knowledge/wiki/.
-- Update or retire obsolete documentation when behavior or architecture changes; do not leave silent contradictions.
-- When architecture changes, check directory-map.md, source-of-truth.md, extension-policy.md, portability.md, README.md, and relevant cross-references.
-- Consider an ADR for consequential, disputed, cross-cutting, or hard-to-reverse decisions.
-- Preserve the distinction between accepted current decisions and proposed future work.
+- 別形式が明示的に必要でない限り、Markdownを使用します。
+- 検証済みの事実を、推論、提案、未解決の疑問と区別します。
+- 現在の正式な状態を、将来の可能性と区別します。
+- 各ルール、仕様、決定は1つの正式な場所に保持し、複製せずリンクします。
+- 規範的なプロジェクト文書と、knowledge/wiki/から導出した知識を混在させません。
+- 動作またはアーキテクチャが変わった場合は、古くなった文書を更新または廃止し、暗黙の矛盾を残しません。
+- アーキテクチャ変更時は、directory-map.md、source-of-truth.md、extension-policy.md、portability.md、README.md、および関連する相互参照を確認します。
+- 重要、議論の余地がある、横断的、または元に戻しにくい決定では、ADRを検討します。
+- 受理済みの現在の決定と、提案段階の将来作業を区別します。
 
-Keep this file scoped and concise. Detailed architecture belongs in docs/architecture/.
+このファイルは対象範囲を限定し、簡潔に保ちます。詳細なアーキテクチャはdocs/architecture/に記載します。

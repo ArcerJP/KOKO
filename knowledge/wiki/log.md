@@ -1,15 +1,15 @@
-# Knowledge Change Log
+# 知識変更履歴
 
-No knowledge changes have been recorded yet.
+知識の変更は、まだ記録されていません。
 
-For each material addition, revision, contradiction update, or retirement, append a concise entry:
+重要な追加、改訂、矛盾の更新、廃止ごとに、次の簡潔な項目を追記します。
 
 ~~~text
-## YYYY-MM-DD — Topic
+## YYYY-MM-DD — トピック
 
-- Change:
-- Sources:
-- Status:
+- 変更：
+- 資料：
+- 状態：
 ~~~
 
-Do not use this log as a substitute for source references on the affected wiki page.
+この履歴を、変更対象wikiページに記載する資料参照の代わりに使用しません。
