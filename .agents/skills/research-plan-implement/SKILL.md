@@ -22,7 +22,7 @@ description: 非自明な実装、複数ファイルの変更、アーキテク�
 
 依頼、適用されるAGENTS.md、関連ソース、現在のdocs、関連知識を読みます。有用な場合は現在の動作を観測します。解決策を早まって選ばず、証拠のパス、事実、推論、制約、矛盾、不明点を記録します。
 
-重要なタスク固有調査には、work/_templates/research.mdに基づくwork/notebook/<task-id>/research/YYYY-MM-DD-topic.mdを使用します。調査結果をknowledge/wiki/へ昇格するのは、タスクを越えて再利用できる場合に限ります。
+重要なタスク固有調査には、work/_templates/research.mdに基づく`work/notebook/<task-id>/research/YYYY-MM-DD-topic.md`を使用します。調査結果をknowledge/wiki/へ昇格するのは、タスクを越えて再利用できる場合に限ります。
 
 ### 任意の並行調査
 
