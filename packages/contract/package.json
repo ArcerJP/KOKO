@@ -1,0 +1,20 @@
+{
+  "name": "@koko/contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/generated/api.d.ts"
+    }
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs && npm run build && node scripts/reference.mjs",
+    "check": "redocly lint openapi.yaml && node scripts/generate.mjs --check && npm run build && node scripts/reference.mjs --check",
+    "build": "tsc -p tsconfig.json"
+  }
+}

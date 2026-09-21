@@ -1,6 +1,10 @@
 {
   "name": "koko-workspace",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=22.22.1"
   },
@@ -8,13 +12,28 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "lint:md": "markdownlint-cli2",
+    "lint": "eslint .",
+    "contract:generate": "npm run generate --workspace @koko/contract",
+    "contract:check": "npm run check --workspace @koko/contract",
+    "typecheck": "tsc -p packages/contract/tsconfig.json --noEmit",
+    "build": "npm run build --workspace @koko/contract",
+    "test": "npm run build && node --test packages/contract/test/*.test.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@eslint/js": "10.0.1",
+    "@redocly/cli": "2.53.3",
+    "@types/node": "24.13.6",
+    "eslint": "10.11.0",
     "husky": "9.1.7",
     "lint-staged": "17.5.1",
     "markdownlint-cli2": "0.23.3",
-    "prettier": "3.9.8"
+    "prettier": "3.9.8",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0",
+    "yaml": "2.9.1"
   },
   "lint-staged": {
     "**/*": "prettier --write --ignore-unknown"

@@ -3,6 +3,11 @@ node_modules/
 tmp/
 package-lock.json
 **/*.pdf
+dist/
+coverage/
+.next/
+.wrangler/
+.vercel/
 
 memory/*
 !memory/README.md
