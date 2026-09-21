@@ -60,7 +60,7 @@ AGENTS.mdは簡潔なリポジトリルーティングを提供します。下�
 
 ## Git / GitHub
 
-既定ブランチはmainとします。commitメッセージは.agents/skills/git-workflow/SKILL.mdに定めたプロジェクト固有の形式に従います。秘密情報や非公開の作業資料をcommitしてはいけません。GitHubの所有者と公開範囲は、ユーザーが明示的に決定します。
+既定ブランチはmainとし、直接pushしません。作業ブランチとPull Requestを使用し、ブランチ名、commit、同期、merge後の削除は.agents/skills/git-workflow/SKILL.mdに定めたプロジェクト固有の形式に従います。秘密情報や非公開の作業資料をcommitしてはいけません。GitHubの所有者と公開範囲は、ユーザーが明示的に決定します。
 
 ## フォーマット
 
