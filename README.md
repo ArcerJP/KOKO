@@ -26,7 +26,7 @@ KOKOは次の5つのパターンを組み合わせます。
 
 ## ディレクトリ概要
 
-~~~text
+```text
 KOKO/
 ├── AGENTS.md              リポジトリ全体のCodexルーティング
 ├── .agents/skills/        反復可能なCodexワークフロー
@@ -36,7 +36,7 @@ KOKO/
 ├── work/                  タスクライフサイクル成果物（プライベート優先）
 ├── memory/                一時的なローカルメモリ（プライベート優先）
 └── MEMORY.md              永続的で公開可能な継続情報
-~~~
+```
 
 正式な登録情報はdocs/architecture/directory-map.mdを参照してください。
 
@@ -48,9 +48,9 @@ KOKO/
 
 タスクは複製せず、次の順に移動します。
 
-~~~text
+```text
 inbox → notebook → outbox → archive
-~~~
+```
 
 動的なタスク内容はローカルに保持し、既定ではGitの追跡対象外です。
 
@@ -60,7 +60,11 @@ AGENTS.mdは簡潔なリポジトリルーティングを提供します。下�
 
 ## Git / GitHub
 
-既定ブランチはmainとします。commitメッセージは.agents/skills/git-workflow/SKILL.mdに定めたプロジェクト固有の形式に従います。秘密情報や非公開の作業資料をcommitしてはいけません。GitHubの所有者と公開範囲は、ユーザーが明示的に決定します。
+既定ブランチはmainとし、直接pushしません。作業ブランチとPull Requestを使用し、ブランチ名、commit、同期、merge後の削除は.agents/skills/git-workflow/SKILL.mdに定めたプロジェクト固有の形式に従います。秘密情報や非公開の作業資料をcommitしてはいけません。GitHubの所有者と公開範囲は、ユーザーが明示的に決定します。
+
+## フォーマット
+
+EditorConfigとPrettierで改行、空白、インデントを統一します。Huskyとlint-stagedがcommit時にステージ済みファイルを整形し、GitHub ActionsがPull Requestを検査します。初回セットアップと操作方法はdocs/formatting.mdを参照してください。
 
 ## KOKOの拡張
 

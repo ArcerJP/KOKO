@@ -21,6 +21,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Repository-local formatting tooling
+node_modules/
+.husky/_/
+
 # Daily / temporary memory
 memory/*
 !memory/README.md
@@ -28,6 +32,7 @@ memory/*
 # Raw knowledge is private-first by default
 knowledge/raw/*
 !knowledge/raw/README.md
+!knowledge/raw/FormatterSetting.pdf
 
 # Dynamic work artifacts are local/private by default
 work/inbox/*
