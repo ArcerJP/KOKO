@@ -37,6 +37,8 @@ mainへ直接pushしません。作業開始前にmainでgit pull origin mainを
 
 ブランチ名は`苗字/接頭辞/内容`の形式にします。接頭辞にはfeature、feat、fix、refactor、docs、chore、test、perfなどを使用し、内容には小文字のkebab-caseで目的を記載します。例：`iijima/feature/add-mogitenpage`。
 
+Pull Requestのタイトルは、commitメッセージと同じく`MMDD 苗字 接頭辞: 説明`の形式にします。日付にはPull Request作成時点の月日4桁を使用し、苗字には実際の作業者を記載します。接頭辞と説明にはPull Request全体の主目的を記載します。例：`0811 iijima feat: 模擬店ページ作成`。この形式により、履歴から変更日、作業者、変更種別、目的を素早く把握できるようにします。
+
 1つのユーザー指示につき、原則として1つの作業ブランチと1つのPull Requestを使用します。目的のない予備ブランチや重複ブランチを作成しません。
 
 Pull Requestを作成する直前に、作業ブランチ上でgit pull origin mainを実行します。競合を解消し、関連するテストとnpm.cmd run format:checkを再実行してから、作業ブランチをpushしてPull Requestを作成します。
