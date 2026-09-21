@@ -5,10 +5,12 @@
 - OpenAI Codex：主要なAI開発環境。
 - Git：ローカルのバージョン管理。変更前に状態を確認します。
 - GitHub CLI：任意のGitHub連携。使用前に利用可否と認証状態を確認します。
-- Node.js／npm：Prettier、Markdownlint、Husky、lint-stagedを実行するためのリポジトリ品質管理環境。プロダクト技術スタックではありません。
+- Node.js／npm workspaces：品質管理、TypeScript共有契約の生成・lint・型・build・テスト環境。実行依存の追加は採用構成と開発計画に従います。
 - EditorConfig／Prettier：改行、空白、インデントの統一。
 - Markdownlint：Markdown文書の構造と記法の静的解析。
-- プロダクト固有のツール：プロダクトの技術スタックを意図的に選定した後に限り追加します。
+- TypeScript／openapi-typescript／Redocly：共有型とOpenAPIの生成・整合性検証。
+- ESLint／Node test runner／PGlite：契約ロジックとSQL・RLSのローカル検証。実Supabase/Authの試験とは区別します。
+- 実行先・未導入ツールはdocs/architecture/product-architecture.md、導入段階はdocs/product/development-plan.mdを参照します。
 
 ## 利用ルール
 

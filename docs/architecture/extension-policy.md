@@ -29,6 +29,8 @@
 
 ワークフローが反復され、順序に依存し、プロジェクト固有で、誤って実行した場合のコストが高く、AGENTS.mdに記載するには詳細すぎ、明確なトリガーで表現できる場合に限り、Skillを追加します。まず既存Skillの拡張を検討します。単発タスクのためにSkillを作成しません。
 
+2026-09-22にユーザー承認のうえ`cost-review`を追加しました。複数サービスの課金単位・必須要件・工数を比較する反復責務であり、一般の調査実装とは別の利用量/請求条件確認が必要です。料金の値は持たず、調査→比較→選択確認の手順だけを保持します。追加する構造は既存Skills配下のSKILL.mdのみです。
+
 新しいSkillは、有効なnameとdescriptionのFront Matterを含むSKILL.mdだけで開始します。scripts、references、assets、UIメタデータは、実際の用途が確認された場合に限り追加します。
 
 ## 命名
@@ -40,3 +42,5 @@ misc/、other/、stuff/、temp2/、new/、old2/、final/、final-v2/、final-fin
 ## 実装領域
 
 src/、app/、apps/、frontend/、backend/、server/、client/、api/、services/、packages/、libs/、infra/、database/、mobile/、web/を事前作成しません。プロダクトと技術の決定によって責務が具体化した後に限り、最小の構造を導入します。
+
+2026-09-21の第0日では、FEトークンとBE SQLを保持するapps/、FE/BE共通契約と試験を保持するpackages/の責務が具体化しました。[ADR-0001](../decisions/ADR-0001-product-baseline.md)に基づくこの2領域以外へ、未実装のサービス・インフラ・アダプター用の空ディレクトリは追加しません。

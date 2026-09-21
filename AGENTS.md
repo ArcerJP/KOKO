@@ -2,9 +2,9 @@
 
 ## 目的
 
-KOKOは、人とOpenAI Codexが長期的に協働するためのAIネイティブワークスペースです。
+KOKOは、第49回技科大祭向けの写真・動画共有Webアプリと、人とOpenAI Codexが長期的に協働するAIネイティブワークスペースです。
 
-プロダクト、プログラミング言語、フレームワーク、データベース、クラウドプロバイダー、リポジトリ構成は、まだ選定されていません。
+現在の要件はdocs/product/requirements.md、実装順序はdocs/product/development-plan.md、採用構成はdocs/architecture/product-architecture.mdを参照してください。第0日の契約整備と、アプリ本体・外部環境の実装完了を区別します。
 
 このファイルはリポジトリのルーティング層です。詳細な手順はSkillsに、正式なアーキテクチャはdocs/に記載してください。
 
@@ -24,6 +24,8 @@ KOKOは、人とOpenAI Codexが長期的に協働するためのAIネイティ�
 
 - docs/ — 現在の正式なプロジェクト文書およびアーキテクチャ文書。
 - docs/decisions/ — 重要な決定に対するアーキテクチャ決定記録。
+- apps/web/、apps/api/ — FEとBEの実装領域。現在はトークンと初期SQL。
+- packages/contract/ — FE/BE共通のAPI、生成型、状態・エラー・キー契約と試験。
 - knowledge/raw/ — 原証拠と原資料。プライベート優先で、通常は変更不可。
 - knowledge/wiki/ — 出典を示した証拠から導出した再利用可能な知識。
 - knowledge/SCHEMA.md — 知識層の正式なルール。知識を取り込む前に読みます。
@@ -46,8 +48,9 @@ KOKOは、人とOpenAI Codexが長期的に協働するためのAIネイティ�
 - 原証拠の追加、または再利用可能なwiki知識の導出 → $knowledge-ingest。
 - Git変更の確認やステージング、commit、ブランチ、remote、push、PR準備 → $git-workflow。
 - トップレベル構造、Skills、AGENTS.md、アーキテクチャ領域の変更 → $evolve-workspace。
+- クラウド・保存・配信・AIの費用見積り、節約案、有料構成の変更判断 → $cost-review。
 
-反復する必要性がevolve-workspaceによって確認されない限り、計画、実装、引き渡しレビュー、メモリ保守を新しいSkillsへ分割しません。
+今後も反復するタスクは、evolve-workspaceで既存Skillとの責務を確認してから、焦点を絞ったSkillへ整理します。反復する必要性が確認されない限り、計画、実装、引き渡しレビュー、メモリ保守を新しいSkillsへ分割しません。
 
 ## ディレクトリ固有の指針
 
@@ -77,7 +80,7 @@ KOKOは、人とOpenAI Codexが長期的に協働するためのAIネイティ�
 - 導出した再利用可能な知識は、knowledge/wiki/に保存します。
 - 現在の規範的な仕様は、docs/に記載します。
 - タスク固有の調査と計画は、work/notebook/に保存します。
-- 実際の実装は、work/ではなく将来のソースツリーに置きます。
+- 実際の実装は、work/ではなくapps/とpackages/の対応領域に置きます。
 - 情報が既存の分類に適合しない場合は再分類し、misc/、other/、stuff/を作成しません。
 
 ## 安全性
