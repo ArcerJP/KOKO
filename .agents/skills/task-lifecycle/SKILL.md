@@ -15,10 +15,10 @@ TASK-YYYYMMDD-short-kebab-description形式を使用します。同じタスクI
 
 ## 状態遷移
 
-1. 受付：work/inbox/<task-id>/request.mdを作成し、依頼、制約、受入条件、参照資料、不明点を記録する。
-2. 開始：同じフォルダーをwork/notebook/<task-id>/へ移動する。requestの状態を更新し、作業で必要な場合に限りresearch/、plans/、prs/を追加する。
-3. 引き渡し：実装と検証の後に引き渡し成果物を追加し、フォルダーをwork/outbox/<task-id>/へ移動する。
-4. アーカイブ：人間による受入れまたは明示的な終了判断の後に限り、work/archive/YYYY/<task-id>/へ移動する。
+1. 受付：`work/inbox/<task-id>/request.md`を作成し、依頼、制約、受入条件、参照資料、不明点を記録する。
+2. 開始：同じフォルダーを`work/notebook/<task-id>/`へ移動する。requestの状態を更新し、作業で必要な場合に限りresearch/、plans/、prs/を追加する。
+3. 引き渡し：実装と検証の後に引き渡し成果物を追加し、フォルダーを`work/outbox/<task-id>/`へ移動する。
+4. アーカイブ：人間による受入れまたは明示的な終了判断の後に限り、`work/archive/YYYY/<task-id>/`へ移動する。
 
 タスクは状態間で移動し、複製しません。同じタスクを複数状態で実行中にしません。
 

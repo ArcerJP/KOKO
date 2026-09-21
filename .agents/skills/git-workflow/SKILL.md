@@ -41,7 +41,7 @@ Pull Requestのタイトルは、commitメッセージと同じく`MMDD 苗字 �
 
 1つのユーザー指示につき、原則として1つの作業ブランチと1つのPull Requestを使用します。目的のない予備ブランチや重複ブランチを作成しません。
 
-Pull Requestを作成する直前に、作業ブランチ上でgit pull origin mainを実行します。競合を解消し、関連するテストとnpm.cmd run format:checkを再実行してから、作業ブランチをpushしてPull Requestを作成します。
+Pull Requestを作成する直前に、作業ブランチ上でgit pull origin mainを実行します。競合を解消し、関連するテストとdocs/ci.mdで現在「導入済み」の検査をすべてローカルで再実行してから、作業ブランチをpushしてPull Requestを作成します。未導入または適用外の検査を成功扱いにせず、理由をPull Requestへ記載します。
 
 Pull Requestがmergeされた後は、GitHubのDelete branchでremoteの作業ブランチを削除します。続いてローカルで次を順に実行します。
 
@@ -53,7 +53,7 @@ git branch -d <ブランチ名>
 
 merge済みであることを確認できない場合や、git branch -dが拒否した場合は、force削除せず停止して状態を確認します。
 
-フォーマットのセットアップと操作はdocs/formatting.mdに従います。commit時の自動整形を信頼するだけでなく、ステージ済み差分を再確認します。
+フォーマットのセットアップと操作はdocs/formatting.mdに、CIの適用範囲と追加条件はdocs/ci.mdに従います。commit時の自動整形を信頼するだけでなく、ステージ済み差分を再確認します。
 
 GitHub CLIを利用できる場合は、認証確認にgh auth statusを使用します。トークンを表示するオプションを使用したり、認証情報ファイルを公開したりしません。
 

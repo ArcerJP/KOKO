@@ -15,7 +15,7 @@ KOKOにおける正式なフォーマット規約は、この文書とリポジ�
 - .editorconfigは、リポジトリ内のテキストファイル全体に適用します。
 - Prettierは、Prettierが認識する追跡対象ファイルに適用します。
 - PDF、非公開の動的コンテキスト、生成物は自動整形の対象外です。
-- Node.jsとnpmは、リポジトリの整形処理にだけ使用します。KOKOのプロダクト技術スタックを決定するものではありません。
+- Node.jsとnpmは、リポジトリの整形と文書の静的解析に使用します。KOKOのプロダクト技術スタックを決定するものではありません。
 
 ## 基本設定
 
@@ -35,7 +35,7 @@ KOKOにおける正式なフォーマット規約は、この文書とリポジ�
 npm.cmd install
 ```
 
-3. VS Codeまたは互換エディターを使用する場合は、次の推奨拡張機能をインストールします。
+1. VS Codeまたは互換エディターを使用する場合は、次の推奨拡張機能をインストールします。
 
 - Prettier - Code formatter（esbenp.prettier-vscode）
 - EditorConfig for VS Code（EditorConfig.EditorConfig）
@@ -59,6 +59,8 @@ npm.cmd run format:check
 commit時にはHuskyとlint-stagedが、ステージ済みファイルのうちPrettier対応形式だけを自動整形します。整形によって差分が変わった場合は、commit前にその差分を再確認してください。
 
 Pull RequestではGitHub ActionsのFormat Checkがnpm.cmd run format:check相当の検査を実行します。失敗した場合はローカルでnpm.cmd run formatを実行し、差分を確認してから再度commit、pushします。
+
+Format Check以外のtest、lint、型チェック、buildを含むCI全体の適用範囲と追加条件はdocs/ci.mdに従います。
 
 ## 改行コードの移行
 

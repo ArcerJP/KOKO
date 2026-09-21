@@ -7,11 +7,13 @@
   "scripts": {
     "format": "prettier . --write",
     "format:check": "prettier . --check",
+    "lint:md": "markdownlint-cli2",
     "prepare": "husky"
   },
   "devDependencies": {
     "husky": "9.1.7",
     "lint-staged": "17.5.1",
+    "markdownlint-cli2": "0.23.3",
     "prettier": "3.9.8"
   },
   "lint-staged": {

@@ -66,6 +66,10 @@ AGENTS.mdは簡潔なリポジトリルーティングを提供します。下�
 
 EditorConfigとPrettierで改行、空白、インデントを統一します。Huskyとlint-stagedがcommit時にステージ済みファイルを整形し、GitHub ActionsがPull Requestを検査します。初回セットアップと操作方法はdocs/formatting.mdを参照してください。
 
+## CI
+
+Pull Requestの作成・更新時とmerge queueでGitHub Actionsを実行します。現在はPrettierによるformat検査とMarkdownlintによる文書の静的解析を導入済みです。ユニット／統合テスト、プロダクト言語固有のLinter、型チェック、production buildは、プロダクトの技術と実行対象を決定した時点で実装と同時に追加します。現在の対応状況と導入条件はdocs/ci.mdを参照してください。
+
 ## KOKOの拡張
 
 トップレベルディレクトリ、指示レイヤー、Skillを追加する前に、.agents/skills/evolve-workspace/SKILL.mdとdocs/architecture/extension-policy.mdに従ってください。

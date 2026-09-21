@@ -10,7 +10,7 @@ KOKOは、次のCodexネイティブな仕組みを使用します。
 
 - ルートのAGENTS.md：リポジトリ全体の指示とルーティング。
 - 下位のAGENTS.md：docs/、knowledge/、work/に限定したルール。
-- .agents/skills/<skill-name>/SKILL.md：リポジトリ固有の反復可能なワークフロー。
+- `.agents/skills/<skill-name>/SKILL.md`：リポジトリ固有の反復可能なワークフロー。
 
 2026-09-19に確認したOpenAI公式文書によると、Codexはリポジトリルートから現在の作業ディレクトリまでをたどってプロジェクト指示チェーンを構築し、より深い階層の指示を優先します。また、現在の作業ディレクトリからリポジトリルートへ向かって、.agents/skills配下のリポジトリSkillを探索します。Skillには、nameとdescriptionを含むSKILL.mdのFront Matterが必要です。任意のリソースは、必要な場合に限り読み込まれます。
 

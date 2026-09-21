@@ -12,7 +12,7 @@ INBOX → ACTIVE / NOTEBOOK → OUTBOX → ARCHIVED
 
 ## INBOX（未着手）
 
-パス：work/inbox/<task-id>/
+パス：`work/inbox/<task-id>/`
 
 意味：依頼を受領済みですが、作業は開始していません。
 
@@ -22,7 +22,7 @@ INBOX → ACTIVE / NOTEBOOK → OUTBOX → ARCHIVED
 
 ## ACTIVE／NOTEBOOK（実行中）
 
-パス：work/notebook/<task-id>/
+パス：`work/notebook/<task-id>/`
 
 意味：タスクを現在、調査、計画、実装、または検証しています。
 
@@ -40,7 +40,7 @@ INBOX → ACTIVE / NOTEBOOK → OUTBOX → ARCHIVED
 
 ## OUTBOX（引き渡し済み）
 
-パス：work/outbox/<task-id>/
+パス：`work/outbox/<task-id>/`
 
 意味：Codex側の作業が完了し、人間のレビュー、受入れ、または次の対応のために提示されています。人間が受け入れたことは意味しません。
 
@@ -50,7 +50,7 @@ INBOX → ACTIVE / NOTEBOOK → OUTBOX → ARCHIVED
 
 ## ARCHIVED（アーカイブ済み）
 
-パス：work/archive/YYYY/<task-id>/
+パス：`work/archive/YYYY/<task-id>/`
 
 意味：タスクの終了が確認され、過去のタスクコンテキストとして保持されています。
 
