@@ -21,19 +21,21 @@ Pull Requestの作成・更新時に再現可能な自動検証を行い、既�
 
 ## 現在の導入状態
 
-| 検査                               | 状態     | 現在の実装または未導入理由                                                                      |
-| ---------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
-| 依存関係の再現可能なinstall        | 導入済み | `npm ci`で`package-lock.json`どおりにリポジトリ品質管理用の依存関係を導入。                     |
-| format／対応形式の構文解析         | 導入済み | `.github/workflows/format-check.yml`の`Prettier` jobが`npm run format:check`を実行。            |
-| Markdown Linter／静的解析          | 導入済み | `.github/workflows/markdown-lint.yml`の`Markdown Lint` jobが`npm run lint:md`を実行。           |
-| ユニットテスト                     | 未導入   | プロダクトソース、test runner、test対象の機能がまだ存在しない。                                 |
-| 統合テスト                         | 未導入   | 統合対象のmodule、API、database、外部serviceがまだ存在しない。                                  |
-| プロダクト言語固有Linter／静的解析 | 未導入   | プロダクトの言語とframeworkが未決定。PrettierやMarkdownlintはESLint、flake8などの代替ではない。 |
-| 型チェック                         | 未導入   | TypeScriptなどの型付き言語と型設定が未決定。                                                    |
-| production build                   | 未導入   | application、build command、成果物、deployment先が未決定。                                      |
-| Docker image build                 | 未導入   | container化とDockerfileが未決定。                                                               |
+| 検査                        | 状態       | 現在の実装または未導入理由                                                               |
+| --------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
+| 依存関係の再現可能なinstall | 導入済み   | npm workspacesを`npm ci`とlockfileで再現。                                               |
+| format／対応形式の構文解析  | 導入済み   | `.github/workflows/format-check.yml`の`Prettier` jobが`npm run format:check`を実行。     |
+| Markdown Linter／静的解析   | 導入済み   | `.github/workflows/markdown-lint.yml`の`Markdown Lint` jobが`npm run lint:md`を実行。    |
+| OpenAPIと生成物一致         | CI定義済み | `Contract Schema`：Redocly lint、生成型とエラー表の一致。                                |
+| ユニットテスト              | CI定義済み | `Contract Tests`：Node test runnerで状態・判定・キー・エラー・権限・トークン等を検証。   |
+| SQL統合テスト               | CI定義済み | 同jobでPGliteへmigrationを実適用し、14テーブル・制約・grants/RLS・イベント境界を検証。   |
+| JS/TS Linter                | CI定義済み | `TypeScript Lint`：ESLint/TypeScript ESLint。生成型は除外し、生成一致とtscで検査。       |
+| 型チェック                  | CI定義済み | `Type Check`：TypeScript strict、noUncheckedIndexedAccess、exactOptionalPropertyTypes。  |
+| 契約package build           | CI定義済み | `Contract Build`：共用ESMと型宣言をdistへ出力。Web/API production buildの代替ではない。  |
+| Web/API production build    | 未導入     | Next.jsアプリ・Workersハンドラーは第1要件で実装する際に同PRで追加。                      |
+| Docker image build          | 未導入     | Cloud Runを採用済みだが画像decoderのスパイク前でDockerfileなし。B1-7で実装と同時に追加。 |
 
-現時点のCIはformat検査とMarkdown文書の静的解析です。未導入項目は成功した検査ではなく、検査対象と実行方法がまだ存在しない項目です。
+契約向け5jobは`.github/workflows/contract-check.yml`に定義しています。workflowの存在とGitHub上の実行成功は別です。PGliteはPostgreSQLエンジンでSQLを実行しますが、Supabase Auth、実OAuth、クラウド通信、認証付きメディア配信を検証していません。これらは第1〜第3要件の別の統合/実機試験です。
 
 Markdownlintは`.gitignore`を尊重して追跡対象相当のMarkdownを検査します。日本語文書と表の可読性をPrettierへ委ねるため、行長の`MD013`を無効化します。また、タスクテンプレートのfront matterにある`title`は文書見出しではなくmetadataとして扱うため、`MD025`ではfront matterを見出しとして数えません。それ以外は既定ruleを使用します。
 
@@ -72,17 +74,22 @@ Markdownlintは`.gitignore`を尊重して追跡対象相当のMarkdownを検査
 ```powershell
 npm.cmd run format:check
 npm.cmd run lint:md
+npm.cmd run contract:check
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run build
 ```
 
 ## 必須status check
 
 workflowを追加しただけではmergeを技術的にブロックできません。新しいjobがGitHub上で一度成功した後、repository管理者がmainのRulesetまたはBranch protection ruleへ必須status checkとして登録します。
 
-現在登録対象となるcheckは、`Format Check` workflowの`Prettier` jobと、`Markdown Lint` workflowの`Markdown Lint` jobです。将来test、プロダクト言語固有lint、typecheck、buildのjobを追加した場合も、それぞれを必須status checkへ追加します。
+登録対象は`Prettier`、`Markdown Lint`に加えて、`Contract Schema`、`TypeScript Lint`、`Type Check`、`Contract Tests`、`Contract Build`です。既存checkを外さず追加してください。Web/API/imageのjobを追加した場合も同様に必須化します。このタスクではRulesetを変更していません。
 
 ## 人間が決定する項目
 
-次の選択はプロダクト設計へ影響するため、推測で決めません。
+現在の構成選択は[ADR-0001](decisions/ADR-0001-product-baseline.md)、残る判断は[第0日](product/day-zero.md)で管理します。次の領域は第0日に選定したものを維持し、今後の未決・追加・変更事項はプロダクト設計へ影響するため推測で決めません。
 
 - プロダクトの言語、framework、package manager、対応runtime version。
 - unit／integration test frameworkと、integration testで使用するdatabaseや外部service。
