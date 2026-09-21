@@ -1,0 +1,1179 @@
+openapi: 3.1.0
+info:
+  title: KOKO FE・BE契約
+  version: 0.1.0
+  description: |
+    第0日契約0.1.0。承認記録はdocs/product/day-zero.md。API実装・本番公開を意味しない。
+    x-stageは実装時期。APIはX-Event-ID、メディアはパスでイベントを限定し、JWTのsubから本人を決定する。
+    現Web版ではGoogle以外のログインを許可しない。管理権限はDBで検証し、クライアントのroleを信用しない。
+    エラーの画面文言はsrc/errors.tsが正本。生の内部例外・原本GET URL・メールを返さない。
+tags:
+  - name: account
+    description: 本人のプロフィール・同意・異議申立て
+  - name: posts
+    description: 原本アップロードと投稿状態
+  - name: feed
+    description: 認証後の共通フィード
+  - name: admin
+    description: 運営権限を必要とする操作
+security:
+  - bearerAuth: []
+  - sessionCookie: []
+paths:
+  /media/{event_id}/{post_id}/{resource}:
+    parameters:
+      - name: event_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/PostId"
+      - name: resource
+        in: path
+        required: true
+        description: BE生成の派生物識別子。上流URLや任意ホストは指定できない。
+        schema: { type: string, pattern: "^[A-Za-z0-9_.-]+$", maxLength: 1024 }
+    get:
+      tags: [feed]
+      operationId: getAuthenticatedMedia
+      summary: セッションを毎回検証して派生画像・動画・サムネイルを配信
+      description: |
+        JWT/セッション→イベント/投稿の現在の公開可否→内部キャッシュの順に検査。
+        ブラウザへはprivate, no-storeを返す。認証トークンをURLへ入れない。
+        Streamは常時requireSignedURLs=true。上流署名はサーバー内限定で、redirectしない。
+        HLS子playlist/segment/key/mapもこのゲートへ書き換え、全取得で認証する。
+        Cookieは同一origin経由。Range/Content-Rangeと有効期限切れを実機検証する。
+        将来のnativeは設定済みHTTPS originにパスを解決し、全子リソースにも認証を付与する。
+        相対パスを一般公開URLやトークン付きURLに置き換えない。
+        審査用resourceでは追加のmoderator/admin権限と目的を検証し、原本は配信しない。
+      x-stage: 1
+      responses:
+        "200":
+          description: 認証済みメディア。Content-Typeは実メディア型、nosniff、private/no-store。
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+            application/vnd.apple.mpegurl:
+              schema: { type: string }
+        "206":
+          description: 検証済み単一Rangeへの部分応答。Content-Range/Accept-Rangesを付与。
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401":
+          $ref: "#/components/responses/Error"
+        default:
+          $ref: "#/components/responses/Error"
+  /me:
+    parameters: &eventParameters
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/CsrfToken"
+    get:
+      tags: [account]
+      operationId: getMe
+      summary: 本人の権限・BAN・同意状態を取得
+      x-stage: 1
+      responses:
+        "200":
+          description: 本人情報。Cache-Controlはprivate, no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401": &unauthorized
+          $ref: "#/components/responses/Error"
+        default: &error
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [account]
+      operationId: updateMe
+      summary: 表示名だけを変更（アバター・roleは受け付けない）
+      x-stage: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [display_name]
+              properties:
+                display_name: { type: string, minLength: 1, maxLength: 50 }
+      responses: &ackResponses
+        "200":
+          description: 処理完了
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Acknowledgement"
+        "401": *unauthorized
+        default: *error
+  /consents:
+    parameters: *eventParameters
+    post:
+      tags: [account]
+      operationId: acceptTerms
+      summary: 現行規約への明示同意をサーバー時刻とともに保存
+      x-stage: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [terms_version, accepted]
+              properties:
+                terms_version: { type: string, minLength: 1 }
+                accepted: { type: boolean, const: true }
+      responses: *ackResponses
+  /uploads:
+    parameters: *eventParameters
+    post:
+      tags: [posts]
+      operationId: createUpload
+      summary: 投稿IDとR2原本への直接アップロード情報を払い出す
+      description: |
+        同意・BAN・受付・10件/分を検証。client_request_idはイベントと本人で一意。
+        同一ID・同一内容の再送は同じ投稿を返し、異なる内容はIDEMPOTENCY_CONFLICT。
+        file_size_bytesに業務独自上限を設けず、R2の上限とmultipartを利用する。
+        署名URLは限定されたPUT専用で、原本を閲覧する権限を含まない。
+      x-stage: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadRequest"
+      responses:
+        "200": &uploadResponse
+          description: 新規または再取得した送信情報。no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadTicket"
+        "401": *unauthorized
+        default: *error
+  /uploads/{upload_id}/refresh:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/UploadId"
+      - $ref: "#/components/parameters/CsrfToken"
+    post:
+      tags: [posts]
+      operationId: refreshUpload
+      summary: 所有者の未完了アップロードURLを再発行
+      x-stage: 1
+      responses:
+        "200": *uploadResponse
+        "401": *unauthorized
+        default: *error
+  /uploads/{upload_id}/parts:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/UploadId"
+      - $ref: "#/components/parameters/CsrfToken"
+    post:
+      tags: [posts]
+      operationId: signUploadParts
+      summary: multipartの指定パートへ限定したPUT URLを発行
+      x-stage: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [part_numbers]
+              properties:
+                part_numbers:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  uniqueItems: true
+                  items: { type: integer, minimum: 1, maximum: 10000 }
+      responses:
+        "200":
+          description: パートURL。ETagをクライアントに公開するCORS設定が必要。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [parts]
+                properties:
+                  parts:
+                    type: array
+                    items:
+                      type: object
+                      required: [part_number, put_url, expires_at]
+                      properties:
+                        part_number:
+                          { type: integer, minimum: 1, maximum: 10000 }
+                        put_url: { type: string, format: uri }
+                        expires_at: { type: string, format: date-time }
+        "401": *unauthorized
+        default: *error
+  /posts/{post_id}/complete:
+    parameters: &postParameters
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/PostId"
+      - $ref: "#/components/parameters/CsrfToken"
+    post:
+      tags: [posts]
+      operationId: completeUpload
+      summary: R2への原本保存を検証して処理キューへ登録
+      description: |
+        本人とupload_idの所属を検証し、multipartならETag一覧で完了、HEADで実在・サイズを確認。
+        本文のMIMEや完了申告だけを信用しない。再実行は同じ処理IDを返し二重処理しない。
+      x-stage: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [upload_id]
+              properties:
+                upload_id: { type: string, format: uuid }
+                parts:
+                  type: array
+                  minItems: 1
+                  maxItems: 10000
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [part_number, etag]
+                    properties:
+                      part_number: { type: integer, minimum: 1, maximum: 10000 }
+                      etag: { type: string, minLength: 1 }
+      responses:
+        "202": &statusResponse
+          description: 本人向け投稿状態。no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostStatus"
+        "401": *unauthorized
+        default: *error
+  /posts/{post_id}/status:
+    parameters: *postParameters
+    get:
+      tags: [posts]
+      operationId: getPostStatus
+      summary: 本人のアップロード・処理結果を確認
+      x-stage: 2
+      responses:
+        "200": *statusResponse
+        "401": *unauthorized
+        default: *error
+  /posts/{post_id}:
+    parameters: *postParameters
+    get:
+      tags: [feed]
+      operationId: getPost
+      summary: 現在公開可能な投稿を取得
+      description: 非公開・削除・他イベントを区別せず404。JWT検証と公開停止判定をキャッシュ参照前に行う。
+      x-stage: 2
+      responses:
+        "200":
+          description: 公開用派生物だけを含む投稿
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicPost"
+        "401": *unauthorized
+        default: *error
+    delete:
+      tags: [posts]
+      operationId: deleteOwnPost
+      summary: 本人の投稿を論理削除し配信停止と物理削除を予約
+      description: 冪等。原本lock中は物理削除を延期し、deletedと区別して記録する。
+      x-stage: 3
+      responses: *ackResponses
+  /feed:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/Cursor"
+      - $ref: "#/components/parameters/Limit"
+      - name: theme
+        in: query
+        schema: { type: string, format: uuid }
+    get:
+      tags: [feed]
+      operationId: getFeed
+      summary: 公開投稿の新着一覧をキーセットで取得
+      description: |
+        created_at DESC, id DESC。cursorはイベント・theme・並び順に束縛された不透明値。
+        JWTと公開停止を検証してからエッジ共有キャッシュ（約10秒）へ進む。
+        HTTPレスポンスはprivate, no-storeとし、共有キャッシュはWorker内部だけ。
+        ユーザー固有のliked状態・role・メール・原本情報を含めない。通常10〜15秒で再取得。
+      x-stage: 2
+      responses:
+        "200": &feedResponse
+          description: 投稿ページ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostPage"
+        "401": *unauthorized
+        default: *error
+  /themes:
+    parameters: *eventParameters
+    get:
+      tags: [feed]
+      operationId: listThemes
+      summary: 公開中・終了済みのお題を取得
+      x-stage: 3
+      responses:
+        "200": &themesResponse
+          description: お題一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Theme"
+        "401": *unauthorized
+        default: *error
+  /me/posts:
+    parameters: &pageParameters
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/Cursor"
+      - $ref: "#/components/parameters/Limit"
+    get:
+      tags: [account]
+      operationId: listOwnPosts
+      summary: 本人の投稿状態一覧を取得（非公開投稿を含む、原本URLなし）
+      x-stage: 3
+      responses:
+        "200":
+          description: 本人専用ページ。no-store。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PostStatus"
+                  next_cursor: { type: [string, "null"] }
+        "401": *unauthorized
+        default: *error
+  /posts/{post_id}/reports:
+    parameters: *postParameters
+    post:
+      tags: [posts]
+      operationId: reportPost
+      summary: 1件目で非表示・2件目で追加通知（本人の重複は数えない）
+      description: |
+        DB更新と配信停止outboxを同一transactionにする。通報後の他の通報者も
+        同じイベントの既知IDへ通報できるが、投稿内容は返さず一律受付応答とする。
+      x-stage: 3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason:
+                  {
+                    type: string,
+                    enum: [privacy, sexual, violence, harassment, other],
+                  }
+                detail: { type: string, maxLength: 1000 }
+      responses: *ackResponses
+  /appeals:
+    parameters: *eventParameters
+    post:
+      tags: [account]
+      operationId: createAppeal
+      summary: 本人のBLOCKまたはBANについて異議申立て（BAN中も利用可）
+      x-stage: 3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [message]
+              properties:
+                post_id: { type: [string, "null"], format: uuid }
+                message: { type: string, minLength: 1, maxLength: 2000 }
+      responses: *ackResponses
+  /admin/feed:
+    parameters: *pageParameters
+    get:
+      tags: [admin]
+      operationId: getAdminFeed
+      summary: moderator以上が監視用投稿状態を取得（FLAG・通報を優先）
+      x-stage: 3
+      responses:
+        "200":
+          description: 監視専用のno-storeレスポンス
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPostPage"
+        "401": *unauthorized
+        default: *error
+  /admin/posts/{post_id}/hide:
+    parameters: *postParameters
+    post:
+      tags: [admin]
+      operationId: hidePost
+      summary: moderator以上が公開投稿を非表示にする
+      x-stage: 3
+      requestBody: &adminAction
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminAction"
+      responses: *ackResponses
+  /admin/posts/{post_id}/restore:
+    parameters: *postParameters
+    post:
+      tags: [admin]
+      operationId: restorePost
+      summary: moderator以上が非表示を解除（BLOCK・BAN・公開停止は解除不可）
+      description: 保存済み判定と以前の公開状態を使用し、バージョン一致と配信準備を検証する。
+      x-stage: 3
+      requestBody: *adminAction
+      responses: *ackResponses
+  /admin/posts/{post_id}/delete:
+    parameters: *postParameters
+    post:
+      tags: [admin]
+      operationId: deletePost
+      summary: moderator以上が論理削除と配信停止・削除ジョブを登録
+      x-stage: 3
+      requestBody: *adminAction
+      responses: *ackResponses
+  /admin/posts/{post_id}/theme:
+    parameters: *postParameters
+    patch:
+      tags: [admin]
+      operationId: reassignTheme
+      summary: adminがお題を付け替え・解除する
+      x-stage: 3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [theme_id, expected_version, reason]
+              properties:
+                theme_id: { type: [string, "null"], format: uuid }
+                expected_version: { type: integer, minimum: 1 }
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses: *ackResponses
+  /admin/users/{user_id}/ban:
+    parameters: &userParameters
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/CsrfToken"
+    post:
+      tags: [admin]
+      operationId: banUser
+      summary: adminがイベント内の利用者をBANし過去投稿を非公開にする
+      x-stage: 3
+      requestBody: &reasonBody
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses: *ackResponses
+  /admin/users/{user_id}/unban:
+    parameters: *userParameters
+    post:
+      tags: [admin]
+      operationId: unbanUser
+      summary: adminがBANを解除（過去投稿の公開復帰とは別操作）
+      x-stage: 3
+      requestBody: *reasonBody
+      responses: *ackResponses
+  /admin/settings:
+    parameters: *eventParameters
+    get:
+      tags: [admin]
+      operationId: getSettings
+      summary: adminが公開停止・受付・モデレーション設定を取得
+      x-stage: 3
+      responses:
+        "200":
+          description: 設定値（秘密・Webhook URLは含まない）。no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+        "401": *unauthorized
+        default: *error
+    put:
+      tags: [admin]
+      operationId: updateSettings
+      summary: adminが設定をバージョン一致で更新（キルスイッチは受付も止める）
+      x-stage: 3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Settings"
+      responses: *ackResponses
+  /admin/themes:
+    parameters: *eventParameters
+    get:
+      tags: [admin]
+      operationId: listAdminThemes
+      summary: adminが下書きを含むお題を取得
+      x-stage: 3
+      responses:
+        "200": *themesResponse
+        "401": *unauthorized
+        default: *error
+    post:
+      tags: [admin]
+      operationId: createTheme
+      summary: adminがお題を作成
+      x-stage: 3
+      requestBody: &themeBody
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThemeInput"
+      responses: *ackResponses
+  /admin/themes/{theme_id}:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/CsrfToken"
+      - name: theme_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [admin]
+      operationId: updateTheme
+      summary: adminがお題を編集・公開・終了
+      x-stage: 3
+      requestBody: *themeBody
+      responses: *ackResponses
+    delete:
+      tags: [admin]
+      operationId: deleteTheme
+      summary: adminが未使用のお題を削除（使用済みは終了にする）
+      x-stage: 3
+      responses: *ackResponses
+  /admin/appeals:
+    parameters: *pageParameters
+    get:
+      tags: [admin]
+      operationId: listAppeals
+      summary: adminが異議申立て一覧を取得
+      x-stage: 3
+      responses:
+        "200":
+          description: no-storeの異議申立て一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Appeal"
+                  next_cursor: { type: [string, "null"] }
+        "401": *unauthorized
+        default: *error
+  /admin/appeals/{appeal_id}:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/CsrfToken"
+      - name: appeal_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [admin]
+      operationId: resolveAppeal
+      summary: adminが異議申立ての対応結果を記録（復元・BAN解除は別操作）
+      x-stage: 3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [resolved, rejected] }
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses: *ackResponses
+  /posts/{post_id}/like:
+    parameters: *postParameters
+    put:
+      tags: [posts]
+      operationId: likePost
+      summary: いいねを付ける（冪等、本人とイベントで一意）
+      x-stage: 4
+      responses: *ackResponses
+    delete:
+      tags: [posts]
+      operationId: unlikePost
+      summary: いいねを取り消す（冪等）
+      x-stage: 4
+      responses: *ackResponses
+  /me/likes:
+    parameters: *pageParameters
+    get:
+      tags: [account]
+      operationId: listOwnLikes
+      summary: 個人のいいね状態を共有キャッシュとは分離して取得
+      x-stage: 4
+      responses:
+        "200":
+          description: no-storeのID一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [post_ids, next_cursor]
+                properties:
+                  post_ids:
+                    type: array
+                    items: { type: string, format: uuid }
+                  next_cursor: { type: [string, "null"] }
+        "401": *unauthorized
+        default: *error
+  /admin/failures:
+    parameters: *pageParameters
+    get:
+      tags: [admin]
+      operationId: listFailures
+      summary: adminが処理失敗を取得（当日はBE運用スクリプトで代替）
+      x-stage: 5
+      responses:
+        "200":
+          description: 失敗した投稿。no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPostPage"
+        "401": *unauthorized
+        default: *error
+  /admin/posts/{post_id}/retry:
+    parameters: *postParameters
+    post:
+      tags: [admin]
+      operationId: retryProcessing
+      summary: adminが保留・BLOCKの再判定を予約（公開を直接承認しない）
+      description: 当日は同じ契約をBEの運用スクリプトから使用。自動再試行上限とは分離する。
+      x-stage: 2
+      requestBody: *adminAction
+      responses: *ackResponses
+  /admin/stats:
+    parameters: *eventParameters
+    get:
+      tags: [admin]
+      operationId: getStats
+      summary: adminがイベントの投稿・通報・容量・配信量を取得
+      x-stage: 5
+      responses:
+        "200":
+          description: 取得日時付き実測値。外部サービスの未取得値はnullであり0ではない。no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stats"
+        "401": *unauthorized
+        default: *error
+  /admin/moderation-logs:
+    parameters: *pageParameters
+    get:
+      tags: [admin]
+      operationId: listModerationLogs
+      summary: adminが判定ログを取得し集計・CSVへ利用
+      description: スコア・モデル・時間・費用のみ。画像やOCR全文は含めない。
+      x-stage: 5
+      responses:
+        "200":
+          description: 判定ログのキーセットページ。no-store。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ModerationLog"
+                  next_cursor: { type: [string, "null"] }
+        "401": *unauthorized
+        default: *error
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: SupabaseのGoogleログイン。iss/aud/exp/署名/Google providerとDB権限を検証。
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-koko_session
+      description: |
+        同一originのSecure/HttpOnly/Path=/セッションCookie。JWTをURLへ渡さない。
+        Cookie認証の書き込みはOriginとセッションに束縛したCSRFトークンを検証する。
+  parameters:
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      description: Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。
+      schema: { type: string, minLength: 32, maxLength: 256 }
+    EventId:
+      name: X-Event-ID
+      in: header
+      required: true
+      description: イベントID。所有者IDやroleは受け取らない。
+      schema: { type: string, format: uuid }
+    PostId:
+      name: post_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UploadId:
+      name: upload_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string, maxLength: 1024 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+  responses:
+    Error:
+      description: src/errors.tsに対応するエラー。機密・内部例外を含めない。
+      headers:
+        Retry-After:
+          description: 再試行可能な場合の待機秒数
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+  schemas:
+    ApiError:
+      type: object
+      additionalProperties: false
+      required: [code, request_id]
+      properties:
+        code:
+          type: string
+          enum:
+            [
+              AUTH_REQUIRED,
+              FORBIDDEN,
+              CONSENT_REQUIRED,
+              ACCOUNT_BANNED,
+              NOT_FOUND,
+              INVALID_INPUT,
+              INVALID_CURSOR,
+              EVENT_CLOSED,
+              PUBLICATION_STOPPED,
+              THEME_UNAVAILABLE,
+              STATE_CONFLICT,
+              IDEMPOTENCY_CONFLICT,
+              RATE_LIMITED,
+              UPLOAD_EXPIRED,
+              UPLOAD_INCOMPLETE,
+              PROVIDER_LIMIT,
+              UNSUPPORTED_MEDIA,
+              VIDEO_TOO_LONG,
+              PROCESSING_HELD,
+              CONTENT_BLOCKED,
+              INTERNAL_ERROR,
+            ]
+        request_id: { type: string, format: uuid }
+        retry_after_seconds: { type: integer, minimum: 1 }
+    Acknowledgement:
+      type: object
+      additionalProperties: false
+      required: [request_id]
+      properties:
+        request_id: { type: string, format: uuid }
+        resource_id: { type: string, format: uuid }
+    Me:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          user_id,
+          event_id,
+          display_name,
+          role,
+          is_banned,
+          terms_version,
+          consent_required,
+          crown,
+        ]
+      properties:
+        user_id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        display_name: { type: string, minLength: 1, maxLength: 50 }
+        role: { type: string, enum: [user, moderator, admin] }
+        is_banned: { type: boolean }
+        terms_version: { type: string }
+        consent_required: { type: boolean }
+        csrf_token:
+          {
+            type: string,
+            minLength: 32,
+            maxLength: 256,
+            description: Cookieセッション時のみ返す。保存/ログ/共有cacheは禁止。,
+          }
+        crown:
+          {
+            type: string,
+            enum: [none, white, gold],
+            description: 第4要件まではnone,
+          }
+    UploadRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [client_request_id, kind, content_type, file_size_bytes, original_scope]
+      properties:
+        client_request_id: { type: string, format: uuid }
+        kind: { type: string, enum: [photo, video] }
+        content_type: { type: string, minLength: 1, maxLength: 255 }
+        file_size_bytes:
+          {
+            type: integer,
+            minimum: 1,
+            description: 業務独自の上限は設けない。プロバイダー制約はPROVIDER_LIMIT。,
+          }
+        original_scope:
+          {
+            type: string,
+            enum: [photo_file, client_trimmed, full_video_fallback],
+          }
+        theme_id: { type: [string, "null"], format: uuid }
+    UploadTicket:
+      type: object
+      additionalProperties: false
+      required: [post_id, upload_id, mode, expires_at]
+      oneOf:
+        - properties:
+            mode: { const: single }
+          required: [mode, put_url, required_headers]
+        - properties:
+            mode: { const: multipart }
+          required: [mode, part_size_bytes]
+      properties:
+        post_id: { type: string, format: uuid }
+        upload_id: { type: string, format: uuid }
+        mode: { type: string, enum: [single, multipart] }
+        expires_at: { type: string, format: date-time }
+        put_url:
+          {
+            type: string,
+            format: uri,
+            description: single時のみ。ログへ保存しない。,
+          }
+        required_headers:
+          type: object
+          additionalProperties: { type: string }
+        part_size_bytes:
+          {
+            type: integer,
+            minimum: 5242880,
+            description: multipart時のみ。末尾以外のパートサイズ。,
+          }
+    State:
+      type: string
+      enum:
+        [
+          uploading,
+          upload_failed,
+          uploaded,
+          processing,
+          published,
+          published_flagged,
+          blocked,
+          held,
+          hidden,
+          deleted,
+        ]
+    PostStatus:
+      type: object
+      additionalProperties: false
+      required: [id, event_id, status, version, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        status:
+          $ref: "#/components/schemas/State"
+        version: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        error_code:
+          $ref: "#/components/schemas/ApiError/properties/code"
+        block_category:
+          {
+            type: string,
+            description: 本人向けの大分類のみ。生スコア・OCR文・モデル内部情報は返さない。,
+          }
+    PublicPost:
+      type: object
+      description: アプリ内で公開済みの投稿。匿名アクセス可能という意味ではない。
+      oneOf:
+        - properties:
+            kind: { const: photo }
+            media:
+              $ref: "#/components/schemas/PhotoDelivery"
+          required: [kind, media]
+        - properties:
+            kind: { const: video }
+            media:
+              $ref: "#/components/schemas/VideoDelivery"
+          required: [kind, media]
+      additionalProperties: false
+      required:
+        [
+          id,
+          event_id,
+          kind,
+          display_name,
+          crown,
+          theme_id,
+          created_at,
+          like_count,
+          media,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        kind: { type: string, enum: [photo, video] }
+        display_name: { type: string }
+        crown: { type: string, enum: [none, white, gold] }
+        theme_id: { type: [string, "null"], format: uuid }
+        created_at: { type: string, format: date-time }
+        like_count: { type: integer, minimum: 0, description: 第4要件までは0 }
+        media:
+          oneOf:
+            - $ref: "#/components/schemas/PhotoDelivery"
+            - $ref: "#/components/schemas/VideoDelivery"
+    PhotoDelivery:
+      type: object
+      additionalProperties: false
+      required: [kind, webp_600, jpg_600, webp_1600, jpg_1600]
+      properties:
+        kind: { type: string, const: photo }
+        webp_600:
+          &mediaPath {
+            type: string,
+            pattern: "^/media/[0-9a-f-]+/[0-9a-f-]+/[A-Za-z0-9_.-]+$",
+          }
+        jpg_600: *mediaPath
+        webp_1600: *mediaPath
+        jpg_1600: *mediaPath
+    VideoDelivery:
+      type: object
+      additionalProperties: false
+      required: [kind, hls_url, thumbnail_url, duration_seconds]
+      properties:
+        kind: { type: string, const: video }
+        hls_url: *mediaPath
+        thumbnail_url: *mediaPath
+        mp4_url:
+          <<: *mediaPath
+          description: 第2要件の実機スパイクで採用した場合だけ返す
+        duration_seconds: { type: number, exclusiveMinimum: 0, maximum: 4 }
+    PostPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicPost"
+        next_cursor: { type: [string, "null"] }
+    AdminPostPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [post, user_id, report_count, is_banned]
+            properties:
+              post:
+                $ref: "#/components/schemas/PostStatus"
+              user_id: { type: string, format: uuid }
+              report_count: { type: integer, minimum: 0 }
+              is_banned: { type: boolean }
+              preview_url:
+                <<: *mediaPath
+                description: 運営権限も毎回検証する審査用派生物。原本ではない。BLOCKは既定で返さない。
+        next_cursor: { type: [string, "null"] }
+    AdminAction:
+      type: object
+      additionalProperties: false
+      required: [expected_version, reason]
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+    ThemeInput:
+      allOf:
+        - $ref: "#/components/schemas/ThemeFields"
+      unevaluatedProperties: false
+    ThemeFields:
+      type: object
+      required: [title, description, icon, color, status, starts_at, ends_at]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string, maxLength: 2000 }
+        icon: { type: string, maxLength: 50 }
+        color: { type: string, pattern: "^#[0-9a-fA-F]{6}$" }
+        status: { type: string, enum: [draft, published, ended] }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+    Theme:
+      allOf:
+        - $ref: "#/components/schemas/ThemeFields"
+        - type: object
+          required: [id, event_id]
+          properties:
+            id: { type: string, format: uuid }
+            event_id: { type: string, format: uuid }
+    Settings:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          version,
+          publication_stopped,
+          uploads_enabled,
+          moderation_concurrency,
+          thresholds,
+        ]
+      properties:
+        version:
+          {
+            type: integer,
+            minimum: 1,
+            description: PUTではexpected versionとして比較し成功時に加算,
+          }
+        publication_stopped: { type: boolean }
+        uploads_enabled: { type: boolean }
+        moderation_concurrency: { type: integer, minimum: 1 }
+        thresholds:
+          type: array
+          description: 各エンジンのアダプターが正規化した0〜1スコア用。flagがblock以下であることを検証し、更新を監査。DBのmoderation_thresholdsへ配列として保存。
+          items:
+            type: object
+            additionalProperties: false
+            required: [engine, category, flag, block, immediate_ban]
+            properties:
+              engine: { type: string, enum: [openai, safesearch, ocr] }
+              category: { type: string, minLength: 1 }
+              flag: { type: number, minimum: 0, maximum: 1 }
+              block: { type: number, minimum: 0, maximum: 1 }
+              immediate_ban:
+                {
+                  type: boolean,
+                  description: 重大カテゴリだけ許可。管理者による校正が必須。,
+                }
+    Appeal:
+      type: object
+      required: [id, user_id, post_id, message, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        post_id: { type: [string, "null"], format: uuid }
+        message: { type: string }
+        status: { type: string, enum: [open, resolved, rejected] }
+        created_at: { type: string, format: date-time }
+    Stats:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          event_id,
+          measured_at,
+          posts,
+          published,
+          reports,
+          original_bytes,
+          stream_delivery_minutes,
+          videos_over_four_seconds,
+        ]
+      properties:
+        event_id: { type: string, format: uuid }
+        measured_at: { type: string, format: date-time }
+        posts: { type: integer, minimum: 0 }
+        published: { type: integer, minimum: 0 }
+        reports: { type: integer, minimum: 0 }
+        original_bytes: { type: [integer, "null"], minimum: 0 }
+        stream_delivery_minutes: { type: [number, "null"], minimum: 0 }
+        videos_over_four_seconds: { type: integer, minimum: 0 }
+    ModerationLog:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          post_id,
+          engine,
+          model_version,
+          decision,
+          scores,
+          latency_ms,
+          estimated_cost_usd,
+          created_at,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        post_id: { type: string, format: uuid }
+        engine: { type: string, enum: [openai, safesearch, ocr] }
+        model_version: { type: string }
+        decision: { type: string, enum: [PASS, FLAG, BLOCK, ERROR] }
+        scores:
+          type: object
+          additionalProperties: { type: number, minimum: 0, maximum: 1 }
+        latency_ms: { type: [integer, "null"], minimum: 0 }
+        estimated_cost_usd: { type: [number, "null"], minimum: 0 }
+        created_at: { type: string, format: date-time }

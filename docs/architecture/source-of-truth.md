@@ -22,6 +22,12 @@ KOKOでは、すべての記録を同じ正本性で扱いません。適切な�
 
 ## 競合時のルール
 
+プロダクトでは、要求は[要件](../product/requirements.md)、実装順序は[開発計画](../product/development-plan.md)、採用構成は[プロダクト構成](product-architecture.md)、承認状況は[第0日](../product/day-zero.md)を参照します。API/状態/キー/エラーの正本は[共有契約](../../packages/contract/README.md)、DBはapps/apiのmigration、トークンはapps/webのCSSです。生成型・エラー表は派生物であり、手で編集しません。
+
+nativeへの設計境界は[native対応準備](native-readiness.md)、予算判断と動画短縮の方針は[費用方針](../product/cost-policy.md)へ分離します。費用を比較する反復手順は[cost-review Skill](../../.agents/skills/cost-review/SKILL.md)、現在のサービス料金の根拠は各社公式資料です。Skillや過去の試算を最新料金の正本にしません。
+
+原資料の記述と、後日のユーザー決定を区別します。現在の仕様にはAccepted ADRを適用し、元資料の内容を問う場合は変更していないknowledge/rawを参照します。契約の存在から機能実装・クラウド適用・人間の合意を推定しません。
+
 1. 競合する情報源を暗黙に調整しません。
 2. 問いと、その正本区分を特定します。
 3. 日付、バージョン、出典、実装状態、および決定が提案済み、受理済み、置換済み、廃止済みのいずれかを確認します。

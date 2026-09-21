@@ -1,0 +1,9 @@
+extends:
+  - recommended
+rules:
+  # 本番未公開のAPI契約。未選定ライセンスや架空の本番URLを補わない。
+  info-license: off
+  no-empty-servers: off
+  operation-4xx-response: error
+  operation-operationId: error
+  operation-summary: error

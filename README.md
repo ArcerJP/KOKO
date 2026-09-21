@@ -2,11 +2,36 @@
 
 ## 概要
 
-KOKOは、プロジェクトの成長後も指示、証拠、知識、計画、実装、メモリ、タスク状態を区別して管理するための、Codexネイティブなワークスペース基盤です。
+KOKOは、第49回技科大祭向けの写真・動画共有Webアプリです。プロジェクトの成長後も指示、証拠、知識、計画、実装、タスク状態を区別するCodexネイティブなワークスペース上で開発します。
 
 ## 現在の状態
 
-このリポジトリには現在、AIネイティブなワークスペースアーキテクチャだけが含まれています。プロダクトの目的、技術スタック、アプリケーション構成、データベース、インフラストラクチャ、デプロイモデルは未決定です。
+第0日の共有契約（初期SQL、OpenAPIと生成型、状態・キー・エラー、トークン、構成）は作成・検証・合意が完了しました。起動可能なアプリ、Google OAuth、クラウド資源の構築は第1要件以降です。契約buildの成功をアプリ完成とは扱いません。
+
+- [プロダクト要件](docs/product/requirements.md)
+- [開発計画・FE/BEタスク](docs/product/development-plan.md)
+- [第0日チェックリストと承認状況](docs/product/day-zero.md)
+- [FE/BE共有契約](packages/contract/README.md)
+- [採用構成・信頼境界](docs/architecture/product-architecture.md)
+- [第6要件からのiOS/Android対応準備](docs/architecture/native-readiness.md)
+- [動画短縮・費用と代替案](docs/product/cost-policy.md)
+
+## ローカル検証
+
+Node.js 24系とnpmを使用します。秘密情報やクラウドアカウントなしで契約を検証できます。
+
+```powershell
+npm.cmd ci
+npm.cmd run format:check
+npm.cmd run lint:md
+npm.cmd run contract:check
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run build
+```
+
+OpenAPIやエラー定義を更新した場合は`npm.cmd run contract:generate`で派生物を生成します。実アプリを起動する`dev`コマンドはまだありません。
 
 ## 主要なAI環境
 
@@ -30,6 +55,9 @@ KOKOは次の5つのパターンを組み合わせます。
 KOKO/
 ├── AGENTS.md              リポジトリ全体のCodexルーティング
 ├── .agents/skills/        反復可能なCodexワークフロー
+├── apps/web/              FE領域（現在は初期トークン）
+├── apps/api/              BE領域（現在は初期SQL）
+├── packages/contract/     OpenAPI・生成型・契約・テスト
 ├── docs/                  正式な文書とADR
 ├── knowledge/raw/         原証拠（プライベート優先）
 ├── knowledge/wiki/        導出した再利用可能な知識
@@ -56,7 +84,7 @@ inbox → notebook → outbox → archive
 
 ## Codexへの指示
 
-AGENTS.mdは簡潔なリポジトリルーティングを提供します。下位のAGENTS.mdは、そのサブツリーに限ったルールを追加します。.agents/skills/配下の5つのSkillsは、タスク固有の手順を提供します。
+AGENTS.mdは簡潔なリポジトリルーティングを提供します。下位のAGENTS.mdは、そのサブツリーに限ったルールを追加します。.agents/skills/配下のSkillsは、タスク管理・調査実装・知識取込・Git・構成変更・費用比較の手順を提供します。
 
 ## Git / GitHub
 
@@ -68,7 +96,7 @@ EditorConfigとPrettierで改行、空白、インデントを統一します。
 
 ## CI
 
-Pull Requestの作成・更新時とmerge queueでGitHub Actionsを実行します。現在はPrettierによるformat検査とMarkdownlintによる文書の静的解析を導入済みです。ユニット／統合テスト、プロダクト言語固有のLinter、型チェック、production buildは、プロダクトの技術と実行対象を決定した時点で実装と同時に追加します。現在の対応状況と導入条件はdocs/ci.mdを参照してください。
+Pull Requestとmerge queueでPrettier、Markdownlint、OpenAPI/生成物、ESLint、TypeScript、契約単体/SQL統合テスト、契約buildを検査します。Web/APIのproduction buildとCloud Runのimage buildは実装導入時に追加します。適用範囲と必須check登録は[CI規約](docs/ci.md)を参照してください。
 
 ## KOKOの拡張
 

@@ -24,6 +24,13 @@ Thumbs.db
 # Repository-local formatting tooling
 node_modules/
 .husky/_/
+dist/
+coverage/
+.next/
+.wrangler/
+.vercel/
+*.tsbuildinfo
+tmp/
 
 # Daily / temporary memory
 memory/*
