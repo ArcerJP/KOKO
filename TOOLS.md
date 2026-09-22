@@ -25,6 +25,8 @@
 
 GitHub CLIはPR・check・ログの確認に便利ですが、KOKO開発の必須条件ではありません。2026-09-23、iijimaのPCでは管理者権限を利用できないため導入を見送りました。既存のGit、GitHub連携、ブラウザで作業を継続します。PRのレビューとmergeは人間が行います。
 
+Git、ブラウザ、連携ツール、CLIは別々のアカウントで認証されている可能性があります。書込み経路を選ぶ際は、[git-workflowのアカウント一致手順](.agents/skills/git-workflow/SKILL.md#pushとpr作成のアカウント一致)に従います。ツールが利用可能でも、同じアカウントで操作できると確認できなければpush・PR作成には使用しません。読取り用の連携と、承認済みの書込み経路を区別します。
+
 将来導入する場合は[GitHub CLI公式のWindows手順](https://github.com/cli/cli/blob/trunk/docs/install_windows.md)を使用し、`gh --version`と`gh auth status`で確認します。インストールと本人による認証は別の手順です。導入保留中に別方式のインストールやPATH変更を進めません。
 
 追加ツールが必要になった時点で、解決する作業、既存手段との差、費用・保守・権限上の負担を示して提案します。リポジトリ内に固定済みのWranglerやPlaywrightを、理由なくグローバルへ重複導入しません。

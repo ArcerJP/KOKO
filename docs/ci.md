@@ -124,7 +124,7 @@ workflowを追加しただけではmergeを技術的にブロックできませ�
 
 導入PRをmainへmergeした後、後続ブランチで`git pull origin main`を行い、後続PRの比較元をmainへ戻してReady for reviewにします。Squash mergeの場合も最新mainを通常mergeして履歴と差分を確認し、最新commitの全必須checkと承認レビューを経てmergeします。先行ブランチの削除は、後続PRの比較元をmainへ戻した後に行います。
 
-`Review required`はCIとは別です。「最後にpushした人以外の承認」が必要な設定では、そのpushを行ったアカウントのApproveだけでは条件を満たしません。Write権限を持つ別の共同開発者によるレビューが必要です。
+`Review required`はCIとは別です。PR作成者は自身のPRを承認できず、「最後にpushした人以外の承認」が必要な設定では、そのpushを行ったアカウントのApproveだけでも条件を満たしません。両方の条件を満たす、Write権限を持つ別の共同開発者によるレビューが必要です。再発防止の正本は[git-workflowのアカウント一致手順](../.agents/skills/git-workflow/SKILL.md#pushとpr作成のアカウント一致)です。CI成功とレビュー要件の充足を混同しません。
 
 ## 人間が決定する項目
 

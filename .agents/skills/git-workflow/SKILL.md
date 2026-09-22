@@ -43,6 +43,23 @@ Pull Requestのタイトルは、commitメッセージと同じく`MMDD 苗字 �
 
 Pull Requestを作成する直前に、作業ブランチ上でgit pull origin mainを実行します。競合を解消し、関連するテストとdocs/ci.mdで現在「導入済み」の検査をすべてローカルで再実行してから、作業ブランチをpushしてPull Requestを作成します。未導入または適用外の検査を成功扱いにせず、理由をPull Requestへ記載します。
 
+### PushとPR作成のアカウント一致
+
+同じPRの作業ブランチをpushするGitHubアカウントと、PRを作成するGitHubアカウントを一致させます。PR作成後の追加pushも、そのPR作成者のアカウントで行います。これはcommitのauthor／committerや`git config user.name`／`user.email`ではなく、GitHubへ操作を実行する認証アカウントの規則です。
+
+1. 最初のpush前に、使用するGit認証経路と、その経路で選択されるGitHubアカウントを確認します。Gitの氏名・メールアドレスやremote URLだけでpushアカウントを判断しません。
+2. PR作成に使うブラウザ、連携ツールまたはCLIの認証アカウントを、その経路自身で確認します。ブラウザのログイン状態や`gh auth status`だけから、別経路のGit／連携ツールも同じアカウントだと推定しません。
+3. pushとPR作成のアカウントが一致することを確認できなければ、push・PR作成を止め、使用アカウントと認証方法をユーザーへ確認します。別アカウントのツールで代行しません。アカウントの切替え、資格情報の削除・再登録、グローバル設定の変更を無断で行いません。
+4. PR作成後は実際のPR作成者を確認します。追加push前にもPR作成者とGit認証アカウントを照合し、不一致・確認不能なら停止します。確認記録にはアカウント名と確認手段だけを残し、トークンや資格情報を表示・保存しません。
+5. レビューはPR作成者でも最後のpush実行者でもない、必要なWrite権限を持つ別の担当者が行います。別アカウントでの自己承認を、人間による独立したレビューの代わりにしません。AIは承認レビューやmergeを代行しません。
+6. 既存PRで不一致が判明した場合は、PR作成者・最後のpush実行者・承認条件を確認し、ユーザーへ報告します。PRの閉鎖・再作成、履歴書換え、空commit、保護ルールの解除で回避せず、対応方針の承認を待ちます。
+
+PR作成者は自身のPRを承認できません。また、「最後のreviewable pushを行った人以外の承認」が必要な設定では、pushとPR作成を分担すると承認可能な担当者を減らします。アカウント一致の確認はこの事故を防ぐ手順であり、CI・CODEOWNERS等の他のmerge条件を免除するものではありません。
+
+根拠：[GitHub公式の承認レビュー](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/approving-a-pull-request-with-required-reviews)、[ブランチ保護の承認条件](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)。
+
+### Merge後の整理
+
 Pull Requestがmergeされた後は、GitHubのDelete branchでremoteの作業ブランチを削除します。続いてローカルで次を順に実行します。
 
 ```powershell
