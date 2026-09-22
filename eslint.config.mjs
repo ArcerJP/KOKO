@@ -8,6 +8,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/node_modules/**",
       "**/generated/**",
+      "**/worker-configuration.d.ts",
       "work/**",
       "knowledge/raw/**",
       "apps/web/**",
