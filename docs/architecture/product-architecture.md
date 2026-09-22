@@ -1,6 +1,6 @@
 # プロダクトアーキテクチャ
 
-2026-09-22時点の選定と、承認済みの第0日契約の実装境界です。実装状況は[開発計画](../product/development-plan.md)、決定履歴は[ADR-0001](../decisions/ADR-0001-product-baseline.md)と[ADR-0002](../decisions/ADR-0002-authenticated-delivery.md)を参照してください。
+2026-09-23時点の選定と、承認済みの第0日契約の実装境界です。実装状況は[開発計画](../product/development-plan.md)、決定履歴は[ADR-0001](../decisions/ADR-0001-product-baseline.md)と[ADR-0002](../decisions/ADR-0002-authenticated-delivery.md)を参照してください。
 
 ## 実行先と責務
 
@@ -17,7 +17,7 @@
 | 運営           | Discord、管理画面。後日rclone→Google Drive | 監査/通知/保持の契約                | webhook、運用script、会場運営、export                              |
 | 共通           | npm workspaces・TypeScript                 | `packages/contract`、型/テスト/CI   | FE/BEから共通import                                                |
 
-第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験を追加しました。クラウド接続・認証・画像decoderは未実装です。[撮影検証の構造と制約](../product/stage-one-capture.md)を参照してください。
+第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験を追加しました。Cloudflare Workersは`GET /health`、R2 binding、ローカル実行環境テスト、dry-run buildまでを基盤として実装しています。クラウドdeploy、認証、R2操作、画像decoderは未実装です。[撮影検証の構造と制約](../product/stage-one-capture.md)を参照してください。
 
 TypeScriptは型生成ツールのpeer範囲を優先して5.9.3を固定しています。実際の依存バージョンはpackage.jsonとlockfileを正本とします。契約パッケージにブラウザDOMやNode専用APIを混ぜず、WorkersとFE双方で使える純粋な契約を保持します。
 

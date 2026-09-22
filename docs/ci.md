@@ -21,22 +21,23 @@ Pull Requestの作成・更新時に再現可能な自動検証を行い、既�
 
 ## 現在の導入状態
 
-| 検査                        | 状態       | 現在の実装または未導入理由                                                                                      |
-| --------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------- |
-| 依存関係の再現可能なinstall | 導入済み   | npm workspacesを`npm ci`とlockfileで再現。                                                                      |
-| format／対応形式の構文解析  | 導入済み   | `.github/workflows/format-check.yml`の`Prettier` jobが`npm run format:check`を実行。                            |
-| Markdown Linter／静的解析   | 導入済み   | `.github/workflows/markdown-lint.yml`の`Markdown Lint` jobが`npm run lint:md`を実行。                           |
-| OpenAPIと生成物一致         | CI定義済み | `Contract Schema`：Redocly lint、生成型とエラー表の一致。                                                       |
-| ユニットテスト              | CI定義済み | `Contract Tests`：Node test runnerで状態・判定・キー・エラー・権限・トークン等を検証。                          |
-| SQL統合テスト               | CI定義済み | 同jobでPGliteへmigrationを実適用し、14テーブル・制約・grants/RLS・イベント境界を検証。                          |
-| JS/TS Linter                | CI定義済み | `TypeScript Lint`：契約側ESLint 10とWeb側ESLint 9／Next.js公式設定。生成型は生成一致とtscで検査。               |
-| 型チェック                  | CI定義済み | `Type Check`：契約buildとWebのNext.js型生成・strict tsc。noUncheckedIndexedAccess、exactOptionalPropertyTypes。 |
-| 契約package build           | CI定義済み | `Contract Build`：共用ESMと型宣言をdistへ出力。Web/API production buildの代替ではない。                         |
-| Web単体・HTTP／メディア統合 | CI定義済み | `Web Tests`：Vitest、MSW、合成メディアの実トリムとpacket照合、Worker境界。                                      |
-| Web production build        | CI定義済み | `Web Build`：共有契約build後のNext.js production build。                                                        |
-| Webブラウザ操作             | CI定義済み | `Web Browser Tests`：production serverを使うPlaywright Chromium。写真・動画・異常入力・モバイル幅。             |
-| API production build        | 未導入     | Workersハンドラーを実装する際に同PRで追加。                                                                     |
-| Docker image build          | 未導入     | Cloud Runを採用済みだが画像decoderのスパイク前でDockerfileなし。B1-7で実装と同時に追加。                        |
+| 検査                        | 状態       | 現在の実装または未導入理由                                                                             |
+| --------------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
+| 依存関係の再現可能なinstall | 導入済み   | npm workspacesを`npm ci`とlockfileで再現。                                                             |
+| format／対応形式の構文解析  | 導入済み   | `.github/workflows/format-check.yml`の`Prettier` jobが`npm run format:check`を実行。                   |
+| Markdown Linter／静的解析   | 導入済み   | `.github/workflows/markdown-lint.yml`の`Markdown Lint` jobが`npm run lint:md`を実行。                  |
+| OpenAPIと生成物一致         | CI定義済み | `Contract Schema`：Redocly lint、生成型とエラー表の一致。                                              |
+| ユニットテスト              | CI定義済み | `Contract Tests`：Node test runnerで状態・判定・キー・エラー・権限・トークン等を検証。                 |
+| SQL統合テスト               | CI定義済み | 同jobでPGliteへmigrationを実適用し、14テーブル・制約・grants/RLS・イベント境界を検証。                 |
+| JS/TS Linter                | CI定義済み | `TypeScript Lint`：契約側ESLint 10とWeb側ESLint 9／Next.js公式設定。生成型は生成一致とtscで検査。      |
+| 型チェック                  | CI定義済み | `Type Check`と`API Type Check`：契約build、Web/APIのstrict tsc、Wrangler生成型一致。                   |
+| 契約package build           | CI定義済み | `Contract Build`：共用ESMと型宣言をdistへ出力。Web/API production buildの代替ではない。                |
+| Web単体・HTTP／メディア統合 | CI定義済み | `Web Tests`：Vitest、MSW、合成メディアの実トリムとpacket照合、Worker境界。                             |
+| Web production build        | CI定義済み | `Web Build`：共有契約build後のNext.js production build。                                               |
+| Webブラウザ操作             | CI定義済み | `Web Browser Tests`：production serverを使うPlaywright Chromium。写真・動画・異常入力・モバイル幅。    |
+| API実行環境テスト           | CI定義済み | `API Tests`：Cloudflare公式Vitest pluginとローカルMiniflareでHTTP境界・R2 binding分離を検証。          |
+| API production build        | CI定義済み | `API Build`：実deployと同じWrangler設定を`wrangler deploy --dry-run`でbundle化し、外部へuploadしない。 |
+| Docker image build          | 未導入     | Cloud Runを採用済みだが画像decoderのスパイク前でDockerfileなし。B1-7で実装と同時に追加。               |
 
 契約向け5jobは`.github/workflows/contract-check.yml`に定義しています。workflowの存在とGitHub上の実行成功は別です。PGliteはPostgreSQLエンジンでSQLを実行しますが、Supabase Auth、実OAuth、クラウド通信、認証付きメディア配信を検証していません。これらは第1〜第3要件の別の統合/実機試験です。
 
@@ -45,6 +46,8 @@ Markdownlintは`.gitignore`を尊重して追跡対象相当のMarkdownを検査
 ## Web検査とLintの保守
 
 Web向け3jobは`.github/workflows/web-check.yml`に定義します。秘密やクラウド課金なしで実行でき、実機のカメラ・実OAuth・R2通信をモック成功で代替しません。詳細は[撮影検証](product/stage-one-capture.md)を参照してください。既存の契約job名は維持し、`Contract Tests`は`test:contract`、`Contract Build`は`build:contract`へ明示的に限定します。
+
+API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type Check`、`API Tests`、`API Build`は秘密情報やCloudflareログインなしで実行します。テストのR2はローカル保存であり、開発用実バケットとの通信成功を示しません。`API Build`もdry-runであり、Cloudflareへのdeploy成功とは区別します。
 
 ### 開発用Lintの互換性と移行課題
 
@@ -102,7 +105,7 @@ npm.cmd run test:e2e
 
 workflowを追加しただけではmergeを技術的にブロックできません。新しいjobがGitHub上で一度成功した後、repository管理者がmainのRulesetまたはBranch protection ruleへ必須status checkとして登録します。
 
-既存の`Prettier`、`Markdown Lint`、`Contract Schema`、`TypeScript Lint`、`Type Check`、`Contract Tests`、`Contract Build`は、PR #4のmerge後にmainで必須化済みです。今回追加する`Web Tests`、`Web Build`、`Web Browser Tests`も、初回成功後に管理者が追加してください。既存checkを外しません。このタスクではRulesetを変更していません。
+`Prettier`、`Markdown Lint`、`Contract Schema`、`TypeScript Lint`、`Type Check`、`Contract Tests`、`Contract Build`、`Web Tests`、`Web Build`、`Web Browser Tests`はmainで必須化済みです。今回追加する`API Type Check`、`API Tests`、`API Build`はGitHub上で一度成功した後、管理者が必須status checkへ追加してください。既存checkを外しません。このタスクではRulesetを変更しません。
 
 ## 人間が決定する項目
 
