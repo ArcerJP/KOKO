@@ -30,10 +30,11 @@ KOKOにおける正式なフォーマット規約は、この文書とリポジ�
 ## 初回セットアップ
 
 1. Node.js 22.22.1以上を用意します。CIではNode.js 24を使用します。
+   共同開発者の環境再現では、[導入手順](collaborator-setup.md)に従って受渡し元とNode/npmを揃えます。
 2. リポジトリルートで次を実行します。
 
 ```powershell
-npm.cmd install
+npm.cmd ci --include=dev --strict-peer-deps
 ```
 
 1. VS Codeまたは互換エディターを使用する場合は、次の推奨拡張機能をインストールします。

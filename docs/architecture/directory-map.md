@@ -39,13 +39,21 @@
 | work/archive/                      | 終了確認済みの過去タスク               | タスク履歴            | タスクフォルダーの配置場所                   | 過去の参照時                                                               | 終了後にYYYY/task-idへ移動                             | READMEは追跡対象、タスクは対象外／プライベート優先                 | アーカイブ済み           |
 | .github/PULL_REQUEST_TEMPLATE.md   | Pull Requestの入力項目                 | 協働テンプレート      | 既定のPR構造に対する正本                     | PR準備時                                                                   | 非公開のタスク内容を複製しない                         | 追跡対象                                                           | 永続                     |
 | .github/workflows/                 | Pull Requestとmerge queueの自動検査    | CI設定                | GitHub Actions検査の正本                     | PR・merge queueイベント時                                                  | 最小権限で再現可能な検査に限定                         | 追跡対象                                                           | 永続、更新可能           |
-| apps/web/                          | FEのトークンと今後のNext.js実装        | プロダクト            | トークン・FE実装の正本                       | FE変更時                                                                   | K-07と契約を維持                                       | ソースを追跡、build/秘密は対象外                                   | プロダクトライフサイクル |
+| apps/web/                          | Next.js撮影検証・トークン・Web試験     | プロダクト            | トークン・FE実装の正本                       | FE変更時                                                                   | K-07と契約を維持                                       | ソースを追跡、build/秘密は対象外                                   | プロダクトライフサイクル |
 | apps/api/                          | BEのSQLと今後のWorkers実装             | プロダクト            | DB migration・BE実装の正本                   | DB/API変更時                                                               | 適用済みSQLは新migrationで変更                         | ソースを追跡、秘密/データは対象外                                  | プロダクトライフサイクル |
 | packages/contract/                 | FE/BE共有API・状態・キー・エラー・試験 | 契約                  | コード化した共通契約の正本                   | FE/BEの境界変更時                                                          | OpenAPIから型を生成し双方レビュー                      | 正本と生成型/表を追跡、distは対象外                                | バージョンを管理して更新 |
 | docs/product/                      | 現在の要件・段階別計画・契約承認       | 規範的文書            | 要件/計画/第0日状況の正本                    | プロダクト作業時                                                           | 未実装・未承認と事実を区別                             | 公開可能な要件だけ追跡                                             | 継続更新                 |
 | eslint.config.mjs                  | JS/TSの静的解析                        | 開発設定              | Linter規則の正本                             | ソース変更・CI時                                                           | 生成物は正本の試験で検証                               | 追跡対象                                                           | 永続、更新可能           |
 
 ## 登録表の保守
+
+`docs/collaborator-setup.md`は共同開発者のWindows導入、`docs/private-sharing.md`は非公開共有の対象・権限・同期運用の正本です。導入・共有時に読み、実装や共有方針に合わせて更新し、公開可能な手順だけを追跡します。個別メンバー・資料一覧・共有時点は非公開側で管理します。`.agents/skills/private-context-sharing/SKILL.md`は確認付き非公開共有の反復手順で、該当作業時に読み、追跡対象として継続管理します。共有コピーは別のPrivateリポジトリの`context/`に保持し、公開KOKOのトップレベル領域やignore方針を変更しません。
+
+`apps/web/public/`はブラウザへ公開する静的ファイルです。現在は依存ライブラリの原文ライセンス通知とソース入手先だけを含みます。秘密・実メディア・測定記録を置きません。依存更新時に通知を確認し、上流のライセンス原文を日本語へ置換しません。
+
+第1要件では`apps/web/`の責務をトークンに加え、Next.js UI・端末内メディア処理・GET境界・MSW試験へ拡張しました。実装の正本は`src/`、自動検証は`test/`と`e2e/`です。`test/fixtures/`は小さい合成素材と生成手順だけを追跡し、実機素材・測定JSON・`.next/`・`next-env.d.ts`・`test-results/`・`playwright-report/`・ローカルブラウザ本体`.playwright/`は追跡しません。
+
+`docs/product/stage-one-capture.md`は起動・端末検証、`docs/product/cloud-setup.md`はクラウド準備の手順の正本です。いずれも対象作業時に読み、実装／公式仕様の変更時に更新し、公開可能な手順だけを継続管理します。秘密・個別請求情報・測定原資料は含めません。一般の検証フローは既存Skillsで扱うため、新しいSkillやトップレベルのサービス領域は追加しません。
 
 費用比較の反復手順は`.agents/skills/cost-review/`（手順の正本、費用判断時に読込、承認済み手順だけ編集、追跡対象、継続更新）へ配置します。個別の見積りや請求情報はここへ保存しません。`docs/architecture/native-readiness.md`は将来クライアントの境界、`docs/product/cost-policy.md`は現在の費用判断方針であり、いずれも対応領域の規範的文書として扱います。
 
