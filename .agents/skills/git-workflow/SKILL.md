@@ -33,6 +33,8 @@ commitメッセージは、`MMDD 苗字 接頭辞: 説明`の形式にします�
 
 変更前に既存のブランチとremoteを確認します。GitHubリポジトリの作成には、所有者と公開範囲の明示が必要です。push、PRの作成、remoteの変更、ブランチの削除は外部状態を変更するため、ユーザーが依頼した範囲内でなければなりません。
 
+操作経路は[TOOLS.md](../../../TOOLS.md#github操作ツール)に従い、既存のGitと確認済みのGitHub連携を使用します。連携の不具合・権限不足・認証アカウント不一致を、ブラウザ操作への自動切替えで回避しません。Web操作が必要ならユーザーへ質問し、[Web操作の利用条件](../../../TOOLS.md#web操作の利用条件)に従います。
+
 mainへ直接pushしません。作業開始前にmainでgit pull origin mainを実行し、最新状態から作業ブランチを作成します。
 
 ブランチ名は`苗字/接頭辞/内容`の形式にします。接頭辞にはfeature、feat、fix、refactor、docs、chore、test、perfなどを使用し、内容には小文字のkebab-caseで目的を記載します。例：`iijima/feature/add-mogitenpage`。
