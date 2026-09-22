@@ -10,7 +10,7 @@
 
 メンバー別の招待・権限、初期資料PR、対応する公開commit、資料の照合結果は、非公開側READMEとPRへ記録します。PRの作成・merge・相手PCへの取込みはそれぞれ別の確認事項であり、共有先を作っただけでは導入完了ではありません。
 
-2026-09-23時点で非公開側のbranch protection／Rulesetは未設定です。GitHubの設定画面には、OrganizationをGitHub Teamへ変更するまでPrivateのRulesetは強制されない旨が表示されました。したがって、現状のPRルールは人による運用であり、直接pushの技術的遮断を保証しません。有料化は別途判断し、契約や保護設定を完了したと推定しません。[公式のRuleset利用条件](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)
+2026-09-23時点で非公開側のbranch protection／Rulesetは未設定です。GitHubの設定画面には、OrganizationをGitHub Teamへ変更するまでPrivateのRulesetは強制されない旨が表示されました。iijimaはこの制約を確認し、**当面は追加費用をかけず、人によるPR運用を行う**と決定しました。直接pushの技術的遮断を保証する運用ではありません。mainへの通常の直接pushを避け、担当者が差分確認・承認・mergeを行います。将来の有料化や保護設定の変更は再承認を得ます。[公式のRuleset利用条件](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)
 
 ## 公開と非公開を分ける
 
