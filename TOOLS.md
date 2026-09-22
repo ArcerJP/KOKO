@@ -20,3 +20,11 @@
 - リポジトリ品質管理ツールはpackage.jsonとpackage-lock.jsonで固定し、通常の再現導入はnpm.cmd ci --include=dev --strict-peer-depsを使用します。依存関係の追加・更新に伴うinstallは別の変更として検証します。共同開発者の初回導入はdocs/collaborator-setup.mdに従います。
 - 明示的な許可なく、リポジトリ固有のルールをCodex、Git、IDE、OS、環境のグローバル設定へ書き込みません。
 - APIキー、トークン、パスワード、認証情報、秘密鍵、セッションデータ、秘密の値をここへ記録しません。
+
+## GitHub操作ツール
+
+GitHub CLIはPR・check・ログの確認に便利ですが、KOKO開発の必須条件ではありません。2026-09-23、iijimaのPCでは管理者権限を利用できないため導入を見送りました。既存のGit、GitHub連携、ブラウザで作業を継続します。PRのレビューとmergeは人間が行います。
+
+将来導入する場合は[GitHub CLI公式のWindows手順](https://github.com/cli/cli/blob/trunk/docs/install_windows.md)を使用し、`gh --version`と`gh auth status`で確認します。インストールと本人による認証は別の手順です。導入保留中に別方式のインストールやPATH変更を進めません。
+
+追加ツールが必要になった時点で、解決する作業、既存手段との差、費用・保守・権限上の負担を示して提案します。リポジトリ内に固定済みのWranglerやPlaywrightを、理由なくグローバルへ重複導入しません。
