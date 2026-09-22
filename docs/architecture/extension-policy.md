@@ -33,6 +33,8 @@
 
 新しいSkillは、有効なnameとdescriptionのFront Matterを含むSKILL.mdだけで開始します。scripts、references、assets、UIメタデータは、実際の用途が確認された場合に限り追加します。
 
+2026-09-23の継続的な非公開資料共有の依頼により、`private-context-sharing`を追加しました。Publicへの誤送信、秘密・生成物の混入、他者変更の上書きを防ぐため、対象分類→双方の比較→限定的反映→hashとGit確認という順序が必要です。一般のGit手順だけではこの資料境界を扱わないため、入口となるSKILL.mdだけを追加し、運用方針は[非公開共有](../private-sharing.md)へ集約します。
+
 ## 命名
 
 通常のディレクトリには小文字のkebab-caseを、文書化された特殊ファイルには標準の大文字名を使用します。日付付き成果物にはYYYY-MM-DD-topic.mdを、タスクにはTASK-YYYYMMDD-short-kebab-descriptionを使用します。

@@ -12,12 +12,18 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "lint:md": "markdownlint-cli2",
-    "lint": "eslint .",
+    "lint": "eslint . && npm run lint --workspace @koko/web",
     "contract:generate": "npm run generate --workspace @koko/contract",
     "contract:check": "npm run check --workspace @koko/contract",
-    "typecheck": "tsc -p packages/contract/tsconfig.json --noEmit",
-    "build": "npm run build --workspace @koko/contract",
-    "test": "npm run build && node --test packages/contract/test/*.test.mjs",
+    "dev": "npm run build:contract && npm run dev --workspace @koko/web",
+    "typecheck": "npm run build:contract && npm run typecheck --workspace @koko/web",
+    "build:contract": "npm run build --workspace @koko/contract",
+    "build:web": "npm run build:contract && npm run build --workspace @koko/web",
+    "build": "npm run build:web",
+    "test:contract": "npm run build:contract && node --test packages/contract/test/*.test.mjs",
+    "test:web": "npm run build:contract && npm run test --workspace @koko/web",
+    "test:e2e": "npm run test:e2e --workspace @koko/web",
+    "test": "npm run test:contract && npm run test:web",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -37,5 +43,16 @@
   },
   "lint-staged": {
     "**/*": "prettier --write --ignore-unknown"
+  },
+  "overrides": {
+    "eslint-config-next": {
+      "eslint": "9.39.5",
+      "typescript-eslint": {
+        "eslint": "$eslint"
+      },
+      "@eslint-community/eslint-utils": {
+        "eslint": "$eslint"
+      }
+    }
   }
 }

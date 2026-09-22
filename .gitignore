@@ -31,6 +31,10 @@ coverage/
 .vercel/
 *.tsbuildinfo
 tmp/
+test-results/
+playwright-report/
+.playwright/
+next-env.d.ts
 
 # Daily / temporary memory
 memory/*

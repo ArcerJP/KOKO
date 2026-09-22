@@ -38,6 +38,10 @@ nativeへの設計境界は[native対応準備](native-readiness.md)、予算判
 
 ## 重複の境界
 
+共同開発者の環境再現は[導入手順](../collaborator-setup.md)、非公開資料の共有先・対象・更新運用は[非公開共有](../private-sharing.md)を正本とします。PublicのKOKOとPrivateのKOKO-privateのGit状態を混同せず、双方のcommitと内容hashを照合します。Codexの安全な反映手順は[private-context-sharing Skill](../../.agents/skills/private-context-sharing/SKILL.md)に置きます。
+
+第1の撮影・トリム受入手順は[stage-one-capture](../product/stage-one-capture.md)、クラウドのアカウント・権限・課金準備は[cloud-setup](../product/cloud-setup.md)が正本です。自動テストは実装を検証するもので、実機や実クラウドの受入記録を代替しません。個別の測定JSONは非公開のタスク証拠として扱います。
+
 - MEMORY.mdからADRへリンクできますが、その内容を複製してはいけません。
 - README.mdでアーキテクチャを要約できますが、正式文書へリンクしなければなりません。
 - 計画は意図した変更を説明するもので、実装後に現在の仕様とはなりません。

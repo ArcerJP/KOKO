@@ -21,23 +21,38 @@ Pull Requestの作成・更新時に再現可能な自動検証を行い、既�
 
 ## 現在の導入状態
 
-| 検査                        | 状態       | 現在の実装または未導入理由                                                               |
-| --------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
-| 依存関係の再現可能なinstall | 導入済み   | npm workspacesを`npm ci`とlockfileで再現。                                               |
-| format／対応形式の構文解析  | 導入済み   | `.github/workflows/format-check.yml`の`Prettier` jobが`npm run format:check`を実行。     |
-| Markdown Linter／静的解析   | 導入済み   | `.github/workflows/markdown-lint.yml`の`Markdown Lint` jobが`npm run lint:md`を実行。    |
-| OpenAPIと生成物一致         | CI定義済み | `Contract Schema`：Redocly lint、生成型とエラー表の一致。                                |
-| ユニットテスト              | CI定義済み | `Contract Tests`：Node test runnerで状態・判定・キー・エラー・権限・トークン等を検証。   |
-| SQL統合テスト               | CI定義済み | 同jobでPGliteへmigrationを実適用し、14テーブル・制約・grants/RLS・イベント境界を検証。   |
-| JS/TS Linter                | CI定義済み | `TypeScript Lint`：ESLint/TypeScript ESLint。生成型は除外し、生成一致とtscで検査。       |
-| 型チェック                  | CI定義済み | `Type Check`：TypeScript strict、noUncheckedIndexedAccess、exactOptionalPropertyTypes。  |
-| 契約package build           | CI定義済み | `Contract Build`：共用ESMと型宣言をdistへ出力。Web/API production buildの代替ではない。  |
-| Web/API production build    | 未導入     | Next.jsアプリ・Workersハンドラーは第1要件で実装する際に同PRで追加。                      |
-| Docker image build          | 未導入     | Cloud Runを採用済みだが画像decoderのスパイク前でDockerfileなし。B1-7で実装と同時に追加。 |
+| 検査                        | 状態       | 現在の実装または未導入理由                                                                                      |
+| --------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------- |
+| 依存関係の再現可能なinstall | 導入済み   | npm workspacesを`npm ci`とlockfileで再現。                                                                      |
+| format／対応形式の構文解析  | 導入済み   | `.github/workflows/format-check.yml`の`Prettier` jobが`npm run format:check`を実行。                            |
+| Markdown Linter／静的解析   | 導入済み   | `.github/workflows/markdown-lint.yml`の`Markdown Lint` jobが`npm run lint:md`を実行。                           |
+| OpenAPIと生成物一致         | CI定義済み | `Contract Schema`：Redocly lint、生成型とエラー表の一致。                                                       |
+| ユニットテスト              | CI定義済み | `Contract Tests`：Node test runnerで状態・判定・キー・エラー・権限・トークン等を検証。                          |
+| SQL統合テスト               | CI定義済み | 同jobでPGliteへmigrationを実適用し、14テーブル・制約・grants/RLS・イベント境界を検証。                          |
+| JS/TS Linter                | CI定義済み | `TypeScript Lint`：契約側ESLint 10とWeb側ESLint 9／Next.js公式設定。生成型は生成一致とtscで検査。               |
+| 型チェック                  | CI定義済み | `Type Check`：契約buildとWebのNext.js型生成・strict tsc。noUncheckedIndexedAccess、exactOptionalPropertyTypes。 |
+| 契約package build           | CI定義済み | `Contract Build`：共用ESMと型宣言をdistへ出力。Web/API production buildの代替ではない。                         |
+| Web単体・HTTP／メディア統合 | CI定義済み | `Web Tests`：Vitest、MSW、合成メディアの実トリムとpacket照合、Worker境界。                                      |
+| Web production build        | CI定義済み | `Web Build`：共有契約build後のNext.js production build。                                                        |
+| Webブラウザ操作             | CI定義済み | `Web Browser Tests`：production serverを使うPlaywright Chromium。写真・動画・異常入力・モバイル幅。             |
+| API production build        | 未導入     | Workersハンドラーを実装する際に同PRで追加。                                                                     |
+| Docker image build          | 未導入     | Cloud Runを採用済みだが画像decoderのスパイク前でDockerfileなし。B1-7で実装と同時に追加。                        |
 
 契約向け5jobは`.github/workflows/contract-check.yml`に定義しています。workflowの存在とGitHub上の実行成功は別です。PGliteはPostgreSQLエンジンでSQLを実行しますが、Supabase Auth、実OAuth、クラウド通信、認証付きメディア配信を検証していません。これらは第1〜第3要件の別の統合/実機試験です。
 
 Markdownlintは`.gitignore`を尊重して追跡対象相当のMarkdownを検査します。日本語文書と表の可読性をPrettierへ委ねるため、行長の`MD013`を無効化します。また、タスクテンプレートのfront matterにある`title`は文書見出しではなくmetadataとして扱うため、`MD025`ではfront matterを見出しとして数えません。それ以外は既定ruleを使用します。
+
+## Web検査とLintの保守
+
+Web向け3jobは`.github/workflows/web-check.yml`に定義します。秘密やクラウド課金なしで実行でき、実機のカメラ・実OAuth・R2通信をモック成功で代替しません。詳細は[撮影検証](product/stage-one-capture.md)を参照してください。既存の契約job名は維持し、`Contract Tests`は`test:contract`、`Contract Build`は`build:contract`へ明示的に限定します。
+
+### 開発用Lintの互換性と移行課題
+
+WebだけESLint 9.39.5を使用する構成はユーザー承認済みです。Next.js公式設定が使うimport／React／アクセシビリティのプラグインはESLint 10をpeer範囲に含めないため、契約側のESLint 10を変更せず分離します。`--force`や`--legacy-peer-deps`で互換性違反を無視しません。lockfileの再現と`npm ls --all`を検査します。
+
+ESLint 9は2026-08-06にEOLとなっています。[公式サポート表](https://eslint.org/version-support/)で判明したこの追加リスクを含め、一時利用と移行方針は2026-09-23にiijimaが承認しました。開発・CI専用で本番の実行依存ではありませんが、既知の脆弱性0件を将来の安全保証にはしません。公式プラグインの10対応時に移行し、lint・型・全試験・buildを再検証します。
+
+`package.json`のscoped overridesでNext.js配下を9系へ固定し、9／10の両方に対応するTypeScript ESLintとeslint-utilsの共有helperは既存のroot版を参照します。npmのhoistによるpeer競合を避けるための設定です。バージョン更新時は、overrideも含めて`npm ci --strict-peer-deps`と`npm ls --all`で再検証してください。
 
 ## 禁止する見かけ上の成功
 
@@ -79,13 +94,15 @@ npm.cmd run lint
 npm.cmd run typecheck
 npm.cmd test
 npm.cmd run build
+npm.cmd exec --workspace @koko/web -- playwright install chromium
+npm.cmd run test:e2e
 ```
 
 ## 必須status check
 
 workflowを追加しただけではmergeを技術的にブロックできません。新しいjobがGitHub上で一度成功した後、repository管理者がmainのRulesetまたはBranch protection ruleへ必須status checkとして登録します。
 
-登録対象は`Prettier`、`Markdown Lint`に加えて、`Contract Schema`、`TypeScript Lint`、`Type Check`、`Contract Tests`、`Contract Build`です。既存checkを外さず追加してください。Web/API/imageのjobを追加した場合も同様に必須化します。このタスクではRulesetを変更していません。
+既存の`Prettier`、`Markdown Lint`、`Contract Schema`、`TypeScript Lint`、`Type Check`、`Contract Tests`、`Contract Build`は、PR #4のmerge後にmainで必須化済みです。今回追加する`Web Tests`、`Web Build`、`Web Browser Tests`も、初回成功後に管理者が追加してください。既存checkを外しません。このタスクではRulesetを変更していません。
 
 ## 人間が決定する項目
 

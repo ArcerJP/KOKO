@@ -24,7 +24,8 @@ KOKOは、第49回技科大祭向けの写真・動画共有Webアプリと、�
 
 - docs/ — 現在の正式なプロジェクト文書およびアーキテクチャ文書。
 - docs/decisions/ — 重要な決定に対するアーキテクチャ決定記録。
-- apps/web/、apps/api/ — FEとBEの実装領域。現在はトークンと初期SQL。
+- docs/collaborator-setup.md、docs/private-sharing.md — 共同開発者の導入と、公開Gitから分離した非公開資料の共有。
+- apps/web/、apps/api/ — FEとBEの実装領域。現在はNext.js撮影検証・トークン・Web試験と、BEの初期SQL。
 - packages/contract/ — FE/BE共通のAPI、生成型、状態・エラー・キー契約と試験。
 - knowledge/raw/ — 原証拠と原資料。プライベート優先で、通常は変更不可。
 - knowledge/wiki/ — 出典を示した証拠から導出した再利用可能な知識。
@@ -49,6 +50,7 @@ KOKOは、第49回技科大祭向けの写真・動画共有Webアプリと、�
 - Git変更の確認やステージング、commit、ブランチ、remote、push、PR準備 → $git-workflow。
 - トップレベル構造、Skills、AGENTS.md、アーキテクチャ領域の変更 → $evolve-workspace。
 - クラウド・保存・配信・AIの費用見積り、節約案、有料構成の変更判断 → $cost-review。
+- 非公開資料の導入・同期・共有、引き渡し時の非公開共有状況確認 → $private-context-sharing。
 
 今後も反復するタスクは、evolve-workspaceで既存Skillとの責務を確認してから、焦点を絞ったSkillへ整理します。反復する必要性が確認されない限り、計画、実装、引き渡しレビュー、メモリ保守を新しいSkillsへ分割しません。
 
