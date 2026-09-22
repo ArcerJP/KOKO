@@ -10,6 +10,8 @@ export default tseslint.config(
       "**/generated/**",
       "work/**",
       "knowledge/raw/**",
+      "apps/web/**",
+      ".playwright/**",
     ],
   },
   js.configs.recommended,

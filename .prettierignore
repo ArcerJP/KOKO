@@ -8,6 +8,10 @@ coverage/
 .next/
 .wrangler/
 .vercel/
+test-results/
+playwright-report/
+.playwright/
+next-env.d.ts
 
 memory/*
 !memory/README.md
