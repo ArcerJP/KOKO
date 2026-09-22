@@ -17,7 +17,9 @@
 | 運営           | Discord、管理画面。後日rclone→Google Drive | 監査/通知/保持の契約                | webhook、運用script、会場運営、export                              |
 | 共通           | npm workspaces・TypeScript                 | `packages/contract`、型/テスト/CI   | FE/BEから共通import                                                |
 
-TypeScriptは型生成ツールのpeer範囲を優先して5.9.3を固定しています。Next.jsや画像ライブラリの実行依存は第1要件で検証して追加します。契約パッケージにブラウザDOMやNode専用APIを混ぜず、WorkersとFE双方で使える純粋な契約を保持します。
+第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験を追加しました。クラウド接続・認証・画像decoderは未実装です。[撮影検証の構造と制約](../product/stage-one-capture.md)を参照してください。
+
+TypeScriptは型生成ツールのpeer範囲を優先して5.9.3を固定しています。実際の依存バージョンはpackage.jsonとlockfileを正本とします。契約パッケージにブラウザDOMやNode専用APIを混ぜず、WorkersとFE双方で使える純粋な契約を保持します。
 
 第6要件からのiOS/Androidは同じAPI/DBを利用する方針です。[クライアント境界・認証・ストア対応](native-readiness.md)を維持し、現Web UIやCookie方式に業務ロジックを閉じ込めません。実装方式は未選定です。動画長と配信方式の選択には[費用方針](../product/cost-policy.md)を適用します。
 
@@ -57,6 +59,8 @@ FEの配信はVercel、API/メディアは同一originの経路からWorkersへ�
 Supabase service key、R2/S3署名資格情報、Stream API/署名鍵、Cloud Runサービス間資格情報、OpenAI/Vision資格情報、Discord webhookをSecretストアへ分離します。Git、DBの設定JSON、FE bundle、ログ、PRへ値を含めません。`NEXT_PUBLIC_`へ秘密を入れません。
 
 開発/検証/本番のDB・バケット・origin・OAuth redirectを分離。未確定のドメイン・project ID・予算・lock期間を仮の本番値で埋めません。外部リソースの作成と権限付与は第1要件で承認後に行います。
+
+アカウント・課金・権限の準備と人間の操作は[クラウド準備ガイド](../product/cloud-setup.md)を参照してください。端末内検証画面は秘密や外部サービス接続なしで動作します。
 
 ## 一次資料（2026-09-21確認）
 
