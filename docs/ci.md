@@ -103,9 +103,28 @@ npm.cmd run test:e2e
 
 ## 必須status check
 
-workflowを追加しただけではmergeを技術的にブロックできません。新しいjobがGitHub上で一度成功した後、repository管理者がmainのRulesetまたはBranch protection ruleへ必須status checkとして登録します。
+workflowを追加しただけではmergeを技術的にブロックできません。新しいjobは、導入PRで実行成功を確認してから、下記の順序でmainのRulesetまたはBranch protection ruleへ登録します。
 
-`Prettier`、`Markdown Lint`、`Contract Schema`、`TypeScript Lint`、`Type Check`、`Contract Tests`、`Contract Build`、`Web Tests`、`Web Build`、`Web Browser Tests`はmainで必須化済みです。今回追加する`API Type Check`、`API Tests`、`API Build`はGitHub上で一度成功した後、管理者が必須status checkへ追加してください。既存checkを外しません。このタスクではRulesetを変更しません。
+`Prettier`、`Markdown Lint`、`Contract Schema`、`TypeScript Lint`、`Type Check`、`Contract Tests`、`Contract Build`、`Web Tests`、`Web Build`、`Web Browser Tests`に加え、`API Type Check`、`API Tests`、`API Build`もmainで必須化されています。APIの3checkは2026-09-23に導入PRで成功し、管理者の再認証・保存とPR上のRequired表示を確認しました。既存checkと承認レビュー要件を維持します。
+
+### 新しい必須checkを導入する順序
+
+1. workflow、検査command、検査対象を同じPRへ追加し、そのPRの最新commitで成功を確認します。
+2. 人間のレビューを経て導入PRをmainへmergeします。
+3. 既存PRへ最新mainを取り込み、新しいworkflowが存在し実行できることを確認します。
+4. 管理者が新しいjob名を必須status checkへ追加し、送信元をGitHub Actionsへ限定します。PR上で結果とRequired表示を確認します。
+
+新しいcheckを導入PRのmerge前に必須化すると、そのworkflowを含まない既存PRが`Expected — Waiting for status to be reported`で止まります。これは実行中や失敗を示すものではなく、結果を待つ状態です。定義のないcheckは、既存workflowを再実行するだけでは届きません。
+
+### Expectedの解消と依存PR
+
+対象PRの最新commitにworkflowと必要なソースがあるか、実行契機・branch/path filter・job名・結果の送信元が必須設定と合うかを確認します。workflowを含むmainを取り込んで、PR更新による実際の検査を実行します。mainに未導入なら、先に導入PRをレビュー・mergeします。空の成功job、skip、手動の成功statusで代替しません。
+
+導入PRのmerge前に後続PRも検査する必要がある場合は、導入PRのブランチを後続ブランチへ通常mergeし、後続PRの比較元も導入ブランチへ一時的に変更します。これにより、後続PRの差分をその目的に絞ってレビューできます。ただし作業ブランチを比較元にしたPRには、main向けRulesetがそのまま適用されるとは限りません。後続PRはDraftにして誤mergeを防ぎ、**作業ブランチへmergeしません。**
+
+導入PRをmainへmergeした後、後続ブランチで`git pull origin main`を行い、後続PRの比較元をmainへ戻してReady for reviewにします。Squash mergeの場合も最新mainを通常mergeして履歴と差分を確認し、最新commitの全必須checkと承認レビューを経てmergeします。先行ブランチの削除は、後続PRの比較元をmainへ戻した後に行います。
+
+`Review required`はCIとは別です。「最後にpushした人以外の承認」が必要な設定では、そのpushを行ったアカウントのApproveだけでは条件を満たしません。Write権限を持つ別の共同開発者によるレビューが必要です。
 
 ## 人間が決定する項目
 

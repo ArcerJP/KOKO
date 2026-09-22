@@ -79,6 +79,7 @@ Discordの通知先とGoogle Driveのアーカイブ先は、後続の運営準�
 - 開発用の非公開R2バケットとして、原本用`koko-dev-originals`と派生物用`koko-dev-derived`を作成しました。どちらもLocationはAutomatic（作成画面の選択先はAsia Pacific）、Default Storage ClassはStandard、Public Accessは無効です。作成後の一覧で2バケットと合計保存量0 Bを確認しました。
 - 大学・実行委員会によるデータ保存地域の制約はないことをiijimaが確認しました。AutomaticのAsia Pacificは日本国内保存を保証する指定ではありません。[R2のデータ配置](https://developers.cloudflare.com/r2/reference/data-location/)
 - `r2.dev`、Public custom domain、Bucket Lock、Lifecycle、API token、ファイル投入は未設定です。保持期間の合意前に削除不能期間を作らず、接続実装前に永続資格情報を発行しません。
+- Worker基盤は`apps/api/`に実装し、`GET /health`、開発用R2 binding、ローカルテスト、dry-run buildを追加しました。型検査・テスト・buildのGitHub Actionsも実行成功を確認しています。Cloudflare上の`koko-api-dev`作成、GitHub連携、実deploy、実R2通信は未完了です。CI成功と実接続の検証を区別します。必須checkの導入順序は[CI規約](../ci.md#新しい必須checkを導入する順序)を参照してください。
 
 #### 残る準備
 
