@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "koko-api-dev",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "r2_buckets": [
+    {
+      "binding": "ORIGINALS_BUCKET",
+      "bucket_name": "koko-dev-originals",
+    },
+    {
+      "binding": "DERIVED_BUCKET",
+      "bucket_name": "koko-dev-derived",
+    },
+  ],
+}
