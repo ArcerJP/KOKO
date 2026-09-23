@@ -39,6 +39,7 @@
 - [ ] Pull Requestのタイトルが`MMDD 苗字 接頭辞: 説明`形式になっている
 - [ ] 各commitが1つの目的だけを含んでいる
 - [ ] Pull Request作成前に作業ブランチで`git pull origin main`を実行した
+- [ ] `.agents/skills/git-workflow/SKILL.md`のアカウント一致手順に従い、push実行者とPR作成者が同じGitHubアカウントであることを確認した（追加push時も再確認）
 - [ ] `npm.cmd run format:check`が成功した
 - [ ] テストまたは正当化された代替手段が文書化されている
 - [ ] 文書が現在の動作と一致している

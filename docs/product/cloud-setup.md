@@ -1,6 +1,6 @@
 # クラウドの役割と準備ガイド
 
-確認日：2026-09-22。対象はB1-1〜B1-3の準備です。採用構成の正本は[プロダクト構成](../architecture/product-architecture.md)、費用判断の方針は[費用方針](cost-policy.md)です。この文書は契約・課金・配備の完了記録ではありません。
+確認日：Vercelの初回配備・保護設定とCloudflareアカウント・R2の初期準備は2026-09-23、その他の準備・料金情報は2026-09-22。対象はB1-1〜B1-3の準備です。採用構成の正本は[プロダクト構成](../architecture/product-architecture.md)、費用判断の方針は[費用方針](cost-policy.md)です。確認済みの範囲は各節に記載し、全サービスの契約・課金・実連携や本番受け入れの完了とは区別します。
 
 ## まず何を用意するか
 
@@ -30,20 +30,63 @@ Discordの通知先とGoogle Driveのアーカイブ先は、後続の運営準�
 
 ### 1. Vercel：Web画面
 
-1. [Vercel](https://vercel.com/signup)でアカウントを準備し、管理するTeamとメンバーを確認します。
-2. GitHub連携時は、GitHub Organizationの管理者がVercel GitHub Appを承認します。対象を`ArcerJP/KOKO`に限定し、無関係なリポジトリへ権限を広げません。
-3. プランはまだ確定しません。Hobbyは個人・非商用向けです。さらに公式[Git連携説明](https://vercel.com/docs/git#using-hobby-teams)は「Organization内のprivate repositoryは不可」、[制限説明](https://vercel.com/docs/limits#connecting-a-project-to-a-git-repository)は「Organizationのrepositoryは不可」と記載が一致していません。KOKOはPublicですが、Hobbyで接続できると断定せず、実際の連携画面と利用条件を一緒に確認してから決めてよいですか？
-4. 「Import／Deploy」は初回配備につながるため、今は押す必要がありません。後続で`apps/web`をRoot Directoryにし、外側の共有契約を含めるmonorepo設定とビルド順を検証してから接続します。現在のCI成功はVercel配備成功の証拠ではありません。
+#### 採用プランと確認済みの状態
 
-Proは月額20 USDのplatform feeにdeploy可能な1席と20 USDの従量creditを含み、追加のdeploy席は各20 USD/月、閲覧専用席は無料です。超過利用や追加機能は別料金です。Hobbyの可否と複数人のdeploy要否を確認して、不要な席を増やさないのが節約案です。[Pro公式料金](https://vercel.com/docs/plans/pro-plan)、[Hobby条件](https://vercel.com/docs/plans/hobby)
+- iijimaの承認によりHobbyを採用します。学祭時点は学生・個人の非商用プロジェクトで、Vercelの設定・管理は代表者1人が行います。有料機能、広告・有償協賛表示、商品・サービスの販売宣伝、開発・運営の報酬はいずれもありません。[Hobby条件](https://vercel.com/docs/plans/hobby)、[Fair Use Guidelines](https://vercel.com/docs/limits/fair-use-guidelines#commercial-usage)
+- 管理スコープは`Arcer`（URL上の識別子は`arcer2`）、プロジェクトは`koko-web`です。公開リポジトリ`ArcerJP/KOKO`との接続と、`main`の`c8b0f49`の初回配備成功を確認しました。`KOKO-private`は接続しません。
+- GitHub Appの許可対象は`ArcerJP/KOKO`に限定する方針です。今回確認したのはVercel側の接続先であり、GitHub側のApp権限一覧は再確認していません。
+- 確認用の固定URLは[https://koko-web-green.vercel.app/](https://koko-web-green.vercel.app/)です。現在は開発用の撮影・トリム画面で、Googleログイン・保存・AI判定には未接続です。Vercelの`Production`表示は配備先の区分であり、学祭向けの本番受け入れ完了を意味しません。
+
+#### ビルド設定
+
+`Settings → Build and Deployment`で以下を確認済みです。既存のnpm workspacesによるmonorepoをそのまま使用し、別のmonorepoツールは追加しません。
+
+| 項目                                     | 設定                                  |
+| ---------------------------------------- | ------------------------------------- |
+| Framework Preset                         | Next.js                               |
+| Root Directory                           | `apps/web`                            |
+| Include files outside the root directory | 有効                                  |
+| Build Command                            | `npm --prefix ../.. run build:web`    |
+| Install Command                          | `npm ci --prefix=../.. --include=dev` |
+| Output Directory                         | Next.jsの既定値（Overrideなし）       |
+| Node.js Version                          | `24.x`                                |
+
+`build:web`は共有契約を先にbuildしてからWebをbuildします。環境変数の指定値は`HUSKY=0`、`NEXT_TELEMETRY_DISABLED=1`で、適用先は両方ともProductionとPreviewです。2026-09-23の管理画面では登録名と適用先を確認し、値の表示・コピーは行っていません。Huskyの無効化はVercelのbuild環境だけで、ローカルのGitフックは変更しません。
+
+#### 開発中の公開範囲
+
+1. `Settings → Deployment Protection`の`Vercel Authentication`で`Require Log In`を有効にします。
+2. iijimaの承認に基づき、`Standard Protection`から`All Deployments`へ変更して保存しました。設定の再読み込み後も選択が維持され、固定URLへのCookie・認証情報なしのHTTPアクセスは`302`で`vercel.com`へリダイレクトされることを確認しました。権限のあるログイン済みChromeでは検証画面の表示を確認しましたが、スマートフォンでの撮影・トリム操作は別途検証が必要です。
+3. `Protected Sourcemaps`は有効のまま維持します。公開例外、保護を迂回するSecret・共有リンク、新たなTrusted Sourceは追加しません。Password Protection等の有料機能も有効化しません。
+
+`Standard Protection`は本番ドメインを保護しません。`All Deployments`は本番を含めてVercelの閲覧権限を要求し、Hobbyでも追加料金なしで利用できます。開発画面の一般公開を防げる一方、権限のない共同開発者はそのままでは閲覧できません。共同検証でアクセスを追加する場合は、対象者・範囲を先に承認します。GitHubの共同開発権限やKOKO利用者向けのGoogleログインとは別の仕組みです。[Deployment Protection公式](https://vercel.com/docs/deployment-protection)
+
+学祭向けに公開する前に、アプリ側の認証・認可、非公開メディア配信、実機検証と本番受け入れを完了し、公開範囲の変更について改めて承認を得ます。Hobbyの利用上限や商用条件、管理体制が変わる場合も再確認し、自動的に有料化しません。
+
+#### 初回buildに残る警告
+
+- `eslint@9.39.5`：2026-08-06でサポート終了。使用中のNext.js用Lint設定のプラグインとの互換性により、iijimaが暫定利用を承認済みです。互換性と検査を確認してから移行し、`--force`等で強制更新しません。[ESLintのサポート状況](https://eslint.org/version-support/)
+- `msw`・`unrs-resolver`の`allow-scripts`：インストール時処理について許可・拒否が未記録という警告です。npmの版・設定によって処理の扱いが異なるため、警告だけを根拠に未実行または安全とは判断しません。内容と必要性を審査せず一括承認しません。[npmの承認機能](https://docs.npmjs.com/cli/v11/commands/npm-approve-scripts/)
+
+警告は配備失敗ではありませんが、既知の脆弱性検査が0件でもサポート終了や未審査の状態は解消されません。今回の設定操作では依存関係・承認ポリシーの変更や再デプロイは行っていません。
 
 ### 2. Cloudflare：API・保存・動画・処理待ち
 
-1. [Cloudflare Dashboard](https://dash.cloudflare.com/)でアカウントを準備します。自分のWebサイトや独自ドメインの登録は、アカウント準備の前提にしません。
-2. Workers、R2、Stream、Queuesが別々の課金項目であることを確認します。Webサイト向けの「Pro」契約と「Workers Paid」は別です。
-3. 後続のB1-1で、開発専用Workers、原本用と派生物用の2つの非公開R2バケット、Queues、Streamを作成します。本番資源とは分離します。現時点では名前・リージョン・保持期間を仮の本番値で埋めません。
-4. R2の`r2.dev`公開とPublic custom domainを有効にしません。Streamは常時署名必須です。Bucket Lockは削除できない期間を作るため、保持期間の合意前には設定しません。
-5. 接続時には対象資源を限定した資格情報を用意し、Global API Keyをアプリに使いません。値はSecretストアへ設定します。
+#### 確認済みの状態
+
+- GitHub連携でCloudflareアカウントを準備し、メール確認とTOTPによる2要素認証の有効化を確認しました。パスワード、TOTP seed、復旧コードは記録していません。
+- R2の従量課金を有効化しました。Cloudflareアカウント全体の従量課金が1請求期間に10 USDへ達した場合のBudget Alertを、管理者本人のメール1件へ設定済みです。通知は利用や課金を停止する上限ではありません。[Budget Alert公式](https://developers.cloudflare.com/billing/manage/budget-alerts/)
+- 開発用の非公開R2バケットとして、原本用`koko-dev-originals`と派生物用`koko-dev-derived`を作成しました。どちらもLocationはAutomatic（作成画面の選択先はAsia Pacific）、Default Storage ClassはStandard、Public Accessは無効です。作成後の一覧で2バケットと合計保存量0 Bを確認しました。
+- 大学・実行委員会によるデータ保存地域の制約はないことをiijimaが確認しました。AutomaticのAsia Pacificは日本国内保存を保証する指定ではありません。[R2のデータ配置](https://developers.cloudflare.com/r2/reference/data-location/)
+- `r2.dev`、Public custom domain、Bucket Lock、Lifecycle、API token、ファイル投入は未設定です。保持期間の合意前に削除不能期間を作らず、接続実装前に永続資格情報を発行しません。
+- Worker基盤は`apps/api/`に実装し、`GET /health`、開発用R2 binding、ローカルテスト、dry-run buildを追加しました。型検査・テスト・buildのGitHub Actionsも実行成功を確認しています。Cloudflare上の`koko-api-dev`作成、GitHub連携、実deploy、実R2通信は未完了です。CI成功と実接続の検証を区別します。必須checkの導入順序は[CI規約](../ci.md#新しい必須checkを導入する順序)を参照してください。
+
+#### 残る準備
+
+1. Workers、R2、Stream、Queuesは別々の課金項目です。Webサイト向けの「Pro」契約と「Workers Paid」も別です。
+2. B1-1の残りとして、開発専用Workers、Queues、Streamを本番資源と分離して準備します。資源名・プラン・保持期間は作成前に確認します。
+3. R2の`r2.dev`公開とPublic custom domainを有効にしません。Streamは常時署名必須です。Bucket Lockは削除できない期間を作るため、保持期間の合意前には設定しません。
+4. 接続時には対象資源を限定した資格情報を用意し、Global API Keyをアプリに使いません。値はSecretストアへ設定します。
 
 R2の開始画面にはサブスクリプション確認があり、無料枠を超えた使用量は課金されます。アカウント作成だけとR2有効化を区別してください。[R2開始手順](https://developers.cloudflare.com/r2/get-started/)
 
