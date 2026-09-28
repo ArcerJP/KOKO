@@ -62,7 +62,7 @@ KOKO/
 ├── AGENTS.md              リポジトリ全体のCodexルーティング
 ├── .agents/skills/        反復可能なCodexワークフロー
 ├── apps/web/              Next.js撮影検証・トークン・Webテスト
-├── apps/api/              BE領域（現在は初期SQL）
+├── apps/api/              Workers API基盤・初期SQL・APIテスト
 ├── packages/contract/     OpenAPI・生成型・契約・テスト
 ├── docs/                  正式な文書とADR
 ├── knowledge/raw/         原証拠（プライベート優先）
@@ -102,7 +102,9 @@ EditorConfigとPrettierで改行、空白、インデントを統一します。
 
 ## CI
 
-Pull Requestとmerge queueでPrettier、Markdownlint、OpenAPI/生成物、ESLint、TypeScript、契約単体/SQL統合テスト、契約buildに加え、Web単体/統合・ブラウザ試験・production buildを検査するworkflowを定義しています。APIのproduction buildとCloud Runのimage buildは実装導入時に追加します。適用範囲と必須check登録は[CI規約](docs/ci.md)を参照してください。
+Pull Requestとmerge queueでPrettier、Markdownlint、OpenAPI/生成物、ESLint、TypeScript、契約単体/SQL統合・build、Web単体/統合・ブラウザ試験・production build、API実行環境テスト・dry-run buildを検査します。API配備の安全条件の回帰試験も既存のAPI Testsへ接続しています。Cloud Runのimage buildは未実装です。適用範囲と必須check登録は[CI規約](docs/ci.md)を参照してください。
+
+個別Worker限定資格情報によるAPI配備はローカル実装段階であり、外部の切替・実配備は未実施です。操作は[クラウド準備の移行手順](docs/product/cloud-setup.md#github-actionsへの移行手順外部操作は別途承認)に沿って別途承認後に進めます。
 
 ## KOKOの拡張
 

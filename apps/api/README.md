@@ -20,11 +20,14 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義していますが、現�
 npm.cmd run typecheck:api
 npm.cmd run test:api
 npm.cmd run build:api
+npm.cmd run test:deploy-workflow
 ```
 
 `build:api`は`wrangler deploy --dry-run`を使うため、bundleを検証しますがCloudflareへアップロードしません。bindingまたはcompatibility dateを変えた場合は、`npm.cmd run types --workspace @koko/api`で[生成型](src/worker-configuration.d.ts)を更新してください。CIは`types:check`で差分を検出します。
 
 実deployは`npm.cmd run deploy --workspace @koko/api`です。このコマンドはCloudflareへ変更を反映するため、対象account・Worker・差分・認証状態を確認した承認済みのdeployだけに使用します。APIトークンやaccount IDをリポジトリへ追加しません。
+
+個別Worker限定のAccount API Tokenを使うGitHub Actions配備はローカル実装段階です。現在のWorkers Buildsからの切替と実配備は未実施です。[CIの配備境界](../../docs/ci.md#開発用api配備)と[クラウドの移行手順](../../docs/product/cloud-setup.md#github-actionsへの移行手順外部操作は別途承認)を参照し、文書やworkflowの存在だけを外部設定の完了と扱わないでください。
 
 ## SQLを適用する前に
 

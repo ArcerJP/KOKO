@@ -14,10 +14,11 @@ Pull Requestの作成・更新時に再現可能な自動検証を行い、既�
 
 ## 実行契機と権限
 
-- `pull_request`でPull Requestの作成、commit追加による更新、再open時に実行します。
+- PR検査は`pull_request`でPull Requestの作成、commit追加による更新、再open時に実行します。
 - merge queueを使用する場合に備え、`merge_group`でも実行します。
 - workflowの権限は検査に必要な最小限とし、現在は`contents: read`だけを許可します。
 - 外部からのPull Requestで秘密情報を渡さずに実行できる検査を基本とします。
+- 外部書込みを行うAPI配備は別workflowです。[開発用API配備](#開発用api配備)の適用条件に従い、PRやmerge queueからは配備しません。
 
 ## 現在の導入状態
 
@@ -49,7 +50,35 @@ Web向け3jobは`.github/workflows/web-check.yml`に定義します。秘密や�
 
 API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type Check`、`API Tests`、`API Build`は秘密情報やCloudflareログインなしで実行します。テストのR2はローカル保存であり、開発用実バケットとの通信成功を示しません。`API Build`もdry-runであり、Cloudflareへのdeploy成功とは区別します。
 
-### 開発用Lintの互換性と移行課題
+`API Tests`には`npm run test:deploy-workflow`も追加しています。既存のAPI実行環境テストとjob名は維持し、配備jobをPRの必須checkには追加しません。
+
+## 開発用API配備
+
+2026-09-29にローカル実装・検証を完了し、PR作成までの承認を受けました。外部設定・実配備は未実施です。[ADR-0003](decisions/ADR-0003-worker-scoped-deployment.md)は外部移行の提案段階であり、PR作成やCI成功をBuilds経路の切替完了とは扱いません。旧Builds停止前に導入PRをmergeしません。
+
+実装の正本は[api-deploy.yml](../.github/workflows/api-deploy.yml)と[実行ガード](../.github/scripts/api-deploy.mjs)、外部設定・切替・期限更新・復旧の正本は[クラウド準備](product/cloud-setup.md#github-actionsへの移行手順外部操作は別途承認)です。
+
+| 境界       | 実装                                                                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 開始       | `ArcerJP/KOKO`の`refs/heads/main`、pushまたは手動実行のみ。任意入力なし                                                                                    |
+| 自動配備   | Repository variable `KOKO_API_AUTO_DEPLOY_ENABLED`が小文字の`true`に完全一致するときだけ。未設定・空・false・その他はOFF。手動経路はこのフラグに依存しない |
+| 検証       | Secretなしで同じイベントSHAをcheckoutし、Node 24・lockfileによる導入、配備回帰試験、API型・テスト・dry-run build                                           |
+| 配備       | verify成功と許可出力が必須。専用Environment `koko-api-dev`で同じSHAを再checkoutし、導入後の最終stepだけSecret参照                                          |
+| 直前ガード | イベント・repository・ref・verify結果・秘密の存在・checkout SHAを再検査。固定GitHub APIのGETで最新mainとSHA一致を確認できなければ書込み停止                |
+| 資格情報   | Cloudflareトークンとaccount IDは最終stepだけ。そのstepのGitHub tokenはmain照会にだけ使い、npm/Wranglerへは渡さない                                         |
+| 実行       | 固定済みWranglerの`npm run deploy --workspace @koko/api`。worker/config/commandの任意上書きなし                                                            |
+| 競合・停止 | 手動/自動で共通concurrency、実行中は自動cancelしない。各jobは15分上限。自動再試行なし                                                                      |
+| 依存・権限 | 公式checkout/setup-nodeを完全SHA固定、persist-credentials false、contents readだけ、cacheや他workflowのartifactは不使用                                    |
+
+concurrencyはCloudflare Buildsを止めません。またmain確認とCloudflare書込みは原子的ではなく、確認後の新しいmergeまで防止しません。初回切替中はmain更新を止める時間帯を本人と合意します。通常運用では次のrunが最新mainを再検証します。待機runが新しいrunで置換される場合があるため、全commitが必ず順に配備される保証はありません。
+
+トークンの実際の権限・期限とEnvironmentの保存済み保護設定は、workflowだけでは確認できません。外部設定の事前確認を省略せず、Repository/Organization Secretへの代替登録や、保護未設定Environmentの暗黙作成を使いません。
+
+回帰試験は[.github/tests/](../.github/tests/api-deploy-workflow.test.mjs)で管理し、ローカルの`npm test`と既存`API Tests`から実行します。実ガードに模擬資格情報と模擬ネットワーク・実行処理を渡し、重要条件を壊したworkflow fixtureも失敗させます。実Cloudflareへの書込みはありません。Action更新時は上流のSHAを確認し、workflowと試験の固定値を同時更新します。
+
+ジョブのskip、dry-run、ローカル試験成功は実配備成功ではありません。通信失敗・タイムアウト後は、Active Deploymentを照合してから再試行を判断します。
+
+## 開発用Lintの互換性と移行課題
 
 WebだけESLint 9.39.5を使用する構成はユーザー承認済みです。Next.js公式設定が使うimport／React／アクセシビリティのプラグインはESLint 10をpeer範囲に含めないため、契約側のESLint 10を変更せず分離します。`--force`や`--legacy-peer-deps`で互換性違反を無視しません。lockfileの再現と`npm ls --all`を検査します。
 
