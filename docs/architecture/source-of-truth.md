@@ -17,10 +17,12 @@ KOKOでは、すべての記録を同じ正本性で扱いません。適切な�
 | 過去のタスク記録は何か                            | `work/archive/YYYY/<task-id>/`               | 以前の状態の配置場所                                   |
 | Codexはどのように振る舞うべきか                   | 適用されるAGENTS.mdと選択されたSkill         | READMEまたは通常の文書                                 |
 | Gitのbranch、commit、Pull Requestをどう運用するか | .agents/skills/git-workflow/SKILL.md         | README、PRテンプレート                                 |
-| CIで何を自動検査し、いつ検査を追加するか          | .github/workflows/とdocs/ci.md               | README、Pull Request本文                               |
+| CIで何を自動検査し、配備をいつ許可するか          | .github/の実装とdocs/ci.md                   | README、Pull Request本文                               |
 | ファイルをどの形式で整形するか                    | docs/formatting.mdとリポジトリ直下の整形設定 | knowledge/raw/FormatterSetting.pdf、エディター個人設定 |
 
 ## 競合時のルール
+
+CI/CDの実行定義は`.github/workflows/`、配備直前のガードは`.github/scripts/`、その秘密なしの回帰試験は`.github/tests/`へ分離します。外部環境の適用済み状態は[クラウド準備](../product/cloud-setup.md)に記録し、ローカルworkflowの存在から実配備成功を推定しません。
 
 プロダクトでは、要求は[要件](../product/requirements.md)、実装順序は[開発計画](../product/development-plan.md)、採用構成は[プロダクト構成](product-architecture.md)、承認状況は[第0日](../product/day-zero.md)を参照します。API/状態/キー/エラーの正本は[共有契約](../../packages/contract/README.md)、DBはapps/apiのmigration、トークンはapps/webのCSSです。生成型・エラー表は派生物であり、手で編集しません。
 

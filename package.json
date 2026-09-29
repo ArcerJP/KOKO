@@ -25,8 +25,9 @@
     "test:contract": "npm run build:contract && node --test packages/contract/test/*.test.mjs",
     "test:web": "npm run build:contract && npm run test --workspace @koko/web",
     "test:api": "npm run test --workspace @koko/api",
+    "test:deploy-workflow": "node --test .github/tests/*.test.mjs",
     "test:e2e": "npm run test:e2e --workspace @koko/web",
-    "test": "npm run test:contract && npm run test:web && npm run test:api",
+    "test": "npm run test:contract && npm run test:web && npm run test:api && npm run test:deploy-workflow",
     "prepare": "husky"
   },
   "devDependencies": {

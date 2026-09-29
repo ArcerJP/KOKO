@@ -35,6 +35,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:api
+      - run: npm run test:deploy-workflow
   build:
     name: API Build
     runs-on: ubuntu-latest
