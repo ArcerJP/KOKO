@@ -86,6 +86,22 @@ ESLint 9は2026-08-06にEOLとなっています。[公式サポート表](https
 
 `package.json`のscoped overridesでNext.js配下を9系へ固定し、9／10の両方に対応するTypeScript ESLintとeslint-utilsの共有helperは既存のroot版を参照します。npmのhoistによるpeer競合を避けるための設定です。バージョン更新時は、overrideも含めて`npm ci --strict-peer-deps`と`npm ls --all`で再検証してください。
 
+## 依存関係のセキュリティ更新
+
+2026-10-02の更新前監査では、Next.jsとCloudflare開発・配備依存を合わせて5パッケージに指摘がありました（critical 1、high 1、moderate 3。同じ間接依存からの波及を含み、5個の固有の脆弱性という意味ではありません）。修正版は各workspaceの`package.json`とrootの`package-lock.json`に固定します。
+
+| 対象                     | 更新              | 目的                                                                  |
+| ------------------------ | ----------------- | --------------------------------------------------------------------- |
+| Next.js／公式ESLint設定  | 16.3.5 → 16.3.8   | `next/og`の修正と、その後のセキュリティ修正を含む同一minorのpatch更新 |
+| Wrangler                 | 4.136.3 → 4.145.0 | 修正済みMiniflare／Undiciへ更新                                       |
+| Cloudflare Vitest plugin | 1.2.3 → 1.3.4     | 上流が指定する同じWrangler／Miniflareの組合せを使用                   |
+
+Next.jsの[上流アドバイザリ](https://github.com/vercel/next.js/security/advisories/GHSA-vcvr-r3jv-pc5j)は、Node.js版`ImageResponse`へ攻撃者が制御するSVG入力を渡す経路を対象とします。現在のアプリソースに`next/og`／`ImageResponse`の利用は確認されませんが、脆弱版を維持する理由にはしません。[16.3.8のリリース](https://github.com/vercel/next.js/releases/tag/v16.3.8)に含まれる追加修正も取り込みます。React、アプリ仕様、ESLintの9／10分離は変更しません。
+
+UndiciはCloudflareのローカル実行・試験・配備ツールからの間接依存です。[WebSocketのDoS](https://github.com/nodejs/undici/security/advisories/GHSA-rfgv-xxqx-mfg5)と[BalancedPoolのTLS検証回避](https://github.com/nodejs/undici/security/advisories/GHSA-w293-vg96-wgc3)を含む監査指摘の修正版7.29.1を使用します。Worker本体に同じNode.js依存を配布しているとは扱いませんが、配備ツールは資格情報を扱うため更新対象です。
+
+更新時は`npm ci --include=dev --strict-peer-deps`、`npm ls --all`、`npm audit --json`と、下記の全CI相当検査を実行します。監査0件は検査時点の既知の指摘に限り、将来の安全性や攻撃経路の不存在を保証しません。ESLint 9のEOLは上記の独立した残課題です。新しい権限・bindingを追加せず、Wranglerの生成型は既存の`compatibility_date`を維持して更新します。dry-run成功と実配備成功は区別し、merge後に自動配備・Access・healthを受け入れてから後続PRをmergeします。
+
 ## 禁止する見かけ上の成功
 
 - assertionを持たない空のtestや、常に終了code 0を返す仮commandを追加しません。
