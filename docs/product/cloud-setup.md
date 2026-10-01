@@ -1,6 +1,6 @@
 # クラウドの役割と準備ガイド
 
-確認日：Cloudflare Workerの初回build・deploy成功と未認証アクセスの転送確認は2026-09-29、保存済みAccess設定の閲覧確認は2026-09-28〜29、専用トークンの作成・保存とBuilds登録成功のユーザー報告、Zero Trust Free有効化とWorker作成フォームの画面確認は2026-09-28、Vercelの初回配備・保護設定とCloudflareアカウント・R2の初期準備は2026-09-23、その他の準備・料金情報は2026-09-22。対象はB1-1〜B1-3の準備です。採用構成の正本は[プロダクト構成](../architecture/product-architecture.md)、費用判断の方針は[費用方針](cost-policy.md)です。確認済みの範囲は各節に記載し、全サービスの契約・課金・実連携や本番受け入れの完了とは区別します。
+確認日：GitHub Actionsの初回手動配備・通常main更新による自動配備と配備後の応答・保護確認は2026-10-01〜02、Cloudflare Workerの初回build・deploy成功と未認証アクセスの転送確認は2026-09-29、保存済みAccess設定の閲覧確認は2026-09-28〜29、専用トークンの作成・保存とBuilds登録成功のユーザー報告、Zero Trust Free有効化とWorker作成フォームの画面確認は2026-09-28、Vercelの初回配備・保護設定とCloudflareアカウント・R2の初期準備は2026-09-23、その他の準備・料金情報は2026-09-22。対象はB1-1〜B1-3の準備です。採用構成の正本は[プロダクト構成](../architecture/product-architecture.md)、費用判断の方針は[費用方針](cost-policy.md)です。確認済みの範囲は各節に記載し、全サービスの契約・課金・実連携や本番受け入れの完了とは区別します。
 
 ## まず何を用意するか
 
@@ -80,7 +80,7 @@ Discordの通知先とGoogle Driveのアーカイブ先は、後続の運営準�
 - 開発用の非公開R2バケットとして、原本用`koko-dev-originals`と派生物用`koko-dev-derived`を作成しました。どちらもLocationはAutomatic（作成画面の選択先はAsia Pacific）、Default Storage ClassはStandard、Public Accessは無効です。作成後の一覧で2バケットと合計保存量0 Bを確認しました。
 - 大学・実行委員会によるデータ保存地域の制約はないことをiijimaが確認しました。AutomaticのAsia Pacificは日本国内保存を保証する指定ではありません。[R2のデータ配置](https://developers.cloudflare.com/r2/reference/data-location/)
 - `r2.dev`、Public custom domain、Bucket Lock、Lifecycle、ファイル投入は未設定です。保持期間の合意前に削除不能期間を作りません。
-- Workers Builds用の専用User API Token `koko-api-dev-build`について、iijimaから作成・保存完了の報告を受けました。承認済みの範囲はKOKOで使用するCloudflareアカウント1件の`Workers:Admin`、TTLは2026-09-28開始・2026-10-19終了です。対象アカウント・権限・期間は、同日の発行後の要約画面でも確認しました。秘密の値は閲覧・取得・記録していません。初回のWorker作成に必要な権限であり、初期構築後は期限を待たず継続デプロイに必要な権限へ縮小します。未使用サービスの権限は先行付与せず、追加が必要になった時点で確認します。Workers Buildsへの登録と登録後の一覧照合は、同日の本人実行ログ`RESULT=REGISTERED_AND_VERIFIED`により成功を確認しました。その後、承認済みの画面再読み込み・入力復元・既存トークン選択を行い、Worker作成フォームの選択値を確認しました。注意表示の内部判定の原因は未確定ですが、2026-09-29にこのトークンを選択した初回ビルドのdeploy成功を確認しました。権限縮小は未完了です。[トークン作成と変更](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)、[Workersの権限](https://developers.cloudflare.com/workers/authorization/workers/)
+- 2026-09-28〜29の初期構築では、Workers Builds用の専用User API Token `koko-api-dev-build`について、iijimaから作成・保存完了の報告を受けました。承認済みの範囲はKOKOで使用するCloudflareアカウント1件の`Workers:Admin`、TTLは2026-09-28開始・2026-10-19終了でした。対象アカウント・権限・期間は発行後の要約画面でも確認し、秘密の値は閲覧・取得・記録していません。初回Worker作成後は継続配備に必要な権限へ限定する方針とし、未使用サービスの権限は先行付与しません。Buildsへの登録と一覧照合は本人実行ログ`RESULT=REGISTERED_AND_VERIFIED`、既存トークン選択は承認済みの画面再読み込み・入力復元後に確認しました。注意表示の内部判定の原因は未確定ですが、このトークンによる初回ビルドのdeploy成功を確認しています。その後は既存トークンを編集する案ではなく、個別Worker限定の新資格情報とActionsへ移行しました。旧トークン削除の本人報告と現在の進捗は[下記](#項目別の進捗2026-10-02更新)を参照してください。[トークン作成と変更](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)、[Workersの権限](https://developers.cloudflare.com/workers/authorization/workers/)
 - Worker基盤は`apps/api/`に実装し、`GET /health`、開発用R2 binding、ローカルテスト、dry-run buildを追加しました。型検査・テスト・buildのGitHub Actionsも実行成功を確認しています。2026-09-28〜29のユーザー提供画像と読み取り専用確認により、Cloudflare上の`koko-api-dev`作成、`ArcerJP/KOKO`の`main`への接続、本人操作による初回Build `41b7ab63`の開始、その後のbuild・deploy成功を確認しました。所要時間は5分39秒で、2026-09-29の画面ログに`Success: Deploy command completed`と`Success! Build completed.`が表示されました。配備先は[開発API](https://koko-api-dev.arcer-jp.workers.dev/health)、R2 bindingは`ORIGINALS_BUCKET`と`DERIVED_BUCKET`です。初期化中の概要ではURL無効・Bindings 0でしたが、完了ログではURLと2つのbindingが報告されました。同日、本人から認証後の動作確認完了の報告と、固定URLの`/health`に`{"service":"koko-api","status":"ok"}`が表示された画像を受け取りました。認証情報やセッションは取得していません。実R2読書きは未検証です。ビルド成功・API応答・bindingの配備・R2実接続検証を区別します。必須checkの導入順序は[CI規約](../ci.md#新しい必須checkを導入する順序)を参照してください。
 
 #### 残る準備
@@ -91,23 +91,23 @@ Discordの通知先とGoogle Driveのアーカイブ先は、後続の運営準�
 4. 接続時には対象資源を限定した資格情報を用意し、Global API Keyをアプリに使いません。値はSecretストアへ設定します。
 5. 開発用APIをCloudflare Accessで保護する方針は承認済みです。2026-09-28、初回の許可対象はiijima本人のみとし、共同開発者は後から追加する方針をiijimaが承認しました。本人を識別するメールアドレス1件も確認・承認済みです。値は公開文書へ記載せず、メールドメイン全体やCloudflareアカウントの全メンバーを許可する設定と混同しません。Zero Trust Freeの有効化とWorker作成フォームでの選択に続き、初回ビルド開始後のWorkerのAccessタブで`Worker Access All traffic`、本番・Previewの全URLでログイン必須、`koko-dev-iijima-only`、承認済み本人メール1件の`Allow`を確認しました。2026-09-29の配備後、固定URLの`/health`へCookie・認証情報なし、リダイレクト追従なしでGETし、HTTP 302でCloudflare Accessログイン先へ転送されることを確認しました。最初の検査はローカル実行環境の接続制限で失敗し、制限外の読み取り専用再実行で確認しています。その後、本人の認証後の正常応答を本人報告と画像で確認しました。配備一覧のリンクから取得したVersion URL 3件（現行`a40d491f`、旧版`f2833009`・`82d3e774`）の`/health`も、同じ未認証条件でGETし、いずれも302でAccessへ転送されました。認証方式・MFAの実効設定、許可対象外の認証済み利用者の拒否試験は未確認です。全URL保護の設定と、実際に試した固定URL・3つのVersion URLの保護動作を区別します。KOKO利用者向けのGoogleログインとは別の開発用アクセス制御であり、このデプロイ用トークンへAccess管理権限を追加するものではありません。[WorkersのAccess保護](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
 
-##### 項目別の進捗（2026-09-29確認）
+##### 項目別の進捗（2026-10-02更新）
 
-上の番号は順番に完了するチェックリストではなく、準備作業と継続して守る条件が混在しています。現在は「2のWorkers初回配備と本人のAPI応答確認、4のBuilds用資格情報の実利用、5のAccess設定保存・本人認証後の正常応答・固定URLと3つのVersion URLの未認証アクセス制限」まで進んでいます。Cloudflare全体の準備完了ではありません。
+上の番号は順番に完了するチェックリストではなく、準備作業と継続して守る条件が混在しています。現在は「2のWorkers配備とAPI応答確認、4のWorker限定資格情報によるActions初回手動配備・受入確認、旧トークン削除の本人報告と自動配備有効化、通常main更新による自動実行・配備後確認、5の本人限定Access設定・認証済み正常応答・固定URLと試験したVersion URLの未認証アクセス制限」まで進んでいます。自動配備の確認結果は[下記の記録](#2026-10-02の通常main更新による自動配備)を参照してください。Cloudflare全体の準備完了ではありません。
 
-| 残る準備                           | 現在の状態                                                                                     | 次の確認・作業                                                                  |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| 1：課金の区分                      | 継続確認。R2・Zero Trust Freeの準備記録あり。他製品の契約完了とは別                            | Queues・Stream等の準備前に対象プラン・費用を確認                                |
-| 2：開発専用Workers・Queues・Stream | 一部完了。Worker作成・GitHub main接続・初回配備・本人のAPI応答確認済み。R2 binding 2件配備済み | 未作成のQueues・Streamを準備。実R2読書きの検証は別途                            |
-| 3：非公開化・署名・保持            | 継続条件。R2は非公開として準備済み。Streamは未準備                                             | R2公開を有効にせず維持。Stream作成時に署名必須、保持期間合意前はBucket Lockなし |
-| 4：限定した資格情報                | 一部完了。専用build tokenの実利用と補助用削除を確認。移行のworkflow・試験・文書をローカル実装  | ローカル変更をレビュー後、別途承認で外部移行。権限縮小・Actions実配備は未完了   |
-| 5：本人限定Access                  | 設定保存、本人認証後の正常応答、固定URLとVersion URL 3件の未認証GET→Accessへの302転送を確認    | 認証方式・MFAの実効設定、認証済み対象外利用者の拒否試験                         |
+| 残る準備                           | 現在の状態                                                                                                      | 次の確認・作業                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 1：課金の区分                      | 継続確認。R2・Zero Trust Freeの準備記録あり。他製品の契約完了とは別                                             | Queues・Stream等の準備前に対象プラン・費用を確認                                |
+| 2：開発専用Workers・Queues・Stream | 一部完了。Worker作成・Actions手動／自動配備・認証済みAPI応答を確認。R2 binding 2件を維持                        | 未作成のQueues・Streamを準備。実R2読書きの検証は別途                            |
+| 3：非公開化・署名・保持            | 継続条件。R2は非公開として準備済み。Streamは未準備                                                              | R2公開を有効にせず維持。Stream作成時に署名必須、保持期間合意前はBucket Lockなし |
+| 4：限定した資格情報                | 開発APIの配備経路を移行確認済み。Worker限定資格情報で手動／自動配備・配備後確認。旧トークン削除は本人報告       | 期限前の資格情報更新。将来接続する他サービスの資格情報は別途準備                |
+| 5：本人限定Access                  | 自動配備後もAll traffic・本人限定policy・認証済み正常応答を確認。固定URLと新Version URLの未認証GETはAccessへ302 | 認証方式・MFAの実効設定、認証済み対象外利用者の拒否試験                         |
 
-直近の作業は「4：限定した資格情報」の整理です。残るAccess検証は未完了項目として保持し、資格情報整理の後にQueues・Streamの構成・費用・保持期間を確認します。初回ビルドのやり直しは不要です。設定変更・権限縮小・失効操作は別途確認し、勝手に実行しません。
+開発APIの配備経路については、移行手順6の自動実行と配備後確認まで進みました。残るAccess検証・実R2読書きを未完了項目として保持し、次はQueues・Streamの構成・費用・保持期間を確認します。新資格情報の期限前更新も必要です。初回ビルドのやり直しは不要です。設定変更・権限変更・失効操作は対象ごとに承認を確認し、勝手に実行しません。
 
 2026-09-29、iijimaは、`koko-api-dev-build`を対象Worker `koko-api-dev`だけの`Editor`へ縮小し、対象アカウントと期限2026-10-19を維持すること、および登録作業が終わった`koko-builds-register-once`の失効を承認しました。ただし、既存User API Tokenをそのまま個別Worker限定へ編集できるという当初案は、後述のトークン種別とBuildsの対応制限を考慮していませんでした。この案での権限縮小は未実施です。Buildsでは編集済みトークンが古い状態として扱われる場合もあり、新規発行・再登録・再配備を自動で進めません。[Buildsの古いトークンに関する注意](https://developers.cloudflare.com/workers/ci-cd/builds/troubleshoot/#stale-api-token)
 
-同日の編集画面では、既存トークンの`Account → Workers`の権限候補は`Admin`のみで、対象の種類も`Account`・`Zone`・`User`でした。個別Workerと`Editor`を指定する項目は確認できず、権限やTTLを変更・保存せず一覧へ戻りました。アカウント全体の旧`Workers Scripts: Edit`は個別Worker限定の代わりにはならず、無断で採用しません。配備用トークンは対象アカウント1件の`Workers:Admin`と期限2026-10-19のままです。
+同日の編集画面では、既存トークンの`Account → Workers`の権限候補は`Admin`のみで、対象の種類も`Account`・`Zone`・`User`でした。個別Workerと`Editor`を指定する項目は確認できず、権限やTTLを変更・保存せず一覧へ戻りました。アカウント全体の旧`Workers Scripts: Edit`は個別Worker限定の代わりにはならず、無断で採用しません。この時点の配備用トークンは対象アカウント1件の`Workers:Admin`と期限2026-10-19のままでした。後続の新資格情報への移行と旧トークン削除は、下記の日付付き記録を参照してください。
 
 同日、iijimaの承認を受け、設定変更なしで別経路を調査しました。公式文書はWranglerの資源単位権限に**Account API Token**を指定しています。実際の`Manage account → Account API tokens`の作成画面でも、`Specified Workers`とWorkersの`Editor`を確認しました。既存User API Tokenの編集画面とは別の経路です。ただし、Workerの選択・権限の入力・トークンの発行は行っておらず、この資格情報による実配備も未検証です。未保存で一覧へ戻り、Account API Tokenが未作成の状態を確認しました。[Wranglerでの資源単位権限](https://developers.cloudflare.com/workers/authorization/#use-granular-permissions-with-wrangler)、[Account API Token](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/)
 
@@ -115,13 +115,13 @@ Discordの通知先とGoogle Driveのアーカイブ先は、後続の運営準�
 
 個別Worker限定を優先する代案は、対象`koko-api-dev`だけのWorkers `Editor`を持つAccount API Tokenを新たに用意し、APIの配備をGitHub Actions等の外部CIから既存Wranglerで行う構成です。Worker・R2・Access・Vercelを作り直す案ではありません。別Workerへの権限を除ける利点がある一方、配備workflow、Secret管理、Buildsとの二重配備防止、期限更新の保守が増えます。対象Workerの更新権限やbinding経由のデータへの影響までなくなるわけではありません。公式の対応経路に基づく提案であり、KOKOでの動作保証ではありません。[GitHub Actionsからの公式配備手順](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/)
 
-その後、iijimaは具体的な移行計画の作成を承認し、通常運用は「初回検証後、mainへのマージで自動配備」を選択しました。2026-09-29に計画案を作成し、続けて「外部設定を変更しない配備の仕組み・テスト・文書のローカル実装」まで承認を受けました。workflow・実行ガード・回帰試験・文書をローカルへ追加し、CI相当の検証を完了しました。同日、commit・push・PR作成まで追加承認を受けました。初期の自動配備OFF、導入PRのmerge前のBuilds切断、本人の手動受入、旧トークン失効、その後の自動化という順序は下記にまとめます。発行、Secret登録、Builds切断、Actionsでの配備、旧配備用トークン失効は今回の許可に含まれず、未実施です。PR作成やCI成功を外部適用済みと扱いません。
+その後、iijimaは具体的な移行計画の作成を承認し、通常運用は「初回検証後、mainへのマージで自動配備」を選択しました。2026-09-29に計画案を作成し、続けて「外部設定を変更しない配備の仕組み・テスト・文書のローカル実装」まで承認を受けました。workflow・実行ガード・回帰試験・文書をローカルへ追加し、CI相当の検証を完了しました。同日、commit・push・PR作成まで追加承認を受けました。初期の自動配備OFF、導入PRのmerge前のBuilds切断、本人の手動受入、旧トークン失効、その後の自動化という順序は下記にまとめます。このローカル実装・PR作成の許可に、発行、Secret登録、Builds切断、Actionsでの配備、旧配備用トークン失効は含まれません。後続の本人による準備状況は下記で区別し、PR作成やCI成功を外部適用済みと扱いません。
 
 補助用`koko-builds-register-once`は削除直前の一覧で`Expires soon`でした。画面の失効手段が`Delete`のため、復元できないことと配備用トークン・Workerを削除しないことを説明し、iijimaから「補助用トークンだけ削除してよい」と実行時点の承認を受けました。同名の削除確認ダイアログを照合して実行し、削除後の未絞り込み一覧から補助用が消え、配備用だけが残ることを確認しました。補助用トークンは復元できません。配備用の編集保存、Builds設定変更、再登録、再配備は行っていません。
 
 #### GitHub Actionsへの移行手順（外部操作は別途承認）
 
-2026-09-29時点ではローカル実装のみです。採用理由は[ADR-0003](../decisions/ADR-0003-worker-scoped-deployment.md)、実行条件と自動テストは[CI規約](../ci.md#開発用api配備)を参照してください。下表は移行時の設定案であり、設定済みの一覧ではありません。
+2026-10-02時点では、PR #11のmergeとmainのpushによる検証成功・配備skip、Actionsからの初回手動配備と受入確認、旧トークン削除の本人報告、自動配備フラグ`true`の本人提供画像に続き、PR #13のmergeによる自動配備と配備後の応答・保護・設定維持を確認しました。移行手順6までの確認結果と残る検証範囲を下記へ記録します。採用理由は[ADR-0003](../decisions/ADR-0003-worker-scoped-deployment.md)、実行条件と自動テストは[CI規約](../ci.md#開発用api配備)を参照してください。下表は移行時の設定案であり、設定済みの一覧ではありません。
 
 | 項目                | 設定案・保存先                                                                                                        |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -133,7 +133,69 @@ Discordの通知先とGoogle Driveのアーカイブ先は、後続の運営準�
 | Repository variable | `KOKO_API_AUTO_DEPLOY_ENABLED`。移行時は`false`、受入後だけ`true`。同名Environment variableを作って値を上書きしない   |
 | 実行先              | 標準GitHub-hosted Linux runner。専用・有料runnerや追加課金の申込みなし。適用前に利用条件を確認                        |
 
+2026-09-29の準備状況（本人の報告・提供画像に加え、保存後の画面とGitHub APIを読取り確認。Codexによる外部設定変更は未実施）：
+
+- 保存後のEnvironment `koko-api-dev`の画面で、`Selected branches and tags`、Branchの`main`1件・Tag 0件、Required reviewersとWait timerがOFFであることを独立確認しました。管理者bypassは初期表示のONのまま変更していません。
+- 同じEnvironmentのSecret一覧で`CLOUDFLARE_ACCOUNT_ID`と`CLOUDFLARE_API_TOKEN`の名前2件、Environment variablesが空であることを確認しました。Repository variablesも再読込みし、`KOKO_API_AUTO_DEPLOY_ENABLED=false`を確認しました。Secret値は取得・表示しておらず、実値の正しさと新トークンによる配備は未検証です。
+- このフラグは新しいActions経路の自動配備だけを制御します。既存Buildsの停止や手動配備の禁止を意味しません。旧Buildsの切断状況は下記で区別し、導入PRのmerge・初回手動配備・自動化は別段階として扱います。
+- 本人から、現在の操作者は本人のみで、切替中は案内する操作以外のmainへのpush・PR mergeを一時停止できると回答を受けました。これは運用上の合意であり、GitHubの保護設定変更やBuilds切断の実行承認ではありません。
+- 停止前の読取り確認では、Active Deploymentは既存の`a40d491f`を100%配信中でした。対応する成功Buildのログと照合し、完全Version IDを非公開の作業記録へ記録しました。Build historyは全1件・成功済みだけで、実行中・待機中の表示はありません。PR #11はopen・Draft・未mergeで、headは従前のまま、必須13検査は全件successでした。mainも従前のSHAから変わっていません。
+- 下記の本人によるAPI確認結果で、新トークンの実際の失効時刻を照合しました。その後、本人提供画像でBuild historyが成功済み1件のみであることと、対象WorkerのSettings → BuildsのGit repository欄が`Connect`だけの未接続表示になったことを確認しました。Codexが切断を代行したわけではなく、再読込後の維持を独立確認した記録とは区別します。`Connect`による再接続は行いません。[Buildsの切断](https://developers.cloudflare.com/workers/ci-cd/builds/#disconnecting-builds)
+- 同時点のGitHub API再確認ではPR #11はopen・Draft・未merge、headとmainは従前のまま、必須13検査とVercel Preview Commentsはsuccessでした。現headへの承認レビュー1件について、iijimaから「別の共同開発者に確認してもらった」と回答を受け、レビュー担当者が本人か不明という保留理由は解消しました。再照会でも同じheadへの承認と検査成功・未mergeを確認しました。[Git運用ルール](../../.agents/skills/git-workflow/SKILL.md#pushとpr作成のアカウント一致)に従い、切断後の未接続表示の維持と自動配備フラグ`false`を確認したうえで、本人がDraftを解除し、GitHub上の通常の承認・検査条件を満たしてmergeする手順を案内しました。管理者bypassや保護ルール変更で回避せず、Codexは承認・mergeを代行しません。この時点ではPR merge・Actions実配備・旧トークン失効・自動配備有効化は未実施でした。
+
+2026-09-30の移行状況：
+
+- 本人からDraft解除完了の報告を受け、マージ前にGitHubの保存済みRepository variables画面を読取り確認しました。`KOKO_API_AUTO_DEPLOY_ENABLED`は`false`、Environment variablesは空でした。設定は変更していません。
+- 続く本人提供画像とGitHub APIにより、[PR #11](https://github.com/ArcerJP/KOKO/pull/11)のmergeを確認しました。merge commitは`4c2e1bdd16ad8dde5df0c55f2254cb7447f0bd59`で、照会時のmain先頭と一致しています。[API Deploy #1](https://github.com/ArcerJP/KOKO/actions/runs/36597022463)はこのSHAの`push`で起動し、`API Deploy Verification`は`success`、`API Deploy to Development`は`skipped`、run全体は`success`でした。これは検証だけの成功で、新しい資格情報による実配備の成功ではありません。
+- この時点で次の作業として、main更新停止と旧Builds切断を維持し、自動配備フラグを`false`のまま、本人が`Run workflow`で`main`を選び1回だけ手動実行する手順を案内しました。手動経路はフラグOFFでも検証成功後に既存Workerを更新します。失敗・タイムアウト時は再実行や権限拡大をせず、Active Deploymentと失敗箇所を確認します。
+
+2026-10-01の初回手動配備（実行は本人、確認は読取り専用）：
+
+- 本人提供画像では`main`・`4c2e1bd`の`workflow_dispatch`が`Queued`でした。その後のGitHub API照会では[初回手動実行](https://github.com/ArcerJP/KOKO/actions/runs/36869672802)のattempt 1が完了し、`API Deploy Verification`と`API Deploy to Development`が両方`success`でした。対象SHAは`4c2e1bdd16ad8dde5df0c55f2254cb7447f0bd59`です。Codexは追加実行・キャンセル・設定変更をしていません。
+- 配備jobのログで`Uploaded koko-api-dev`、`Deployed koko-api-dev triggers`、固定URLが従前と同じであること、新Version `948956fd-558c-4210-9f33-4735e7ab204e`を確認しました。R2 bindingも`ORIGINALS_BUCKET`→`koko-dev-originals`、`DERIVED_BUCKET`→`koko-dev-derived`と報告されています。ログ上の配備成功と、管理画面のActive Deployment照合・実R2読書きは区別します。
+- 配備後の固定URLの`/health`へCookie・認証情報なし、リダイレクト非追従でGETし、HTTP 302と既知のCloudflare Accessログイン先への転送を確認しました。最初のローカル接続確認は失敗し、制限外の読取り専用再確認で成功しています。認証情報・応答Cookie・リダイレクトのクエリ値は出力や文書へ含めていません。
+- この時点では本人認証後の正常応答、新Version URLのAccess保護、管理画面のActive Deployment・保存済みbinding・Access policy・旧Builds未接続の維持は未照合でした。続く確認結果を下記へ記録します。
+
+2026-10-01〜02の追加受入確認（外部設定の変更なし）：
+
+- 本人から配備後の「health正常」の報告を受けました。提供画像とCloudflareのDeployments画面で、ログの新Versionに対応する`948956fd`がActive Deploymentとして100%配信されていることを確認しました。本人の認証済み応答は本人報告、配備状態は管理画面の読取り確認として区別します。
+- 配備一覧に表示された新Version URLの`/health`へCookie・認証情報なし、リダイレクト非追従でGETし、HTTP 302と、従前と同じAccessログイン先・対象Versionホストのログインパスを確認しました。ローカル接続制限による失敗後、制限外の読取り専用再確認で成功しています。先に確認した固定URLと合わせ、今回の配備でも保護が維持されています。応答Cookie・リダイレクトのクエリ値は出力・保存していません。
+- Access画面で`Worker Access All traffic`、本番とPreviewの全URLでログイン必須、`koko-dev-iijima-only`、承認済み本人メール1件の`Allow`を確認しました。Settingsの保存済みR2 bindingは`ORIGINALS_BUCKET`→`koko-dev-originals`、`DERIVED_BUCKET`→`koko-dev-derived`の2件で、Git repositoryは`Connect`だけの未接続表示でした。Recent buildsは従前の成功Buildだけで、今回のActions配備に伴う新規Builds配備は表示されていません。
+- 以上と既存の保存済みトークンpolicy・期限確認を合わせ、移行手順4の初回手動受入を確認しました。確認範囲は対象Worker・配備ログ・保存済み設定であり、アカウント全資源の監査、実R2読書き、認証方式・MFAの実効設定、対象外の認証済み利用者や別Workerへの拒否試験は実施していません。今回の読取り確認では他資源の変更・データ投入をしていません。
+- この受入確認後、2026-10-02に本人から旧`koko-api-dev-build`はこのWorkerの旧Builds以外では使用していないと回答を受けました。用途確認だけを削除の実行承認や完了記録とは扱わず、下記の本人操作へ進みました。
+
+2026-10-02の旧トークン整理（本人操作）：
+
+- 本人提供のUser API Tokens削除確認画面で、対象名が旧`koko-api-dev-build`であることを確認しました。復元不可であること、新`koko-api-dev-deploy`・GitHub Secret・Worker本体は対象外であることを明記し、本人に削除と一覧再読込みの手順を案内しました。その後、本人から一覧で「消えていました」と報告を受けました。移行手順5の完了を本人報告として記録し、Codexによる独立した削除後一覧照会や旧秘密値による無効化試験を実施したとは扱いません。
+- 手順6として、本人に既存Repository variable `KOKO_API_AUTO_DEPLOY_ENABLED`を`false`から小文字の`true`へ変更・保存し、一覧で値を確認する手順を案内しました。同名Environment variableの追加、Secret変更、Builds再接続は対象外です。
+
+2026-10-02の自動配備有効化（本人操作）：
+
+- 本人から「trueにできました」と報告を受け、提供画像のRepository variables一覧で`KOKO_API_AUTO_DEPLOY_ENABLED`の値が`true`であることを確認しました。これは本人報告と提供画像による有効化の確認であり、Codexが設定変更・保存後の独立した再照会を行ったわけではありません。
+- 有効化時点では自動実行は未実証でした。設定保存だけで過去のpushは再実行されないため、次の必要な変更を通常のPRレビュー・mainへのmergeで反映し、両jobの成功と受入条件を確認する手順を案内しました。本人の承認により作成した移行記録の文書更新PR #12は、その確認候補でしたが、先行して必要になった依存脆弱性修正の別PR #13により、下記のとおり自動実行を確認しました。PR作成やPRのCI成功を自動配備の実証とは扱わず、空commitや手動再実行も代用していません。
+
+##### 2026-10-02の通常main更新による自動配備
+
+- [PR #13](https://github.com/ArcerJP/KOKO/pull/13)は2026-10-02 01:24:48 JSTにmerge済みで、main先頭は`6d425f15e0140691e7a3def62aa144a7dd1d2be7`でした。[API Deployの自動実行](https://github.com/ArcerJP/KOKO/actions/runs/36891798633)は、このSHAの`push`を契機に起動し、attempt 1の`API Deploy Verification`と`API Deploy to Development`が両方`success`でした。手動実行や配備skipではありません。
+- 配備jobのログでWrangler `4.145.0`、`Uploaded koko-api-dev`、`Deployed koko-api-dev triggers`、Version `0b234e2f-70e8-4ed7-9a78-adfb06d98e64`を確認しました。CloudflareのDeployments画面でも対応する`0b234e2f`がActive Deploymentとして100%配信されていました。Cloudflare側の`Manually deployed / Wrangler by Unknown`という表示だけで起動元を判断せず、GitHubのイベント・SHA・配備ログのVersionと照合しています。
+- 既存の認証済みブラウザで固定URLの`/health`を再読込みし、`{"service":"koko-api","status":"ok"}`を読取り確認しました。以前の本人報告や再読込み前の表示の流用ではありません。新たなログイン、認証情報・Cookieの取得、Accessの迂回は行っていません。
+- 固定URLと、配備一覧のリンクで取得した新Version URLの`/health`を、Cookie・認証情報なし・リダイレクト非追従でGETしました。両方ともHTTP 302で、既知のAccessログインホストと各対象ホストのログインパスへ転送されました。応答Cookie・クエリ値は出力・保存していません。
+- 保存済みSettingsのR2 binding 2件（`ORIGINALS_BUCKET`→`koko-dev-originals`、`DERIVED_BUCKET`→`koko-dev-derived`）、Git repositoryの`Connect`だけの未接続表示、Accessの`All traffic`と本人限定policyを照合しました。Recent buildsは従前の成功Build `41b7ab63`だけで、自動配備に伴う新しいBuilds配備は表示されていません。
+- 以上により、通常main更新による自動実行と、確認対象の応答・保護・設定維持を実証しました。新資格情報の保存済みpolicy・期限は先の確認記録を根拠とし、今回秘密値を取得して再検証したわけではありません。実R2読書き、別Workerへの拒否試験、全アカウント資源の変更監査、認証方式・MFAの実効設定、対象外の認証済み利用者の拒否試験は未実施です。全サービスの準備や本番受入の完了とは扱いません。
+
+PR #12は最新mainを取り込み、上記の結果を反映して再検査・差分レビューを行う文書更新です。脆弱性修正そのものはPR #13の変更であり、本PRでアプリ・依存・workflow・外部設定を追加変更しません。PR #12もmainへmergeすると現在のworkflow条件で自動配備が起動するため、人間のレビュー・必須check成功後、配備結果を確認できる時間帯にmergeしてください。
+
 Environmentが既にあれば、Secret値は再表示せず、用途・保護・同名変数の衝突を確認してから進めます。既存設定の上書き、reviewerの削除、Repository/Organization Secretsへの代替登録は行いません。通常はmainのPRレビューを承認境界とするため、新たな毎回のEnvironment reviewerは設けない案ですが、既存reviewerがあれば確認します。main限定の保護を設定する前にworkflowを手動実行しないでください。
+
+2026-09-29の本人提供のAccount API Token作成画面では、Permission policiesの選択肢に`Start from scratch`、Token expirationに`Custom`、確認ボタンに`Review token`が表示されています。`Start from scratch`からの入力後、`Specified Workers`で`koko-api-dev`1件、`Individual Workers`の`Editor`だけ選択済みであることを確認しました。期限欄は`9/29/26 - 10/19/26`、IP/CIDR欄は空です。続く発行前Summaryの提供画像では、名前`koko-api-dev-deploy`、終了日`October 19, 2026`、policyはWorkersの`koko-api-dev`に対する`Individual Workers Editor`1件、IP制限は`All IP addresses allowed`であることを照合しました。計画と一致するため、本人へ`Create token`による発行と暗号化された保管先への保存を案内し、その後、本人から「作成・保存完了」と報告を受けました。Codexは秘密の値を閲覧・記録していません。
+
+同日、保存済みトークンの詳細を入力・保存せず閲覧し、名前と対象Worker1件・`Individual Workers Editor`1 policy、IP/CIDR空欄を独立確認しました。期限欄は`9/29/26 - 10/20/26`と表示され、発行前Summaryの`October 19, 2026`と日付が異なったため、切断前に実際の失効日時を確認することにしました。本人は発行後の変更について「変更していないはずだが、よく覚えていない」と回答し、変更履歴は断定していません。
+
+続いて本人が、保存済みトークンを伏せ字入力して公式のAccount API Token verifyをGETで実行しました。提示された結果は対象token ID照合を含む`RESULT=CHECKED`、`TOKEN_STATUS=active`、`EXPIRES_UTC=2026-10-19T23:59:59.0000000+00:00`、`EXPIRES_JST=2026-10-20T08:59:59.0000000+09:00`でした。これにより実際の期限は**UTCの2026-10-19 23:59:59（日本時間2026-10-20 08:59:59）**と確認しました。UTCと日本時間で日付が異なることと画面表示は整合し、実際の期限が不明という保留理由は解消しました。画面内部の表示処理や過去の変更履歴を検証したわけではありません。[確認API](https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/verify/)
+
+この期限確認でCodexは秘密値の取得・token verify照会の代行をしていません。この結果だけではGitHub Secretに同じ値が保存されていることや、Worker配備が成功することの検証にはなりません。この時点では期限の再設定・トークン再発行・旧配備用トークン削除・実配備は行っていませんでした。後続の旧Builds停止・導入PRのmerge・本人によるActions配備と受入確認は、上記の日付付き記録を参照してください。
+
+Client IP address filteringは、標準GitHub-hosted runnerから使うため今回の入力案ではIP/CIDRを空欄とし、本人のPCのIPは指定しません。GitHubは標準runnerの広いIP範囲をallowlistに使うことを推奨しておらず、範囲も更新されます。空欄ではIPによる制限がないため、トークンの漏洩時には他の場所からも権限範囲内で使用され得ます。Worker限定・期限・Environment Secretの保管を守り、発行前に確認します。固定IP方式への変更は別途構成判断とします。[GitHubのrunner IP](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#ip-addresses)、[Cloudflareのトークン制限](https://developers.cloudflare.com/fundamentals/api/how-to/restrict-tokens/)
 
 1. **ローカル変更のレビュー・PR準備**：外部設定や実配備を含まない差分と検証結果を確認。commit・push・PRは対象ファイルとbranchを示し、承認後にGit-E-z7で実施。PRのレビューとmergeは人間が担当し、この時点ではまだmergeしない。
 2. **移行先の準備**：実行時点で対象・期限・保管先の承認を取り、上表のEnvironment・フラグ・新資格情報を準備。対象Worker1件とEditorを選べなければ発行せず停止。Account API TokenをBuildsへ登録しない。

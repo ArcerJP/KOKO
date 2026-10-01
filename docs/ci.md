@@ -54,7 +54,7 @@ API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type 
 
 ## 開発用API配備
 
-2026-09-29にローカル実装・検証を完了し、PR作成までの承認を受けました。外部設定・実配備は未実施です。[ADR-0003](decisions/ADR-0003-worker-scoped-deployment.md)は外部移行の提案段階であり、PR作成やCI成功をBuilds経路の切替完了とは扱いません。旧Builds停止前に導入PRをmergeしません。
+2026-09-29にローカル実装・検証を完了し、その後の本人による準備と切替を経て、2026-10-02までにActionsの初回手動配備と通常main更新による自動配備を確認しました。採用理由は[ADR-0003](decisions/ADR-0003-worker-scoped-deployment.md)、配備後確認・残る検証と日付付き証拠は[クラウド準備の進捗](product/cloud-setup.md#項目別の進捗2026-10-02更新)を参照してください。PRのCI成功だけを実配備成功とは扱いません。
 
 実装の正本は[api-deploy.yml](../.github/workflows/api-deploy.yml)と[実行ガード](../.github/scripts/api-deploy.mjs)、外部設定・切替・期限更新・復旧の正本は[クラウド準備](product/cloud-setup.md#github-actionsへの移行手順外部操作は別途承認)です。
 

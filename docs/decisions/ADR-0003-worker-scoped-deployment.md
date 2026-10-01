@@ -2,15 +2,15 @@
 
 ## 状態
 
-Proposed — 外部移行は未実施。
+Accepted — 個別Worker限定の資格情報とGitHub Actionsによる配備を採用・適用済み。
 
-2026-09-29、iijimaは移行計画に続き、配備の仕組み・テスト・文書のローカル実装を承認しました。検証完了後、commit・push・PR作成まで追加承認を受けました。通常運用は初回手動検証後のmainマージによる自動配備を選択済みです。新資格情報の発行、GitHub設定、旧経路の切断、実配備、旧資格情報の失効は別途承認が必要です。この記録を外部環境の切替完了と扱いません。
+2026-09-29、iijimaは移行計画に続き、配備の仕組み・テスト・文書のローカル実装を承認しました。検証完了後、commit・push・PR作成まで追加承認を受けました。通常運用は初回手動検証後のmainマージによる自動配備を選択し、その後、本人による準備・切替・旧資格情報の整理を経て、自動配備を有効化しました。2026-10-02には通常main更新による実配備を確認しています。日付付きの証拠と残る検証は[クラウド準備の進捗](../product/cloud-setup.md#項目別の進捗2026-10-02更新)を正本とします。今後の発行・設定変更・失効も対象ごとの承認が必要であり、このADRは包括的な外部操作許可ではありません。
 
 ## 背景
 
-開発用WorkerはWorkers Buildsから初回配備済みですが、現在のUser API Tokenは対象アカウントのWorkers Adminです。権限を既存`koko-api-dev`だけに限定する必要があります。Cloudflareの資源単位権限はAccount API Tokenで利用できる一方、Workers BuildsはUser API Tokenだけに対応しています。
+移行検討時、開発用WorkerはWorkers Buildsから初回配備済みでしたが、User API Tokenは対象アカウントのWorkers Adminでした。権限を既存`koko-api-dev`だけに限定する必要がありました。2026-09-29に確認した公式仕様では、Cloudflareの資源単位権限はAccount API Tokenで利用できる一方、Workers BuildsはUser API Tokenだけに対応していました。
 
-## 決定案とローカル実装
+## 決定と実装
 
 - APIの配備元だけをGitHub Actionsへ移し、既存Worker1件のWorkers Editorを持つAccount API Tokenを専用Environmentへ保管する。
 - Worker・URL・R2 binding・Accessを作り直さない。R2やAccessの管理権限を配備用トークンへ足さない。
