@@ -19,7 +19,7 @@
 
 第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験を追加しました。Cloudflare Workersは`GET /health`、R2 binding、ローカル実行環境テスト、dry-run buildを実装しています。開発用Workerの初回クラウド配備と本人のhealth応答は確認済みですが、アプリの認証、実R2操作、画像decoderは未実装です。[撮影検証の構造と制約](../product/stage-one-capture.md)と[クラウドの確認済み進捗](../product/cloud-setup.md)を参照してください。
 
-2026-09-29、個別Workerへ配備権限を限定するGitHub Actions workflow・回帰試験・文書をローカル実装しました。外部環境は現行Workers Buildsから未切替です。[ADR-0003](../decisions/ADR-0003-worker-scoped-deployment.md)は提案段階とし、配備の安全条件は[CI規約](../ci.md#開発用api配備)、外部の移行・受入はクラウド準備へ分離します。開発用Cloudflare Accessを利用者向けGoogle認証の実装と混同しません。
+2026-09-29、個別Workerへ配備権限を限定するGitHub Actions workflow・回帰試験・文書をローカル実装し、その後、旧Workers Buildsを切断してActionsへ移行しました。2026-10-02までに初回手動配備と通常main更新による自動配備を確認しています。採用理由は[ADR-0003](../decisions/ADR-0003-worker-scoped-deployment.md)、配備の安全条件は[CI規約](../ci.md#開発用api配備)、外部の適用済み状態・証拠・残る検証は[クラウド準備](../product/cloud-setup.md#項目別の進捗2026-10-02更新)へ分離します。開発用Cloudflare Accessを利用者向けGoogle認証の実装と混同しません。
 
 TypeScriptは型生成ツールのpeer範囲を優先して5.9.3を固定しています。実際の依存バージョンはpackage.jsonとlockfileを正本とします。契約パッケージにブラウザDOMやNode専用APIを混ぜず、WorkersとFE双方で使える純粋な契約を保持します。
 
