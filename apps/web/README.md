@@ -1,6 +1,6 @@
 # KOKO フロントエンド
 
-Next.js App Router・TypeScriptをVercelで実行する領域です。[初期トークン](src/styles/tokens.css)を使う、端末内の撮影・トリム検証画面を実装しています。Googleログイン・アップロード・AI判定は未接続です。Figmaデザインの確定とも区別します。
+Next.js App Router・TypeScriptをVercelで実行する領域です。[初期トークン](src/styles/tokens.css)を使う、端末内の撮影・トリム検証画面とGoogleログインの検証導線を実装しています。アップロード・AI判定は未接続です。Figmaデザインの確定とも区別します。
 
 [起動方法・実機の確認手順](../../docs/product/stage-one-capture.md)、[クラウドの準備](../../docs/product/cloud-setup.md)、[自動検証](../../docs/ci.md)を参照してください。リポジトリルートで`npm.cmd ci`、`npm.cmd run dev`を実行すると起動します。
 
@@ -20,5 +20,13 @@ Next.js App Router・TypeScriptをVercelで実行する領域です。[初期ト
 API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用します。手書き型を複製しません。`src/api`のGET境界と`src/mocks`のMSWをNodeテストで検証します。ブラウザ本番でMSWや偽セッションを有効化する設定はありません。実認証の試験は後続です。
 
 撮影UIは`src/components`、トリムは`src/media`、単体・HTTP/メディア統合は`test`、実ブラウザ操作は`e2e`です。動的メディア処理はWorkerへ分離し、必要時だけ読み込みます。
+
+## Googleログインの検証導線
+
+`/login`からSupabase AuthのGoogle OAuthを開始し、`/auth/callback`でcodeをCookieセッションへ交換します。`/account`は署名検証済みのGoogle単独セッションだけを表示し、ログアウトできます。認証ページは動的応答・非キャッシュです。既存の`/`は外部送信しない撮影検証画面のままであり、利用者向けアプリ全体の認証ゲートではありません。
+
+接続時は[例](.env.example)に従い、SupabaseのProject URLと`sb_publishable_`で始まる公開用キーを設定します。Google Client Secret、Supabase secret/service_roleキー、セッションをここやGitへ保存しません。Supabaseには固定Web URLの`/auth/callback`だけをRedirect URLとして登録済みです。ローカルURLは未登録のため、ローカル実ログイン試験にはその完全URLの追加許可が別途必要です。現在のVercel保護とSupabaseのSite URLは維持しています。
+
+SupabaseのEmail providerは無効化済みです。規約への同意・表示名、API側の認可、実機のセッション維持・失効試験は後続です。ログイン導線の追加をF1-4全体の完了とは扱いません。
 
 メディアは[認証ゲート](../../docs/decisions/ADR-0002-authenticated-delivery.md)経由。Cookieを通さない公開画像最適化cacheや、署名付きStream URLの直接配布で代替しません。詳細な順序は[FEタスク](../../docs/product/development-plan.md#feタスク)を参照してください。

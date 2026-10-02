@@ -4,9 +4,9 @@ import "../styles/tokens.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "KOKO | 撮影・トリム検証",
+  title: "KOKO | ログイン・撮影検証",
   description:
-    "第49回技科大祭 KOKOの端末内メディア検証。投稿・外部送信は行いません。",
+    "第49回技科大祭 KOKOのGoogleログイン導線と端末内メディア検証。撮影画面からの投稿は行いません。",
   robots: { index: false, follow: false },
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };

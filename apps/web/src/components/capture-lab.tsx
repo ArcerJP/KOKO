@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { videoTrimTargetsSeconds } from "@koko/contract";
 import {
@@ -185,9 +186,12 @@ export function CaptureLab() {
       <aside className="notice">
         <strong>この画面から投稿・外部送信は行いません。</strong>
         <p>
-          Googleログイン・R2保存・AI判定は未接続です。再読み込みすると検証結果は消えます。
+          ここは端末内の検証画面です。R2保存・AI判定は未接続で、再読み込みすると検証結果は消えます。
         </p>
       </aside>
+      <p>
+        <Link href="/login">Googleログインの検証へ</Link>
+      </p>
 
       <section className="panel" aria-labelledby="capture-heading">
         <div className="section-heading">

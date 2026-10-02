@@ -354,6 +354,12 @@ Freeは開発の候補ですが、非活動7日でのpauseやbackup制約があ�
 4. GoogleログインはGoogle Auth PlatformでBranding／Audience／Data Accessを設定します。一般来場者を対象にするため、大学内限定のInternal設定を安易に使いません。アプリ名・問い合わせ先・公開主体は運営側が確定します。最小scopeは`openid`、`email`、`profile`です。
 5. テスト段階では必要なGoogleテストユーザーを登録します。Web applicationのOAuth clientを作り、Authorized JavaScript originsへ確定したアプリorigin、Authorized redirect URIsへSupabase画面から取得したcallback URLを登録します。アプリの`/auth/callback`とSupabaseのcallbackを取り違えないでください。公開への切替・審査の要否は管理画面で確認します。[Supabase公式のGoogle設定手順](https://supabase.com/docs/guides/auth/social-login/auth-google)
 
+2026-10-02、iijimaの指定でGoogle Cloudプロジェクト`KOKO`（ID `koko-510318`、親は「組織なし」）を作成し、管理画面で確認しました。無料トライアル・請求先は設定していません。Google Auth Platformにはアプリ名`KOKO`、外部ユーザー、本人が公開を了承したサポートメール、および同じ開発者連絡先を入力し、iijima本人がユーザーデータポリシーに同意して初期構成を作成しました。Web用OAuth client `KOKO web development`には固定Web URLをJavaScript origin、Supabase KOKOプロジェクトのcallbackをredirect URIとして登録し、管理画面の作成通知と一覧で確認しました。Data Accessには`openid`、メールアドレス、基本プロフィールの3スコープのみを保存し、本人1件をテストユーザーとして登録しました。公開ステータスは「テスト中」のままです。Client Secretは閲覧・記録せず、サポートメールの値や認証情報も本書へ記録しません。
+
+同日、iijimaがGoogle Client ID・SecretをSupabase KOKOプロジェクトのGoogle providerに入力して保存しました。保存前の画面でClient IDが作成済みWeb用IDと一致し、GoogleログインはON、`Skip nonce checks`と`Allow users without an email`はOFF、callback URLはGoogleへ登録したものと一致することを確認しました。Secretはマスク表示で存在のみ確認し、値の一致は確認していません。保存後の一覧では`Google Enabled`を確認しました。これはprovider設定の保存確認であり、ログイン成功ではありません。初期状態のSupabase Site URLは`http://localhost:3000`、redirect許可リストは空でした。固定Web URLは未ログインのブラウザーからアクセスした際にVercelのログイン画面へ転送されました。このためSite URLの変更と一般公開は保留しました。WebのGoogle OAuth開始・callback・Google単独セッション確認は作業ブランチにローカル実装しましたが、公開用キーを設定した実ログインとアプリ全体の認証ゲートは未検証・未実装です。
+
+続いてiijimaは、Supabase KOKOのRedirect URLsへ`https://koko-web-green.vercel.app/auth/callback`の1件だけを追加し、Email providerを無効化することを承認しました。管理画面で`Successfully added 1 URL`と許可リストの1件表示、`Email Disabled`と`Google Enabled`を確認しました。Site URLは`http://localhost:3000`のまま、Vercelの閲覧保護も変更していません。ローカルcallback URLは未登録です。これらは認証設定の保存確認であり、Webの実ログイン成功や公開用キーの配備確認ではありません。
+
 Cloud RunのCPU・メモリ・通信、コンテナ保管・build・ログは使用量次第です。Visionは画像ごと・機能ごとの課金で、SafeSearchとOCRを1機能分とは数えません。各機能の最初の月1,000単位は無料、その後500万単位までText Detectionは1,000単位あたり1.50 USD、SafeSearch単独も1.50 USDです。動画3フレームや再試行の回数を含めます。[Vision料金](https://cloud.google.com/vision/pricing)
 
 通常のAlerts-only予算は通知用であり支出を止めません。Spend cap予算は別機能で、Preview条件と対象サービス・停止時の影響の確認が必要です。どの通知／停止方式を使うかを確認せず、自動停止済みとは扱いません。[Google Cloud予算](https://docs.cloud.google.com/billing/docs/how-to/budgets)
