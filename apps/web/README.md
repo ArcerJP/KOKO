@@ -17,7 +17,7 @@ Next.js App Router・TypeScriptをVercelで実行する領域です。[初期ト
 
 ## 実装時の入口
 
-API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用します。手書き型を複製しません。`src/api`のGET境界と`src/mocks`のMSWをNodeテストで検証します。ブラウザ本番でMSWや偽セッションを有効化する設定はありません。実認証の試験は後続です。
+API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用します。手書き型を複製しません。`src/api`のGET境界と`src/mocks`のMSWをNodeテストで検証します。ブラウザ本番でMSWや偽セッションを有効化する設定はありません。本人1件の実Googleログイン・ログアウトは確認済みですが、実JWTを使うDB/API認可試験は後続です。
 
 撮影UIは`src/components`、トリムは`src/media`、単体・HTTP/メディア統合は`test`、実ブラウザ操作は`e2e`です。動的メディア処理はWorkerへ分離し、必要時だけ読み込みます。
 

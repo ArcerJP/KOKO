@@ -10,7 +10,7 @@ async function dispatch(
   init?: RequestInit<IncomingRequestCfProperties>,
 ): Promise<Response> {
   const request = new IncomingRequest(`https://api.example.test${path}`, init);
-  return worker.fetch(request);
+  return worker.fetch(request, env);
 }
 
 describe("KOKO API Worker", () => {
