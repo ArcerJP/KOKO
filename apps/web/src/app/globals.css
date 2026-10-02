@@ -245,6 +245,15 @@ input[type="checkbox"] {
 footer {
   margin-top: 2rem;
 }
+.auth-shell {
+  max-width: 38rem;
+}
+.auth-shell .panel {
+  margin-bottom: 1.5rem;
+}
+.auth-shell button {
+  width: 100%;
+}
 .visually-hidden {
   position: absolute;
   width: 1px;
