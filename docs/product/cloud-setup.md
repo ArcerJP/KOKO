@@ -16,6 +16,8 @@
 
 Discordの通知先とGoogle Driveのアーカイブ先は、後続の運営準備です。今すべてを契約する必要はありません。
 
+上表の「今回の実装」は当初のローカル検証段階を指し、現在の外部設定の完了状況ではありません。現在地は[項目別の進捗](#項目別の進捗2026-10-02更新)と下記の各サービス記録を参照してください。
+
 ## iijimaさんが今行う順序
 
 1. 各社について「アカウントあり／なし」「管理できる人」を確認してください。名義・契約主体・引継ぎ先は誰にしますか？個人のログインを共有せず、各サービスの招待機能で管理者を分ける方針です。
@@ -52,6 +54,10 @@ Discordの通知先とGoogle Driveのアーカイブ先は、後続の運営準�
 | Node.js Version                          | `24.x`                                |
 
 `build:web`は共有契約を先にbuildしてからWebをbuildします。環境変数の指定値は`HUSKY=0`、`NEXT_TELEMETRY_DISABLED=1`で、適用先は両方ともProductionとPreviewです。2026-09-23の管理画面では登録名と適用先を確認し、値の表示・コピーは行っていません。Huskyの無効化はVercelのbuild環境だけで、ローカルのGitフックは変更しません。
+
+2026-10-02、Vercel `arcer2/koko-web`にSupabase KOKO用の`NEXT_PUBLIC_SUPABASE_URL`と`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`をProductionのみへ保存し、一覧で登録名と適用先を確認しました。後者は`sb_publishable_`形式の公開用キーで、全文は本書へ記録しません。同じ操作中に適用先を誤変更した既存の`HUSKY`と`NEXT_TELEMETRY_DISABLED`は、iijimaが元の値`0`／`1`と元の適用先Production＋Previewを確認したうえで復元しました。両方ともSecret種別を維持し、保存前の入力値と保存後の適用先を確認しています。Secretの値は保存後に読み返していません。Vercelは変更の反映に新しいデプロイが必要と表示しました。この時点で再デプロイやGoogleログイン試験は行っていません。
+
+その後、Googleログイン実装のPR #14がmainへマージされ、保護を維持したVercel Productionの配備成功を確認しました。未ログインで`/account`へアクセスすると`/login`へ転送され、iijima提供の画像ではGoogleログイン後の`/account`にログイン状態が表示されました。ログアウト完了はiijima本人の報告です。これは本人1件の認証導線の確認であり、投稿・閲覧API、同意・表示名、他人の認可、一般公開の検証完了ではありません。
 
 #### 開発中の公開範囲
 
@@ -95,15 +101,23 @@ Discordの通知先とGoogle Driveのアーカイブ先は、後続の運営準�
 
 上の番号は順番に完了するチェックリストではなく、準備作業と継続して守る条件が混在しています。現在は「2のWorkers配備とAPI応答確認、4のWorker限定資格情報によるActions初回手動配備・受入確認、旧トークン削除の本人報告と自動配備有効化、通常main更新による自動実行・配備後確認、5の本人限定Access設定・認証済み正常応答・固定URLと試験したVersion URLの未認証アクセス制限」まで進んでいます。自動配備の確認結果は[下記の記録](#2026-10-02の通常main更新による自動配備)を参照してください。Cloudflare全体の準備完了ではありません。
 
-| 残る準備                           | 現在の状態                                                                                                      | 次の確認・作業                                                                  |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| 1：課金の区分                      | 継続確認。R2・Zero Trust Freeの準備記録あり。他製品の契約完了とは別                                             | Queues・Stream等の準備前に対象プラン・費用を確認                                |
-| 2：開発専用Workers・Queues・Stream | 一部完了。Worker作成・Actions手動／自動配備・認証済みAPI応答を確認。R2 binding 2件を維持                        | 未作成のQueues・Streamを準備。実R2読書きの検証は別途                            |
-| 3：非公開化・署名・保持            | 継続条件。R2は非公開として準備済み。Streamは未準備                                                              | R2公開を有効にせず維持。Stream作成時に署名必須、保持期間合意前はBucket Lockなし |
-| 4：限定した資格情報                | 開発APIの配備経路を移行確認済み。Worker限定資格情報で手動／自動配備・配備後確認。旧トークン削除は本人報告       | 期限前の資格情報更新。将来接続する他サービスの資格情報は別途準備                |
-| 5：本人限定Access                  | 自動配備後もAll traffic・本人限定policy・認証済み正常応答を確認。固定URLと新Version URLの未認証GETはAccessへ302 | 認証方式・MFAの実効設定、認証済み対象外利用者の拒否試験                         |
+| 残る準備                           | 現在の状態                                                                                                      | 次の確認・作業                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 1：課金の区分                      | R2・Zero Trust Freeに加え、Queuesの無料枠とStream最小保存枠1,000分・月額5 USDの有効化を確認                     | 配信従量料金・利用量を確認。通知を支出上限と扱わない                    |
+| 2：開発専用Workers・Queues・Stream | Worker配備、空のQueue 2件（保持24時間・consumerなし）、Stream最小枠の有効化まで確認                             | Queue接続・Stream処理実装。実R2読書きの検証は別途                       |
+| 3：非公開化・署名・保持            | R2は非公開。Streamは有効化済みだが動画未投入で、動画ごとの署名必須設定・検証は未実施                            | R2非公開を維持。Stream投入時に署名必須、保持期間合意前はBucket Lockなし |
+| 4：限定した資格情報                | 開発APIの配備経路を移行確認済み。Worker限定資格情報で手動／自動配備・配備後確認。旧トークン削除は本人報告       | 期限前の資格情報更新。将来接続する他サービスの資格情報は別途準備        |
+| 5：本人限定Access                  | 自動配備後もAll traffic・本人限定policy・認証済み正常応答を確認。固定URLと新Version URLの未認証GETはAccessへ302 | 認証方式・MFAの実効設定、認証済み対象外利用者の拒否試験                 |
 
-開発APIの配備経路については、移行手順6の自動実行と配備後確認まで進みました。残るAccess検証・実R2読書きを未完了項目として保持し、次はQueues・Streamの構成・費用・保持期間を確認します。新資格情報の期限前更新も必要です。初回ビルドのやり直しは不要です。設定変更・権限変更・失効操作は対象ごとに承認を確認し、勝手に実行しません。
+開発APIの配備経路については、移行手順6の自動実行と配備後確認まで進みました。残るAccess検証・実R2読書きを未完了項目として保持し、Queues・Streamは下記の資源準備まで進んでいます。新資格情報の期限前更新も必要です。初回ビルドのやり直しは不要です。設定変更・権限変更・失効操作は対象ごとに承認を確認し、勝手に実行しません。
+
+##### 2026-10-02のQueues・Stream準備
+
+iijimaは通常用`koko-dev-media`と失敗退避用`koko-dev-media-dlq`の作成、およびStream最小保存枠1,000分・月額5 USDと配信従量料金による有効化を承認しました。対象は空の資源準備までで、動画投入、Worker接続・配備、新資格情報の作成、既存トークンの権限拡大は含みません。
+
+- **Queues：作成済み。** 作成前に空の一覧と無料枠10,000操作/日を確認し、上記2件を作成しました。各SettingsでMessage retention `86400 seconds`（24時間）、Delivery delay `0 seconds`、`No consumers configured`を確認しました。一覧は2件とも`Inactive`、メッセージ・操作数は0です。Workers producerは接続せず、既定のHTTP Push表示だけを確認しています。DLQ用の名前を付けただけでは失敗転送は有効にならず、後続のconsumer設定と失敗復旧試験が必要です。[Queues料金](https://developers.cloudflare.com/queues/platform/pricing/)、[DLQ設定](https://developers.cloudflare.com/queues/configuration/dead-letter-queues/)
+- **Stream：最小枠の有効化済み。** iijimaが規約同意・毎月課金許可と`Activate`を操作し、有効化完了を報告しました。同日の確認画面で`Purchase complete`、`The subscription is active`、通常のImages & Stream基本枠0 USD、動画保存1,000分・月額5 USD、動画配信1,000分あたり1 USDを確認しました。Imagesの有料保存、Starter/Creator Bundle、追加保存枠は含めていません。AIは購入確定を代行せず、支払情報も記録していません。動画投入・署名設定・実連携の成功とは区別します。[Stream料金](https://developers.cloudflare.com/stream/pricing/)
+- Worker、R2、Access、配備トークン、既存のBudget Alertは変更していません。原本の削除・保持・Bucket Lockも未変更です。Streamの動画ごとの署名必須設定、source/clip処理、Queue配送は未実装・未検証として残します。資源準備をB1-1全体やメディア処理の完了とは扱いません。
 
 2026-09-29、iijimaは、`koko-api-dev-build`を対象Worker `koko-api-dev`だけの`Editor`へ縮小し、対象アカウントと期限2026-10-19を維持すること、および登録作業が終わった`koko-builds-register-once`の失効を承認しました。ただし、既存User API Tokenをそのまま個別Worker限定へ編集できるという当初案は、後述のトークン種別とBuildsの対応制限を考慮していませんでした。この案での権限縮小は未実施です。Buildsでは編集済みトークンが古い状態として扱われる場合もあり、新規発行・再登録・再配備を自動で進めません。[Buildsの古いトークンに関する注意](https://developers.cloudflare.com/workers/ci-cd/builds/troubleshoot/#stale-api-token)
 
@@ -340,7 +354,7 @@ R2は保存量・操作数、Streamは保存枠・配信分数の課金です。
 
 1. [Supabase Dashboard](https://supabase.com/dashboard)でアカウントと管理用Organizationを準備します。
 2. 接続開始時に開発用プロジェクトを1つ作ります。リージョンは日本からの利用とCloud Runとの距離・費用を確認して決めます。データ所在に関する組織ルールがあれば先に教えてください。
-3. DBパスワードは十分強いものを設定し、パスワード管理ツールへ保存します。既存migrationはCodex側で適用手順を検証してから使います。今すぐSQL Editorへ貼り付ける必要はありません。
+3. DBパスワードは十分強いものを設定し、パスワード管理ツールへ保存します。初期migrationはKOKO開発DBへ適用済みです。同じSQLを再適用せず、後続の変更もmigration履歴を確認してから進めます。SQL Editorへ初期SQLを貼り付けません。
 4. Google OAuthの準備時にAuthenticationのGoogle provider画面を開き、そこに表示されたSupabase callback URLをGoogleへ登録します。Client ID／Secretはそのprovider画面へ入力します。詳細は次のGoogle Cloud節を参照してください。
 5. アプリのSite URLとredirect許可リストは、実際の開発URLが確定してから設定します。任意ドメインを許可する広いwildcardで代用しません。Google以外のログイン手段は今回追加しません。
 
@@ -359,6 +373,12 @@ Freeは開発の候補ですが、非活動7日でのpauseやbackup制約があ�
 同日、iijimaがGoogle Client ID・SecretをSupabase KOKOプロジェクトのGoogle providerに入力して保存しました。保存前の画面でClient IDが作成済みWeb用IDと一致し、GoogleログインはON、`Skip nonce checks`と`Allow users without an email`はOFF、callback URLはGoogleへ登録したものと一致することを確認しました。Secretはマスク表示で存在のみ確認し、値の一致は確認していません。保存後の一覧では`Google Enabled`を確認しました。これはprovider設定の保存確認であり、ログイン成功ではありません。初期状態のSupabase Site URLは`http://localhost:3000`、redirect許可リストは空でした。固定Web URLは未ログインのブラウザーからアクセスした際にVercelのログイン画面へ転送されました。このためSite URLの変更と一般公開は保留しました。WebのGoogle OAuth開始・callback・Google単独セッション確認は作業ブランチにローカル実装しましたが、公開用キーを設定した実ログインとアプリ全体の認証ゲートは未検証・未実装です。
 
 続いてiijimaは、Supabase KOKOのRedirect URLsへ`https://koko-web-green.vercel.app/auth/callback`の1件だけを追加し、Email providerを無効化することを承認しました。管理画面で`Successfully added 1 URL`と許可リストの1件表示、`Email Disabled`と`Google Enabled`を確認しました。Site URLは`http://localhost:3000`のまま、Vercelの閲覧保護も変更していません。ローカルcallback URLは未登録です。これらは認証設定の保存確認であり、Webの実ログイン成功や公開用キーの配備確認ではありません。
+
+2026-10-02の読み取り専用事前確認では、Supabase KOKOプロジェクトの`public`テーブルは0件、移行履歴も初回実行前で、Freeプランにはプロジェクトバックアップがありませんでした。[初期SQL](../../apps/api/supabase/migrations/20260921000000_initial_contract.sql)のPGlite試験はローカルで10件成功しました。
+
+その後、iijimaが対象と単一の保留migrationを事前確認し、Supabase CLIで`20260921000000_initial_contract.sql`をKOKO開発DBへ適用しました。提示された実行結果では、適用後のローカル・リモート移行履歴は`20260921000000`で一致し、`public`テーブル14件、RLS有効14件、public policy 7件です。リモートのSQL Editorで同じスキーマを再実行しません。
+
+同日、iijimaの承認を受け、実DBのSQL Editorで`BEGIN`～`ROLLBACK`による認可試験を実施しました。事前確認では認証ユーザー1件、イベント・所属0件、対象2テーブルのユーザー定義トリガー0件でした。既存ユーザーのIDだけをSQL内部で参照し、一時イベントと所属を挿入。`SET LOCAL ROLE`と`request.jwt.claim.sub`の模擬設定で、本人のイベント・所属読取は成功、別IDの読取は0件、匿名ロールのイベント読取は権限エラー、`service_role`の読取は成功しました。匿名への読取権限や認証利用者への直接書込権限・投稿読取権限がないことも確認しました。試験後の別クエリでは認証ユーザー1件、イベント・所属0件、public policy 7件で、一時データが残っていないことを確認しました。IDの値、メールアドレス、パスワードは表示・記録していません。これは**実DBでロールとIDを模擬したRLS試験**であり、署名済みJWTを使うWeb/API経由の認可、別の実アカウント、全14テーブルの全操作を検証したものではありません。[SupabaseのRLS試験手順](https://supabase.com/docs/guides/database/postgres/row-level-security)
 
 Cloud RunのCPU・メモリ・通信、コンテナ保管・build・ログは使用量次第です。Visionは画像ごと・機能ごとの課金で、SafeSearchとOCRを1機能分とは数えません。各機能の最初の月1,000単位は無料、その後500万単位までText Detectionは1,000単位あたり1.50 USD、SafeSearch単独も1.50 USDです。動画3フレームや再試行の回数を含めます。[Vision料金](https://cloud.google.com/vision/pricing)
 
