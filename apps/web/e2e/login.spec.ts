@@ -30,3 +30,13 @@ test("未認証の/accountはログインへ戻す", async ({ page }) => {
   await page.goto("/account");
   await expect(page).toHaveURL(/\/login$/);
 });
+
+test("API Cookie bridgeは既定無効でCookieを変更しない", async ({ request }) => {
+  for (const method of ["POST", "DELETE"]) {
+    const response = await request.fetch("/auth/api-session", { method });
+    expect(response.status()).toBe(503);
+    expect(await response.json()).toEqual({ code: "API_SESSION_UNAVAILABLE" });
+    expect(response.headers()["set-cookie"]).toBeUndefined();
+    expect(response.headers()["cache-control"]).toBe("private, no-store");
+  }
+});
