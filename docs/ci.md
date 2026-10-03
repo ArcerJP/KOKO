@@ -80,6 +80,27 @@ concurrencyはCloudflare Buildsを止めません。またmain確認とCloudflar
 
 ジョブのskip、dry-run、ローカル試験成功は実配備成功ではありません。通信失敗・タイムアウト後は、Active Deploymentを照合してから再試行を判断します。
 
+### 配備metadataの読取り専用診断
+
+`API Deploy Diagnostics`を[api-diagnose.yml](../.github/workflows/api-diagnose.yml)に定義します。実処理は[api-diagnose.mjs](../.github/scripts/api-diagnose.mjs)、回帰試験は[api-diagnose.test.mjs](../.github/tests/api-diagnose.test.mjs)です。2026-10-03にworkflow定義とローカル検証を準備しました。GitHub上での診断実行、原因確定、配備成功は未完了です。
+
+対象はWranglerがDashboard更新後に追加取得するmetadataです。固定Worker `koko-api-dev`のservice情報からenvironment名を検証して取り出し、bindings、routes、custom domains、subdomain、service environment、schedulesを各1回GETします。最初のservice取得に失敗した場合やenvironment名が不正な場合はそこで停止し、`production`等を推測して続けません。追加6件の一部失敗では残りも確認し、失敗した取得先を分けて記録します。[Wranglerの取得処理](https://raw.githubusercontent.com/cloudflare/workers-sdk/wrangler@4.147.0/packages/deploy-helpers/src/deploy/helpers/download-worker-config.ts)
+
+- 実行：`ArcerJP/KOKO`のmainから手動の`workflow_dispatch`のみ。任意入力、push・PR起動なし。実行contextとcheckout SHAもスクリプトで検査。
+- 資格情報：配備と同じEnvironment `koko-api-dev`の既存Secretを最終stepだけで使用。追加トークン・権限・秘密値の再入力は不要。checkout確認用Git子プロセスには資格情報を渡さない。
+- 通信：`https://api.cloudflare.com/client/v4`の固定取得先へGETのみ。リダイレクト禁止、各リクエスト15秒・本文256 KiB上限、job 5分上限、再試行なし。Node標準機能のみで、npm install・Wrangler・配備処理・artifact保存なし。
+- 出力：取得先の固定名、HTTPステータス、固定の結果分類、数値エラーコードのみ。配備元は`dash`／`api`／`wrangler`／`other`に限定。レスポンス本文・binding値・headers・例外本文・秘密値は表示しない。Nodeのdebug・追加起動オプションも無効化。
+- 判定：すべて成功はexit 0と`ALL_METADATA_READS_OK`。取得失敗・安全条件違反はexit 1。HTTP 401/403、APIエラー、通信例外、本文解析失敗を区別するが、通信例外の詳細は秘密非出力を優先して`REQUEST_FAILED`へ集約する。全GET成功でも、設定差分の安全性・upload・Supabase接続・受入成功を意味しない。
+- 検証：模擬通信の試験とworkflow改悪fixtureを既存`test:deploy-workflow`へ含め、ローカル`npm test`と`API Tests`で検査する。テストは実トークンを使わず、Cloudflareへ接続しない。
+
+公開・実行は別途承認を受け、次の順序で行います。
+
+1. **mainへのmerge前に、既存の自動配備を止める手順を承認・実施する。** 診断workflow自体に配備処理はありませんが、診断を導入するmain更新で既存`API Deploy`が起動し得ます。既存variable `KOKO_API_AUTO_DEPLOY_ENABLED`をOFFにし、進行中・待機中の配備がないことを確認する操作は別途承認が必要です。OFFでも既存の手動配備は防げないため、診断中は手動配備・Dashboard変更も行いません。
+2. コードレビュー・CI・本人merge後、mainの診断を明示的に手動実行する。[GitHubの仕様](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)上、workflowは既定ブランチに存在する必要があります。既存Environmentの保護を緩和せず、保存済みSecretの値を表示しません。
+3. ログから取得先・HTTP・エラー番号を照合し、必要最小限の修正を別途判断する。権限追加、`--strict`解除、Secret再登録、配備再試行を自動で行いません。終了後の自動配備再開も別途承認・確認します。
+
+診断用concurrencyは配備と分離し、待機中の配備runを診断で置き換えません。そのためCloudflare設定との同時変更をロックする仕組みではなく、上記の停止・調整が必要です。Environment利用によりGitHub上でdeployment記録が作成され得ますが、Cloudflareへコードを配備することとは区別します。トークン自体は書込み権限を持つため、GET限定のコードレビューと既存Environment保護は引き続き必要です。
+
 ## 開発用Lintの互換性と移行課題
 
 WebだけESLint 9.39.5を使用する構成はユーザー承認済みです。Next.js公式設定が使うimport／React／アクセシビリティのプラグインはESLint 10をpeer範囲に含めないため、契約側のESLint 10を変更せず分離します。`--force`や`--legacy-peer-deps`で互換性違反を無視しません。lockfileの再現と`npm ls --all`を検査します。
@@ -108,6 +129,8 @@ ESLint 9は2026-08-06にEOLとなっています。[公式サポート表](https
 Wranglerが指定するMiniflare `5.20261001.0-alpha`とworkerd `1.20261001.1`、および生成型を同時に更新しました。Cloudflare Vitest plugin `1.3.4`は変更せず、その内部のWrangler `4.145.0`／Miniflare `5.20260930.0-alpha`／workerd `1.20260930.2`は上流の指定どおり残します。lockfile内の旧版はこのテスト用経路であり、配備は`@koko/api`の直接依存`4.147.0`を使用します。`compatibility_date`、Worker設定、アプリの認証処理、配備ガードは変更していません。
 
 [4.146.0](https://github.com/cloudflare/workers-sdk/releases/tag/wrangler%404.146.0)と[4.147.0](https://github.com/cloudflare/workers-sdk/releases/tag/wrangler%404.147.0)の公式リリースには、今回のmetadata取得失敗に対する直接の修正は明記されていません。ローカル検査・dry-run成功を原因特定や実配備成功と扱わず、承認後の実配備で効果を確認します。同じ失敗が続く場合は認可・API応答を追加調査し、権限拡大や`--strict`の解除を自動で行いません。
+
+その後、PR #16のmergeによる[API Deploy #7](https://github.com/ArcerJP/KOKO/actions/runs/37105605539)でも同じmetadata取得失敗を確認しました。版更新による解消はできていません。追加調査では、Dashboard更新後だけ実行される設定取得と、いずれの取得失敗も共通エラーで表示する処理を確認しています。失敗API・HTTPステータス・原因となる権限は未確定であり、上記の読取り専用診断で切り分けます。
 
 ローカルでは再現install、依存整合性、format、Markdown、契約生成一致、型、179件の契約・Web・API・配備ガード試験、7件のChromium E2E、Web/API buildが成功しました。Lintは作業ツリーに以前から残るGit対象外の一時ファイルを拾って失敗したため、Git管理ファイルと今回の差分だけを展開し、同じlockfileで依存を導入した一時コピー上で、除外オプションを足さない`npm run lint`の成功を確認しました。既存の一時ファイルやLint設定は変更していません。監査は引き続き開発用High 7件・本番実行依存0件で、この更新による追加指摘はありません。GitHub CIと実配備は別途確認します。
 
