@@ -1,4 +1,4 @@
-import { handleAccount, type AccountEnv } from "./account";
+import { handleAccount, handleConsent, type AccountEnv } from "./account";
 
 const JSON_HEADERS = {
   "cache-control": "no-store",
@@ -18,6 +18,8 @@ export default {
     const { pathname } = new URL(request.url);
 
     if (pathname === "/me") return handleAccount(request, env as AccountEnv);
+    if (pathname === "/consents")
+      return handleConsent(request, env as AccountEnv);
 
     if (pathname === "/health") {
       if (request.method !== "GET") {

@@ -35,14 +35,13 @@ test("正式文書・契約の相対ファイルリンクにリンク切れが�
 });
 
 test("SQLもUTF-8/LF、末尾改行、末尾空白なしを維持する", async () => {
-  const sql = await readFile(
-    join(
-      root,
-      "apps/api/supabase/migrations/20260921000000_initial_contract.sql",
-    ),
-    "utf8",
-  );
-  assert.equal(sql.includes("\r"), false);
-  assert.ok(sql.endsWith("\n"));
-  assert.equal(/[\t ]+$/m.test(sql), false);
+  const directory = join(root, "apps/api/supabase/migrations");
+  for (const file of (await readdir(directory)).filter((name) =>
+    name.endsWith(".sql"),
+  )) {
+    const sql = await readFile(join(directory, file), "utf8");
+    assert.equal(sql.includes("\r"), false, file);
+    assert.ok(sql.endsWith("\n"), file);
+    assert.equal(/[\t ]+$/m.test(sql), false, file);
+  }
 });

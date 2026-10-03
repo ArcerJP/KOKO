@@ -6,7 +6,7 @@ TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置�
 
 - Worker名：`koko-api-dev`
 - 開発Workerへ配備済みの処理：`GET /health`、Bearer認証の`GET /me`と`PATCH /me`。全URLをCloudflare Accessで保護し、一般公開した意味ではありません。実クラウドでは読取り／未所属拒否まで受入済みで、所属ありの取得・更新は未検証です。
-- 本人情報API：Supabase Authで本人を検証し、Google単独ログインとイベント所属を確認した後、WorkerだけがDB Secretを使用します。Cookie認証・CSRFトークンの発行、`POST /consents`は未実装です。
+- 本人情報API：Supabase Authで本人を検証し、Google単独ログインとイベント所属を確認した後、WorkerだけがDB Secretを使用します。`POST /consents`は下記のローカル実装を追加しましたが未配備です。Cookie認証・CSRFトークンの発行は未実装です。
 - 未定義route：JSONの404
 - `/health`へのGET以外のmethod：JSONの405
 - R2 binding：`ORIGINALS_BUCKET`と`DERIVED_BUCKET`
@@ -15,12 +15,27 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義していますが、現�
 
 `/me`は`SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`がそろわなければ失敗させます。値をソースや`wrangler.jsonc`へ書かず、クラウドの登録・更新は[配備Skill](../../.agents/skills/api-deployment/SKILL.md)に従い本人が入力します。SecretはRLSを回避するため、ブラウザ・Webの`NEXT_PUBLIC_`変数に渡しません。利用者JWTはURLに載せず、Workerへは`Authorization: Bearer`だけで渡します。実試験の一時イベント・本人所属は削除済みで、正式イベント・所属の登録や同意保存を済ませたという意味ではありません。
 
+## 現行規約の同意保存（ローカル実装）
+
+`POST /consents`は既存の[API契約](../../packages/contract/openapi.yaml)に従い、`X-Event-ID`とGoogle単独のBearer認証、イベント所属を確認します。入力は`terms_version`と`accepted: true`だけのJSONです。本文は1KiBまでとし、不正JSON・UTF-8・余分な属性・空版を拒否します。本人IDや同意日時をクライアントに指定させません。Cookieだけでは認証せず、CSRF未実装の書込み経路を開けません。
+
+[追加migration](supabase/migrations/20261004000000_accept_current_terms.sql)の`accept_current_terms`が、イベントの現行版確認・所属の再照合・保存を1 transactionで実行します。規約版の行は`FOR SHARE`、所属行は`FOR KEY SHARE`で保持し、別リクエストで版を読んでから保存する競合を避けます。DBの`accepted_at`既定値で日時を記録し、同じ本人・イベント・版の再送は重複挿入せず、最初の日時を残します。規約更新後も旧版の同意履歴を上書きしません。BAN中の同意は投稿制限の解除を意味せず、BAN状態を変更しません。
+
+関数は`SECURITY INVOKER`・空の`search_path`とし、`PUBLIC`・`anon`・`authenticated`の実行権限を取り消し、既存の`service_role`だけへ許可します。Workerは検証済み本人IDだけをRPCへ渡します。成功は200の`request_id`、旧版は403 `CONSENT_REQUIRED`、所属消失は403 `FORBIDDEN`です。RPC未適用・未知の応答・上流障害は500 `INTERNAL_ERROR`に閉じ、redirectを追わず、生応答・資格情報を返しません。
+
+**追加migrationは実Supabase未適用、同意APIは未配備です。** 既存初期SQL、正式な規約・イベント・所属・同意は変更していません。ローカルのPGliteは関数実行・権限・版更新・再送・transaction取消しを検証しますが、単一接続のため実PostgreSQLの多接続競合試験とは区別します。Worker試験の上流はmockであり、実RPC・Google・Cookie／CSRF・FE画面の通し試験は後続です。
+
+実適用時は別途本人確認のうえ、追加migrationと権限・schema cacheの反映を確認してからWorkerを配備します。migrationにはPostgRESTのschema cache更新通知を含めています。失敗時に旧版の直接INSERTへ迂回したり、既存同意を削除して再実行したりしません。正式規約の内容・版の採択は運営の確認事項です。
+
+根拠：[PostgREST RPC](https://docs.postgrest.org/en/stable/references/api/functions.html)、[Supabaseの関数権限](https://supabase.com/docs/guides/database/functions)、[PostgreSQLの行ロック](https://www.postgresql.org/docs/current/explicit-locking.html)（2026-10-04確認）。
+
 ## ローカル検証
 
 リポジトリルートで次を実行します。
 
 ```powershell
 npm.cmd run typecheck:api
+npm.cmd run test:contract
 npm.cmd run test:api
 npm.cmd run build:api
 npm.cmd run test:deploy-workflow
