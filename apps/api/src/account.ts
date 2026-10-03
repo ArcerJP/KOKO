@@ -95,7 +95,8 @@ async function rows(
       accept: "application/json",
       ...init?.headers,
     },
-    redirect: "error",
+    // workerd rejects "error"; do not follow redirects carrying the secret key.
+    redirect: "manual",
     cache: "no-store",
   });
   if (!response.ok) return null;
@@ -143,7 +144,8 @@ export async function handleAccount(
         apikey: settings.publishableKey,
         Authorization: `Bearer ${match[1]}`,
       },
-      redirect: "error",
+      // Redirects remain non-OK below and must never forward the bearer token.
+      redirect: "manual",
       cache: "no-store",
     });
     if ([400, 401, 403].includes(authResponse.status)) {

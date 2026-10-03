@@ -26,13 +26,26 @@ function fakeUpstream(options?: {
   member?: boolean;
   google?: boolean;
   consent?: boolean;
+  authStatus?: number;
+  redirect?: { path: string; status: number };
 }) {
   const calls: { url: URL; init: RequestInit | undefined }[] = [];
   const fetcher = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = new URL(String(input));
+      // Use workerd's Request parser even when the upstream response is mocked.
+      // Plain function mocks otherwise miss unsupported fetch options.
+      const outbound = new Request(input, init);
+      const url = new URL(outbound.url);
       calls.push({ url, init });
+      if (options?.redirect?.path === url.pathname) {
+        return new Response(null, {
+          status: options.redirect.status,
+          headers: { location: "https://untrusted.example/credential-sink" },
+        });
+      }
       if (url.pathname === "/auth/v1/user") {
+        if (options?.authStatus)
+          return new Response(null, { status: options.authStatus });
         return Response.json({
           id: userId,
           app_metadata:
@@ -114,6 +127,63 @@ describe("/me のローカル認証・認可境界", () => {
     expect(response.status).toBe(403);
     expect(upstream.calls).toHaveLength(1);
   });
+
+  it("不正なBearerを401にし、DBへ接続しない", async () => {
+    const upstream = fakeUpstream({ authStatus: 401 });
+    const response = await handleAccount(
+      request("GET", undefined, { Authorization: "Bearer invalid" }),
+      settings,
+      upstream.fetcher,
+    );
+    expect(response.status).toBe(401);
+    expect(upstream.calls).toHaveLength(1);
+  });
+
+  it.each([301, 302, 303, 307, 308])(
+    "認証先の%s転送を追わず、秘密も転送先も応答に含めない",
+    async (status) => {
+      const upstream = fakeUpstream({
+        redirect: { path: "/auth/v1/user", status },
+      });
+      const response = await handleAccount(
+        request(),
+        settings,
+        upstream.fetcher,
+      );
+      expect(response.status).toBe(500);
+      expect(upstream.calls).toHaveLength(1);
+      expect(
+        upstream.calls.every((call) => call.init?.redirect === "manual"),
+      ).toBe(true);
+      expect(response.headers.get("location")).toBeNull();
+      expect(await response.text()).not.toMatch(
+        /sb_|signed\.jwt|untrusted\.example/,
+      );
+    },
+  );
+
+  it.each([301, 302, 303, 307, 308])(
+    "DBの%s転送を追わず、秘密も転送先も応答に含めない",
+    async (status) => {
+      const upstream = fakeUpstream({
+        redirect: { path: "/rest/v1/event_members", status },
+      });
+      const response = await handleAccount(
+        request(),
+        settings,
+        upstream.fetcher,
+      );
+      expect(response.status).toBe(500);
+      expect(upstream.calls).toHaveLength(2);
+      expect(
+        upstream.calls.every((call) => call.init?.redirect === "manual"),
+      ).toBe(true);
+      expect(response.headers.get("location")).toBeNull();
+      expect(await response.text()).not.toMatch(
+        /sb_|signed\.jwt|untrusted\.example/,
+      );
+    },
+  );
 
   it("イベントに所属しない利用者を拒否する", async () => {
     const upstream = fakeUpstream({ member: false });
