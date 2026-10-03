@@ -82,7 +82,7 @@ concurrencyはCloudflare Buildsを止めません。またmain確認とCloudflar
 
 ### 配備metadataの読取り専用診断
 
-`API Deploy Diagnostics`を[api-diagnose.yml](../.github/workflows/api-diagnose.yml)に定義します。実処理は[api-diagnose.mjs](../.github/scripts/api-diagnose.mjs)、回帰試験は[api-diagnose.test.mjs](../.github/tests/api-diagnose.test.mjs)です。2026-10-03にPR #17をmainへ反映し、実診断で2GETの403を特定しました。本人承認の読取り権限追加後は7GET成功です。その後の単回配備#9はmetadata取得を通過しましたが、R2設定の差分で`--strict`がupload前に停止し、新mainの外部適用は未完了です。診断は配備workflowへ自動接続していません。追加観測の根拠・停止状態は[クラウド準備](product/cloud-setup.md#r2設定差分と読取り診断の追加2026-10-03)へ集約します。
+`API Deploy Diagnostics`を[api-diagnose.yml](../.github/workflows/api-diagnose.yml)に定義します。実処理は[api-diagnose.mjs](../.github/scripts/api-diagnose.mjs)、回帰試験は[api-diagnose.test.mjs](../.github/tests/api-diagnose.test.mjs)です。2026-10-03にPR #17をmainへ反映し、実診断で2GETの403を特定しました。本人承認の読取り権限追加後は7GET成功です。その後の単回配備#9はmetadata取得を通過しましたが、R2設定の差分で`--strict`がupload前に停止しました。限定互換修正のmerge後、10月4日の単回配備#13は成功しています。診断は配備workflowへ自動接続していません。追加観測・実配備・残る受入の正本は[クラウド準備](product/cloud-setup.md#r2修正後の単回配備2026-10-04)です。
 
 対象はWranglerがDashboard更新後に追加取得するmetadataです。固定Worker `koko-api-dev`のservice情報からenvironment名を検証して取り出し、bindings、routes、custom domains、subdomain、service environment、schedulesを各1回GETします。最初のservice取得に失敗した場合やenvironment名が不正な場合はそこで停止し、`production`等を推測して続けません。追加6件の一部失敗では残りも確認し、失敗した取得先を分けて記録します。[Wranglerの取得処理](https://raw.githubusercontent.com/cloudflare/workers-sdk/wrangler@4.147.0/packages/deploy-helpers/src/deploy/helpers/download-worker-config.ts)
 
@@ -121,7 +121,7 @@ concurrencyはCloudflare Buildsを止めません。またmain確認とCloudflar
 - 運用：npm lifecycleを無効化したり、direct Wranglerで前処理を迂回したりしません。`--check`は書込みせず修正済み状態を検証します。不一致をhash更新だけで回避せず、実際の依存と上流変更を調査します。部分書込み等で壊れた生成物は、元ソースを保持して同じlockfileの`npm ci`から再現します。
 - 解除：公式修正のある版を検証できた段階で通常PRから依存更新とこの前処理/専用試験の撤去を行います。今回の修正自体を取り消す場合も、呼出し・script・試験を通常PRで戻し、再installで原版へ戻します。曖昧な逆パッチやforce pushは使いません。
 
-版固定の局所修正により不要な依存更新・権限追加を避けられますが、独自保守と更新時検証の負担は残ります。これはローカル/CI用の実装であり、main merge・実配備受入・自動配備再開を済ませた意味ではありません。
+版固定の局所修正により不要な依存更新・権限追加を避けられますが、独自保守と更新時検証の負担は残ります。修正はmainへmergeされ単回配備に成功していますが、実装・実配備・受入・自動配備再開はそれぞれ別工程です。現在の受入範囲と自動配備OFFは[クラウド準備](product/cloud-setup.md#r2修正後の単回配備2026-10-04)を参照してください。
 
 ## 開発用Lintの互換性と移行課題
 

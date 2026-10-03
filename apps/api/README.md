@@ -1,12 +1,12 @@
 # KOKO バックエンド
 
-TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置く領域です。[初期migration](supabase/migrations/20260921000000_initial_contract.sql)に加え、Workerの安全な最小基盤を実装しています。初期SQLはKOKO開発DBへ適用済みです。`/me`はローカルWorkerと実Google JWT・開発DBによる取得・表示名変更・拒否経路まで検証済みです。2026-10-03にWorkerのSupabase設定を登録済みですが、`/me`実装の外部配備・接続受入は未完了です。メディア操作APIも未実装です。
+TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置く領域です。[初期migration](supabase/migrations/20260921000000_initial_contract.sql)に加え、Workerの安全な最小基盤を実装しています。初期SQLはKOKO開発DBへ適用済みです。`/me`はローカルWorkerと実Google JWT・開発DBによる取得・表示名変更・拒否経路まで検証済みです。2026-10-03にWorkerのSupabase設定を登録し、10月4日に`/me`を含むmainを既存開発Workerへ配備しました。配備後の保護維持と本人報告による認証済みhealthを確認し、`/me`の外部接続受入は未完了です。[最新の配備結果](../../docs/product/cloud-setup.md#r2修正後の単回配備2026-10-04)を参照してください。メディア操作APIも未実装です。
 
 ## Worker基盤
 
 - Worker名：`koko-api-dev`
-- 公開済みの処理：`GET /health`
-- ローカル実装のみ：Bearer認証の`GET /me`と`PATCH /me`。Supabase Authで本人を検証し、Google単独ログインとイベント所属を確認した後、WorkerだけがDB Secretを使用します。Cookie認証・CSRFトークンの発行、`POST /consents`は未実装です。
+- 開発Workerへ配備済みの処理：`GET /health`、Bearer認証の`GET /me`と`PATCH /me`。全URLをCloudflare Accessで保護し、一般公開した意味ではありません。`/me`の実クラウド接続受入は未完了です。
+- 本人情報API：Supabase Authで本人を検証し、Google単独ログインとイベント所属を確認した後、WorkerだけがDB Secretを使用します。Cookie認証・CSRFトークンの発行、`POST /consents`は未実装です。
 - 未定義route：JSONの404
 - `/health`へのGET以外のmethod：JSONの405
 - R2 binding：`ORIGINALS_BUCKET`と`DERIVED_BUCKET`
@@ -28,7 +28,7 @@ npm.cmd run test:deploy-workflow
 
 `build:api`は`wrangler deploy --dry-run`を使うため、bundleを検証しますがCloudflareへアップロードしません。bindingまたはcompatibility dateを変えた場合は、`npm.cmd run types --workspace @koko/api`で[生成型](src/worker-configuration.d.ts)を更新してください。CIは`types:check`で差分を検出します。
 
-Wrangler 4.147.0には未指定R2 jurisdictionを削除差分として扱う不具合があるため、`prebuild`と`predeploy`で[限定互換修正](../../.github/scripts/patch-wrangler-r2.mjs)を適用します。対象版・CLI全体のhashが一致しなければ停止し、`--strict`や実設定差分の拒否は維持します。通常のroot commandから実行し、npm lifecycleを省略しないでください。確認だけは`node .github/scripts/patch-wrangler-r2.mjs --check`（root）で行えます。採用理由・更新/解除・不一致時の対応は[CI規約](../../docs/ci.md#wrangler-r2未指定値の限定互換修正)を参照してください。修正後の実配備は未実施です。
+Wrangler 4.147.0には未指定R2 jurisdictionを削除差分として扱う不具合があるため、`prebuild`と`predeploy`で[限定互換修正](../../.github/scripts/patch-wrangler-r2.mjs)を適用します。対象版・CLI全体のhashが一致しなければ停止し、`--strict`や実設定差分の拒否は維持します。通常のroot commandから実行し、npm lifecycleを省略しないでください。確認だけは`node .github/scripts/patch-wrangler-r2.mjs --check`（root）で行えます。採用理由・更新/解除・不一致時の対応は[CI規約](../../docs/ci.md#wrangler-r2未指定値の限定互換修正)を参照してください。修正後の単回配備成功と残る受入は上記の最新記録へ集約します。
 
 通常の実配備は[配備Skill](../../.agents/skills/api-deployment/SKILL.md)に従いGitHub Actionsから実行します。ローカルの`npm.cmd run deploy --workspace @koko/api`もCloudflareへ書き込むため、別途承認された用途だけに使用し、Actionsのガード・診断失敗の迂回に使いません。APIトークンやaccount IDをリポジトリへ追加しません。
 
