@@ -372,7 +372,23 @@ Freeは開発の候補ですが、非活動7日でのpauseやbackup制約があ�
 
 同日、iijimaがGoogle Client ID・SecretをSupabase KOKOプロジェクトのGoogle providerに入力して保存しました。保存前の画面でClient IDが作成済みWeb用IDと一致し、GoogleログインはON、`Skip nonce checks`と`Allow users without an email`はOFF、callback URLはGoogleへ登録したものと一致することを確認しました。Secretはマスク表示で存在のみ確認し、値の一致は確認していません。保存後の一覧では`Google Enabled`を確認しました。これはprovider設定の保存確認であり、ログイン成功ではありません。初期状態のSupabase Site URLは`http://localhost:3000`、redirect許可リストは空でした。固定Web URLは未ログインのブラウザーからアクセスした際にVercelのログイン画面へ転送されました。このためSite URLの変更と一般公開は保留しました。WebのGoogle OAuth開始・callback・Google単独セッション確認は作業ブランチにローカル実装しましたが、公開用キーを設定した実ログインとアプリ全体の認証ゲートは未検証・未実装です。
 
-続いてiijimaは、Supabase KOKOのRedirect URLsへ`https://koko-web-green.vercel.app/auth/callback`の1件だけを追加し、Email providerを無効化することを承認しました。管理画面で`Successfully added 1 URL`と許可リストの1件表示、`Email Disabled`と`Google Enabled`を確認しました。Site URLは`http://localhost:3000`のまま、Vercelの閲覧保護も変更していません。ローカルcallback URLは未登録です。これらは認証設定の保存確認であり、Webの実ログイン成功や公開用キーの配備確認ではありません。
+続いてiijimaは、Supabase KOKOのRedirect URLsへ`https://koko-web-green.vercel.app/auth/callback`の1件だけを追加し、Email providerを無効化することを承認しました。管理画面で`Successfully added 1 URL`と許可リストの1件表示、`Email Disabled`と`Google Enabled`を確認しました。Site URLは`http://localhost:3000`のまま、Vercelの閲覧保護も変更していません。この時点ではローカルcallback URLは未登録でした。これらは認証設定の保存確認であり、Webの実ログイン成功や公開用キーの配備確認ではありません。
+
+2026-10-03、実JWTと開発DBを使うローカル試験のため、iijimaの承認を受けてRedirect URLsに正確な`http://localhost:3000/auth/callback`を追加しました。管理画面で既存の公開Web用URLと合わせて2件を確認しています。ワイルドカード・Site URL・公開範囲は変更していません。この追加時点では実JWT・DB・Workerの結合試験前でした。
+
+同日の試験では、自動操作用ChromeでGoogleログインが拒否されました。[Google公式の対応ブラウザー案内](https://support.google.com/accounts/answer/7675428)に従い、通常のChrome／Edgeで本人が手動ログインし、承認済みのlocalhost callbackで[PKCE](https://supabase.com/docs/guides/auth/sessions/pkce-flow)の認証結果を受け取るローカル試験へ変更しました。試験用コードはGit対象外の`tmp/`に置き、キー・JWTはファイルに保存せず、試験セッションのみ終了時にサインアウトします。ローカル受信処理の試験とダミーキーでの起動確認は成功しました。この補助試験はNext.js画面そのものの検証を含みません。
+
+手動ログイン用ページの初回送信では、補助コードの`Referrer-Policy: no-referrer`によりフォームの`Origin`が`null`となり、送信元チェックに拒否される不具合をChromeで再現しました。ログインページだけを`same-origin`に変更し、送信元・Cookie・CSRFの検証を維持しました。フォーム転送先のCSPには当該SupabaseとGoogle認証のoriginを明示しています。修正後は受信処理4試験と、実ChromeによるPC内の疑似認証・callback・Cookie消去の1試験が成功しました。これは実Googleログインの成功を示すものではありません。[Referrer-Policyのブラウザー仕様](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy)
+
+続く本人の実行結果では、`SIGNED_GOOGLE_JWT=VERIFIED`、`SIGNED_JWT_EVENT_QUERY=200`、`TEST_SESSION_SIGN_OUT=OK`を確認しました。一方、ローカル`/me`は認証なし・不正Bearer・実JWTで順に401／500／500となり、結合試験全体は停止しました。ダミーキーだけのローカルWrangler診断で、workerdが`redirect: "error"`を受け付けず例外になることを再現しました。
+
+本人の承認後、`apps/api/src/account.ts`の認証・DB通信の2か所を`redirect: "manual"`へ修正しました。自動追従せず、既存の非2xx拒否で転送もエラーにするため、Bearerや秘密キーを転送先へ送りません。[Cloudflareの転送時の注意](https://developers.cloudflare.com/workers/runtime-apis/request/)に沿った方針です。テストの疑似通信でもworkerdの`Request`生成を通し、修正前は24件中17件が失敗、修正後は24件すべて成功しました。認証先・DBの301／302／303／307／308拒否、認証なし・不正Bearerの401、所属なしの403を含みます。型検査・対象ESLint・dry-run buildも成功し、ローカルWranglerからダミーキーを用いた実通信で不正認証への401を確認しました。この修正直後は実JWTによる`/me`再試験待ちでした。DB書き込み、commit、push、merge、外部配備は行っていません。
+
+続く2026-10-03の本人提供ログと完了画面では、`SIGNED_GOOGLE_JWT=VERIFIED`、`SIGNED_JWT_EVENT_QUERY=200`、ローカル`/me`の認証なし401・不正Bearer401・所属のない実JWT403、`PUBLIC_APP_TABLE_WRITES=NONE`、`RESULT=READ_ONLY_AUTH_DB_VERIFIED`、`TEST_SESSION_SIGN_OUT=OK`を確認しました。これにより、実Google認証・開発DB・ローカルWorkerを結ぶ読み取り／拒否経路は成功です。これは実アカウント1件の試験であり、全テーブルのRLS、所属ありの`/me`正常応答・表示名更新、規約同意保存、Next.js画面の通し試験、外部配備の確認ではありません。キー・JWT・利用者IDは文書へ記録していません。
+
+同日、iijimaは開発DBへの専用draftイベント1件・本人の一般ユーザー所属1件の一時保存、`/me`取得・表示名変更・未同意状態の試験、試験行だけの限定削除を承認しました。補助処理について、正常・通信断・誤対象・片付け失敗・復旧・metadata検査の模擬15試験、既存OAuth補助4試験、API24試験、ダミーキーでの補助サーバー起動確認が成功しました。実行前に既存DBパスワードでcatalogだけを読み、テーブル/RLS・独自トリガー・ルール・危険なFK削除設定などを確認する構成です。一時行をcommitし、最後に本人所属→専用イベントの順で削除して残存0と削除後403を検証します。中断時は試験イベントIDだけのローカル復旧記録を使用し、作成の成否不明・対象不一致・削除未確認では停止します。DBログ等までの抹消を保証するものではありません。
+
+続く本人提供ログで、実Google JWTの検証、所属あり`GET /me`の200と`consent_required=true`、表示名`PATCH /me`の200と再取得一致、無関係イベント403を確認しました。`CONSENT_WRITES=NONE`、試験イベント・所属・同意の残存がそれぞれ0、削除後403、`CLEANUP=VERIFIED`、`RESULT=MEMBERSHIP_AUTH_DB_VERIFIED_AND_CLEANED`、試験セッションsign-out成功も確認しました。ローカルの復旧記録・実行ロックが残っていないことも照合しました。**実Google JWT・開発DB・ローカルWorkerでの本人情報正常系と試験データの限定削除は成功**です。証拠は本人実行ログであり、Codexが実キーを取得して再実行したものではありません。正式イベント・所属や規約同意は登録しておらず、別実アカウント・全テーブルRLS・Next.js画面の通し試験・クラウド配備は未完了です。試験完了時点ではcommit・push・merge・外部配備は未実施でした。実試験の成功とPR反映・外部配備は別の工程です。
 
 2026-10-02の読み取り専用事前確認では、Supabase KOKOプロジェクトの`public`テーブルは0件、移行履歴も初回実行前で、Freeプランにはプロジェクトバックアップがありませんでした。[初期SQL](../../apps/api/supabase/migrations/20260921000000_initial_contract.sql)のPGlite試験はローカルで10件成功しました。
 
