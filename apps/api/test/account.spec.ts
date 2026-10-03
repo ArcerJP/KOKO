@@ -95,7 +95,7 @@ describe("/me のローカル認証・認可境界", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
   });
 
-  it("Cookieだけでは認証せず、CSRF未実装の経路を開けない", async () => {
+  it("汎用Cookieを認証へ転用しない", async () => {
     const upstream = fakeUpstream();
     const response = await handleAccount(
       request(

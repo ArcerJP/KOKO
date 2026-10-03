@@ -6,18 +6,50 @@ TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置�
 
 - Worker名：`koko-api-dev`
 - 開発Workerへ配備済みの処理：`GET /health`、Bearer認証の`GET /me`と`PATCH /me`。全URLをCloudflare Accessで保護し、一般公開した意味ではありません。実クラウドでは読取り／未所属拒否まで受入済みで、所属ありの取得・更新は未検証です。
-- 本人情報API：Supabase Authで本人を検証し、Google単独ログインとイベント所属を確認した後、WorkerだけがDB Secretを使用します。`POST /consents`は下記のローカル実装を追加しましたが未配備です。Cookie認証・CSRFトークンの発行は未実装です。
+- 本人情報API：Supabase Authで本人を検証し、Google単独ログインとイベント所属を確認した後、WorkerだけがDB Secretを使用します。`POST /consents`と既定無効のCookie認証・CSRF受信境界は下記のローカル実装を追加しましたが未配備です。Cookie自体の発行・更新・削除は未実装です。
 - 未定義route：JSONの404
 - `/health`へのGET以外のmethod：JSONの405
 - R2 binding：`ORIGINALS_BUCKET`と`DERIVED_BUCKET`
 
 R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義していますが、現在のハンドラーはR2を読み書きしません。認証・認可・投稿状態の確認を実装する前に、原本や派生物を返すrouteを追加しないでください。`wrangler dev`とテストは既定でローカルR2を使用し、開発用実バケットへ接続しません。
 
-`/me`は`SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`がそろわなければ失敗させます。値をソースや`wrangler.jsonc`へ書かず、クラウドの登録・更新は[配備Skill](../../.agents/skills/api-deployment/SKILL.md)に従い本人が入力します。SecretはRLSを回避するため、ブラウザ・Webの`NEXT_PUBLIC_`変数に渡しません。利用者JWTはURLに載せず、Workerへは`Authorization: Bearer`だけで渡します。実試験の一時イベント・本人所属は削除済みで、正式イベント・所属の登録や同意保存を済ませたという意味ではありません。
+`/me`は`SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`がそろわなければ失敗させます。値をソースや`wrangler.jsonc`へ書かず、クラウドの登録・更新は[配備Skill](../../.agents/skills/api-deployment/SKILL.md)に従い本人が入力します。SecretはRLSを回避するため、ブラウザ・Webの`NEXT_PUBLIC_`変数に渡しません。利用者JWTはURLに載せません。配備済みWorkerは`Authorization: Bearer`のみで、未配備のCookie経路は下記の明示設定が必要です。実試験の一時イベント・本人所属は削除済みで、正式イベント・所属の登録や同意保存を済ませたという意味ではありません。
+
+## Cookie認証とCSRF（既定無効のローカル実装）
+
+[account-auth.ts](src/account-auth.ts)はWeb用の受信境界です。Supabase SSR CookieやCloudflare Access Cookieを利用者認証へ自動転用せず、`__Host-koko_session`という単一Cookieだけを扱います。値は加工していないSupabase access JWTで、chunk分割・引用符・URLエンコードには対応しません。Cookie headerは16KiB、tokenは8KiB以内です。重複やBearerとの併送は401で拒否し、不正BearerからCookieへfallbackしません。既存Bearer経路はCookie用設定に依存せず、`GET /me`へCSRFを追加しません。
+
+以下は将来の有効化条件であり、**今回値を生成・登録したり、Wrangler設定を変更したりしていません。**
+
+| 設定               | 受信条件                                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `KOKO_WEB_ORIGIN`  | 単一の正規化済みHTTPS origin。末尾slash・path・query・fragment・認証情報なし。実URLは未決定                     |
+| `KOKO_CSRF_SECRET` | 独立した暗号学的乱数32byteを64桁hexで表す専用Secret。Supabase鍵やAccess tokenを再利用せず、サーバー外へ渡さない |
+
+両方未設定ならCookie経路は無効（401）、片方だけ・不正設定なら500に閉じます。HTTPS以外を拒否し、指定された`Origin`は設定値と完全一致が必要です。`PATCH /me`と`POST /consents`ではOriginが必須で、Host／X-Forwarded-Host／Refererから補完しません。`Sec-Fetch-Site`があれば`same-origin`だけを許可します（GETでは`none`も許可）。同headerがないブラウザでも書込みのOriginとCSRFは省略しません。CORSを有効化せず、OPTIONSは405のままです。
+
+### セッションに結び付けたCSRF
+
+1. `GET /me`は毎回Supabase AuthでJWTを照合し、Google単独・イベント所属・本人情報取得がすべて成功した場合だけ`csrf_token`を返します。
+2. 値は`v1.<16byteの乱数を32桁hex化したnonce>.<HMAC-SHA256のbase64url>`。MAC入力はUTF-8の`JSON.stringify(["koko.csrf.v1", 設定origin, eventId, accessJWT, nonce])`です。JWTや鍵そのものを応答へ返しません。
+3. Cookie書込みでは`X-CSRF-Token`の形式・正規base64urlとMACをWeb Cryptoで検証してからAuth/DBへ進みます。CSRFだけでは認証せず、書込み時も本人・Google・所属を再確認します。成功・エラーとも非キャッシュです。
+4. JWT更新、イベント・origin・鍵の変更後は以前のCSRFを使えません。再GETした複数のCSRFは同じセッション内で併用できます。nonceを使い捨てや同意の証明とは扱いません。
+
+有効期間はSupabaseが当該JWTを受理する期間に依存し、独立したCSRF期限は設けません。ログアウト直後のJWT即時失効を保証するものではなく、実際の失効挙動は未受入です。CSRFをURL・ログ・永続ストレージ・共有cacheへ保存せず、ログアウト時にはクライアントのメモリからも破棄します。CSRF用Cookieを併用する方式ではありません。
+
+### 未実装・実接続前の条件
+
+Cookie発行側は未実装です。将来の発行側で`Secure; HttpOnly; Path=/`、Domain属性なし、適切なSameSite・寿命・更新・削除を実装し、refresh tokenをこのCookieへ入れないでください。受信Cookie headerだけではこれらの属性を検証できません。既存のSupabase SSRログインからコピーしただけで完成とは扱いません。
+
+同一origin転送、CookieとOriginの伝搬、Accessとの両立、鍵の登録、実Google認証・refresh・logout・失効を確認してから有効化します。Secret登録・認証設定変更・実配備は[保護操作の個別確認](../../AGENTS.md#保護操作の確認)へ分離します。API境界の模擬試験は実ブラウザCookieや実クラウド受入を証明しません。
+
+[試験](test/cookie-auth.spec.ts)はworkerdの実Web Cryptoと合成Auth/DB応答を使用し、独立したNode HMAC既知ベクトル、改竄・別session/event/origin/key、設定不足、重複Cookie、送信元偽装、認証・所属拒否、Bearer互換性を検証します。CSRFは悪意ある別サイトからの送信を制限するもので、XSSや漏洩したJWT・鍵への対策を代替しません。
+
+根拠：[OWASPのCSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)、[Workers Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/)、[Supabaseのサーバーでの本人照合](https://supabase.com/docs/reference/javascript/auth-getuser)（2026-10-04確認）。
 
 ## 現行規約の同意保存（ローカル実装）
 
-`POST /consents`は既存の[API契約](../../packages/contract/openapi.yaml)に従い、`X-Event-ID`とGoogle単独のBearer認証、イベント所属を確認します。入力は`terms_version`と`accepted: true`だけのJSONです。本文は1KiBまでとし、不正JSON・UTF-8・余分な属性・空版を拒否します。本人IDや同意日時をクライアントに指定させません。Cookieだけでは認証せず、CSRF未実装の書込み経路を開けません。
+`POST /consents`は既存の[API契約](../../packages/contract/openapi.yaml)に従い、`X-Event-ID`とGoogle単独認証、イベント所属を確認します。既定のBearer、または明示設定された上記Cookie＋Origin＋CSRF経路を使います。入力は`terms_version`と`accepted: true`だけのJSONです。本文は1KiBまでとし、不正JSON・UTF-8・余分な属性・空版を拒否します。本人IDや同意日時をクライアントに指定させません。Cookieだけで書込みを許可しません。
 
 [追加migration](supabase/migrations/20261004000000_accept_current_terms.sql)の`accept_current_terms`が、イベントの現行版確認・所属の再照合・保存を1 transactionで実行します。規約版の行は`FOR SHARE`、所属行は`FOR KEY SHARE`で保持し、別リクエストで版を読んでから保存する競合を避けます。DBの`accepted_at`既定値で日時を記録し、同じ本人・イベント・版の再送は重複挿入せず、最初の日時を残します。規約更新後も旧版の同意履歴を上書きしません。BAN中の同意は投稿制限の解除を意味せず、BAN状態を変更しません。
 

@@ -1,6 +1,12 @@
 import { errors, type ApiErrorCode } from "@koko/contract";
+import {
+  createCsrfToken,
+  readAccountAuthentication,
+  verifyCsrfToken,
+  type CookieAuthEnv,
+} from "./account-auth";
 
-export type AccountEnv = {
+export type AccountEnv = CookieAuthEnv & {
   SUPABASE_URL?: string;
   SUPABASE_PUBLISHABLE_KEY?: string;
   SUPABASE_SECRET_KEY?: string;
@@ -116,7 +122,7 @@ function restUrl(
   return url;
 }
 
-/** Only Bearer is supported here. Supabase SSR cookies must not become an implicit auth path. */
+/** Cookie is opt-in. Supabase SSR cookies must not become an implicit auth path. */
 export async function handleAccount(
   request: Request,
   env: AccountEnv,
@@ -149,18 +155,27 @@ async function handleAccountRequest(
 
   const eventId = request.headers.get("X-Event-ID");
   if (!eventId || !uuid.test(eventId)) return failure("INVALID_INPUT");
-  const authorization = request.headers.get("Authorization");
-  const match = /^Bearer ([A-Za-z0-9._~-]+)$/.exec(authorization ?? "");
-  if (!match || !match[1] || match[1].length > 8192)
-    return failure("AUTH_REQUIRED");
+  const credentials = readAccountAuthentication(request, env);
+  if (!credentials.ok) return failure(credentials.code);
+  const auth = credentials.authentication;
   const settings = config(env);
   if (!settings) return failure("INTERNAL_ERROR");
 
   try {
+    if (
+      auth.mode === "cookie" &&
+      request.method !== "GET" &&
+      !(await verifyCsrfToken(
+        auth,
+        eventId,
+        request.headers.get("X-CSRF-Token"),
+      ))
+    )
+      return failure("FORBIDDEN");
     const authResponse = await fetcher(new URL("/auth/v1/user", settings.url), {
       headers: {
         apikey: settings.publishableKey,
-        Authorization: `Bearer ${match[1]}`,
+        Authorization: `Bearer ${auth.token}`,
       },
       // Redirects remain non-OK below and must never forward the bearer token.
       redirect: "manual",
@@ -318,6 +333,9 @@ async function handleAccountRequest(
         terms_version: termsVersion,
         consent_required: consents.length === 0,
         crown: member.crown,
+        ...(auth.mode === "cookie"
+          ? { csrf_token: await createCsrfToken(auth, eventId) }
+          : {}),
       },
       200,
     );
