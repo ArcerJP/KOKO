@@ -220,6 +220,156 @@ function assertNoLeak(sim) {
   for (const line of sim.lines) assert.doesNotThrow(() => JSON.parse(line));
 }
 
+const expectedR2Bindings = [
+  {
+    type: "r2_bucket",
+    name: "ORIGINALS_BUCKET",
+    bucket_name: "koko-dev-originals",
+  },
+  {
+    type: "r2_bucket",
+    name: "DERIVED_BUCKET",
+    bucket_name: "koko-dev-derived",
+  },
+];
+
+async function observeR2(bindings) {
+  const sim = simulation({
+    reply: (n) =>
+      n === 1 ? response({ success: true, result: bindings }) : null,
+  });
+  assert.equal(await main([], context, sim.dependencies), 0);
+  assert.equal(sim.calls.length, 7);
+  assertNoLeak(sim);
+  const rows = sim.lines
+    .map(JSON.parse)
+    .filter((row) => row.check === "r2_binding_shape");
+  assert.equal(rows.length, 1);
+  return rows[0];
+}
+
+test("R2 shape reports only expected pairs and missing jurisdiction, without extra requests", async () => {
+  const summary = await observeR2([
+    ...expectedR2Bindings.toReversed(),
+    { type: "secret_text", name: canary, text: canary },
+    { type: "plain_text", name: canary, text: canary },
+  ]);
+  assert.deepEqual(summary, {
+    check: "r2_binding_shape",
+    result: "OBSERVED",
+    r2Count: 2,
+    expectedPairsMatch: true,
+    bindings: ["ORIGINALS_BUCKET", "DERIVED_BUCKET"].map((binding) => ({
+      binding,
+      matches: 1,
+      bucketMatches: true,
+      jurisdiction: "ABSENT",
+    })),
+  });
+});
+
+for (const [value, expected] of [
+  [null, "NULL"],
+  ["", "EMPTY"],
+  ["eu", "EU"],
+  ["fedramp", "FEDRAMP"],
+  [canary, "OTHER"],
+  [`::error::${canary}`, "OTHER"],
+  [0, "OTHER"],
+  [false, "OTHER"],
+  [{ text: canary }, "OTHER"],
+  [[canary], "OTHER"],
+]) {
+  test(`R2 jurisdiction ${expected} is classified without echoing arbitrary values (${typeof value})`, async () => {
+    const summary = await observeR2(
+      expectedR2Bindings.map((b) => ({ ...b, jurisdiction: value })),
+    );
+    assert.equal(summary.expectedPairsMatch, true);
+    assert.deepEqual(
+      summary.bindings.map((b) => b.jurisdiction),
+      [expected, expected],
+    );
+  });
+}
+
+test("unknown R2 names and bucket values never leak", async () => {
+  const summary = await observeR2([
+    { ...expectedR2Bindings[0], bucket_name: canary },
+    expectedR2Bindings[1],
+    {
+      type: "r2_bucket",
+      name: canary,
+      bucket_name: canary,
+      jurisdiction: canary,
+    },
+  ]);
+  assert.equal(summary.r2Count, 3);
+  assert.equal(summary.expectedPairsMatch, false);
+  assert.equal(summary.bindings[0].bucketMatches, false);
+});
+
+test("missing and duplicate expected R2 bindings are not treated as a match", async () => {
+  for (const input of [
+    [],
+    [expectedR2Bindings[0]],
+    [expectedR2Bindings[0], expectedR2Bindings[0]],
+  ]) {
+    const summary = await observeR2(input);
+    assert.equal(summary.expectedPairsMatch, false);
+    assert.equal(summary.bindings[1].matches, 0);
+    assert.equal(summary.bindings[1].jurisdiction, "UNAVAILABLE");
+    if (input.length === 2) {
+      assert.equal(summary.bindings[0].matches, 2);
+      assert.equal(summary.bindings[0].bucketMatches, null);
+      assert.equal(summary.bindings[0].jurisdiction, "UNAVAILABLE");
+    }
+  }
+});
+
+for (const input of [
+  null,
+  {},
+  canary,
+  [null],
+  [canary],
+  [{}],
+  [{ type: 123 }],
+  [[]],
+]) {
+  test("malformed R2 binding envelope produces a fixed observation failure", async () => {
+    assert.deepEqual(await observeR2(input), {
+      check: "r2_binding_shape",
+      result: "INVALID_BINDINGS",
+    });
+  });
+}
+
+test("HTTP and API errors never inspect or report R2 response data", async () => {
+  for (const status of [200, 403]) {
+    const sim = simulation({
+      reply: (n) =>
+        n === 1
+          ? response(
+              {
+                success: false,
+                result: expectedR2Bindings,
+                errors: [{ code: 10000, message: canary }],
+              },
+              status,
+            )
+          : null,
+    });
+    assert.equal(await main([], context, sim.dependencies), 1);
+    assert.equal(sim.calls.length, 7);
+    assert(
+      !sim.lines
+        .map(JSON.parse)
+        .some((row) => row.check === "r2_binding_shape"),
+    );
+    assertNoLeak(sim);
+  }
+});
+
 test("seven exact Cloudflare GETs, derived environment, no redirects, no request body", async () => {
   const sim = simulation({ environment: "staging_2" });
   assert.equal(await main([], context, sim.dependencies), 0);

@@ -82,7 +82,7 @@ concurrencyはCloudflare Buildsを止めません。またmain確認とCloudflar
 
 ### 配備metadataの読取り専用診断
 
-`API Deploy Diagnostics`を[api-diagnose.yml](../.github/workflows/api-diagnose.yml)に定義します。実処理は[api-diagnose.mjs](../.github/scripts/api-diagnose.mjs)、回帰試験は[api-diagnose.test.mjs](../.github/tests/api-diagnose.test.mjs)です。2026-10-03にworkflow定義とローカル検証を準備しました。GitHub上での診断実行、原因確定、配備成功は未完了です。
+`API Deploy Diagnostics`を[api-diagnose.yml](../.github/workflows/api-diagnose.yml)に定義します。実処理は[api-diagnose.mjs](../.github/scripts/api-diagnose.mjs)、回帰試験は[api-diagnose.test.mjs](../.github/tests/api-diagnose.test.mjs)です。2026-10-03にPR #17をmainへ反映し、実診断で2GETの403を特定しました。本人承認の読取り権限追加後は7GET成功です。その後の単回配備#9はmetadata取得を通過しましたが、R2設定の差分で`--strict`がupload前に停止し、新mainの外部適用は未完了です。診断は配備workflowへ自動接続していません。追加観測の根拠・停止状態は[クラウド準備](product/cloud-setup.md#r2設定差分と読取り診断の追加2026-10-03)へ集約します。
 
 対象はWranglerがDashboard更新後に追加取得するmetadataです。固定Worker `koko-api-dev`のservice情報からenvironment名を検証して取り出し、bindings、routes、custom domains、subdomain、service environment、schedulesを各1回GETします。最初のservice取得に失敗した場合やenvironment名が不正な場合はそこで停止し、`production`等を推測して続けません。追加6件の一部失敗では残りも確認し、失敗した取得先を分けて記録します。[Wranglerの取得処理](https://raw.githubusercontent.com/cloudflare/workers-sdk/wrangler@4.147.0/packages/deploy-helpers/src/deploy/helpers/download-worker-config.ts)
 
@@ -92,6 +92,15 @@ concurrencyはCloudflare Buildsを止めません。またmain確認とCloudflar
 - 出力：取得先の固定名、HTTPステータス、固定の結果分類、数値エラーコードのみ。配備元は`dash`／`api`／`wrangler`／`other`に限定。レスポンス本文・binding値・headers・例外本文・秘密値は表示しない。Nodeのdebug・追加起動オプションも無効化。
 - 判定：すべて成功はexit 0と`ALL_METADATA_READS_OK`。取得失敗・安全条件違反はexit 1。HTTP 401/403、APIエラー、通信例外、本文解析失敗を区別するが、通信例外の詳細は秘密非出力を優先して`REQUEST_FAILED`へ集約する。全GET成功でも、設定差分の安全性・upload・Supabase接続・受入成功を意味しない。
 - 検証：模擬通信の試験とworkflow改悪fixtureを既存`test:deploy-workflow`へ含め、ローカル`npm test`と`API Tests`で検査する。テストは実トークンを使わず、Cloudflareへ接続しない。
+
+2026-10-03の追加変更として、bindings取得成功後に`r2_binding_shape`を1行出す実装を準備し、本人からcommit・push・PR作成の承認を得ました。以下はmainへの適用・実診断が未完了であり、上記のmain適用済み診断と区別します。
+
+- 新たな通信・権限・任意入力は追加せず、同じbindings応答をメモリ内だけで分類する。
+- 出力は固定名`ORIGINALS_BUCKET`/`DERIVED_BUCKET`、一致件数、期待Bucket名との一致boolean、R2件数、`expectedPairsMatch`だけ。応答側の未知のbinding名・bucket名は出さない。
+- jurisdictionは`ABSENT`（プロパティなし）、`NULL`、`EMPTY`、`EU`、`FEDRAMP`、`OTHER`、`UNAVAILABLE`の固定分類のみ。任意文字列・値は出さない。重複/欠落は`UNAVAILABLE`で、期待する2件と接続先が揃わなければ`expectedPairsMatch=false`。
+- 正常に分類できれば`result=OBSERVED`、bindingsの構造が不正なら`INVALID_BINDINGS`。HTTP/API失敗時は分類しない。
+- これは追加の観測出力で、既存の終了コードと`ALL_METADATA_READS_OK`は通信/API取得の成否のまま。`OBSERVED`やexit 0を設定一致・配備可能の判定に使わない。`INVALID_BINDINGS`、想定外の分類、接続先不一致なら、修正の実適用へ進まず調べ直す。
+- 既存試験を含む配備/診断回帰161件が成功。未知値・秘密のcanary・workflow commandの非出力、同じ7GET、missing/duplicate、異常応答を確認した。
 
 公開・実行は別途承認を受け、次の順序で行います。
 

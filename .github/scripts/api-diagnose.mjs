@@ -84,6 +84,56 @@ function numericErrorCodes(data) {
   ].slice(0, 10);
 }
 
+function summarizeR2Bindings(bindings) {
+  const check = "r2_binding_shape";
+  if (
+    !Array.isArray(bindings) ||
+    bindings.some(
+      (binding) =>
+        binding === null ||
+        typeof binding !== "object" ||
+        Array.isArray(binding) ||
+        typeof binding.type !== "string",
+    )
+  ) {
+    return { check, result: "INVALID_BINDINGS" };
+  }
+  const r2 = bindings.filter((binding) => binding.type === "r2_bucket");
+  // Emit only fixed labels, counts and comparisons, never API-supplied names,
+  // bucket names, arbitrary jurisdiction values, or unrelated binding values.
+  const expected = [
+    ["ORIGINALS_BUCKET", "koko-dev-originals"],
+    ["DERIVED_BUCKET", "koko-dev-derived"],
+  ];
+  const summaries = expected.map(([binding, bucket]) => {
+    const matches = r2.filter((item) => item.name === binding);
+    const single = matches.length === 1 ? matches[0] : null;
+    let jurisdiction = "UNAVAILABLE";
+    if (single) {
+      if (!Object.hasOwn(single, "jurisdiction")) jurisdiction = "ABSENT";
+      else if (single.jurisdiction === null) jurisdiction = "NULL";
+      else if (single.jurisdiction === "") jurisdiction = "EMPTY";
+      else if (single.jurisdiction === "eu") jurisdiction = "EU";
+      else if (single.jurisdiction === "fedramp") jurisdiction = "FEDRAMP";
+      else jurisdiction = "OTHER";
+    }
+    return {
+      binding,
+      matches: matches.length,
+      bucketMatches: single ? single.bucket_name === bucket : null,
+      jurisdiction,
+    };
+  });
+  return {
+    check,
+    result: "OBSERVED",
+    r2Count: r2.length,
+    expectedPairsMatch:
+      r2.length === 2 && summaries.every((item) => item.bucketMatches === true),
+    bindings: summaries,
+  };
+}
+
 async function inspectEndpoint(check, path, token, fetchApi) {
   const summary = {
     check,
@@ -182,13 +232,18 @@ export async function diagnose(env, { readHead, fetchApi, writeLine }) {
   let failed = false;
   // One request per endpoint, sequentially, without retrying 401/403/429/5xx.
   for (const [check, path] of endpoints) {
-    const { summary } = await inspectEndpoint(
+    const { summary, data } = await inspectEndpoint(
       check,
       path,
       env.CLOUDFLARE_API_TOKEN,
       fetchApi,
     );
     report(summary);
+    if (check === "bindings" && summary.result === "OK") {
+      // Observation only. ALL_METADATA_READS_OK remains a transport/API result,
+      // not proof of safe config differences or permission to deploy.
+      report(summarizeR2Bindings(data?.result));
+    }
     failed ||= summary.result !== "OK";
   }
   report({
