@@ -10,7 +10,9 @@
     "types:check": "wrangler types src/worker-configuration.d.ts --check",
     "typecheck": "npm run types:check && tsc --noEmit && tsc --noEmit --project test/tsconfig.json",
     "test": "vitest run",
+    "prebuild": "node ../../.github/scripts/patch-wrangler-r2.mjs",
     "build": "npm run types:check && wrangler deploy --dry-run --outdir dist",
+    "predeploy": "node ../../.github/scripts/patch-wrangler-r2.mjs",
     "deploy": "wrangler deploy --strict"
   },
   "dependencies": {

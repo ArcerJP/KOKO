@@ -181,6 +181,12 @@ test("actual workflow preserves the deployment and credential boundaries", () =>
     JSON.parse(read("../../apps/api/package.json")).scripts.deploy,
     "wrangler deploy --strict",
   );
+  for (const lifecycle of ["prebuild", "predeploy"]) {
+    assert.equal(
+      JSON.parse(read("../../apps/api/package.json")).scripts[lifecycle],
+      "node ../../.github/scripts/patch-wrangler-r2.mjs",
+    );
+  }
   assert.equal(
     parse(read("../../apps/api/wrangler.jsonc")).name,
     "koko-api-dev",

@@ -191,19 +191,21 @@ Wrangler 4.147.0の[配備前処理](https://github.com/cloudflare/workers-sdk/b
 
 本人承認後、比較処理だけでなくAPI形式の模擬bindings → 実metadata変換 → 設定生成 → 比較まで通して追跡しました。R2の`jurisdiction`がAPIデータにないと、変換処理が`jurisdiction: undefined`を作り、ローカルの未指定との差が`jurisdiction__deleted: undefined`になります。`json-diff`はundefined値を文字列表示しない一方、strict判定は削除として扱います。このソフトウェア上の不具合を再現し、#9の実ログにある空オブジェクト2件と一致することを再確認しました。
 
-ただし、当該実環境のbindings応答の`jurisdiction`有無はまだ直接観測していません。UIの既存binding/bucket名一致、R2 defaultのリンク、実ログ一致は根拠ですが、API応答の直接証拠とは区別します。**不具合の再現・修正案のローカル検証済み、実環境の発生条件の最終照合は未完了**です。
+当初は実環境のbindings応答の`jurisdiction`有無が未確認でした。その後、2026-10-03 23:35 JSTの[読取り診断 #4](https://github.com/ArcerJP/KOKO/actions/runs/37130145092)で`r2Count=2`、`expectedPairsMatch=true`、`ORIGINALS_BUCKET`と`DERIVED_BUCKET`各1件・接続先一致・両方`jurisdiction=ABSENT`を確認しました。7GETすべて200 / OK、配備元はdashです。固定版の不具合再現と実環境の発生条件が一致しました。**実環境の条件照合は完了、修正後の実配備成功は未検証**です。
 
-最小修正案は上流のR2 metadata変換1箇所に限り、`jurisdiction !== undefined`の場合だけ同項目を設定するものです。node_modules・配備経路へ適用せず、メモリ内のパッチで24件の試験に成功しました。同一設定の空差分は解消し、Bucket/Binding名変更・削除、設定済みjurisdictionの変更・削除、別bindingやrouteの削除は破壊的差分のままです。空文字/nullを未設定扱いにはせず、`wrangler.jsonc`へ空文字を追加する案では現行strictエラーが残ることも確認しました。
+最初の最小修正案は上流のR2 metadata変換1箇所に限り、`jurisdiction !== undefined`の場合だけ同項目を設定するもので、実適用せずメモリ内で24件の試験に成功しました。同一設定の空差分は解消し、Bucket/Binding名変更・削除、設定済みjurisdictionの変更・削除、別bindingやrouteの削除は破壊的差分のままです。空文字/nullを未設定扱いにはせず、`wrangler.jsonc`へ空文字を追加する案では現行strictエラーが残ることも確認しました。今回の局所実装はこの結果を基にし、実バンドルの回帰と適用ガードを29件の公開試験へ統合しています。
 
-実環境で最後の照合を行うため、既存[読取り診断](../../.github/scripts/api-diagnose.mjs)にR2の件数・期待した接続先との一致・jurisdictionの有無等の固定分類だけを出す変更を追加しました。Secret値・未知の名前/値は表示せず、通信は同じ7GET、workflow・権限・配備処理は変更しません。実装と分類の正本は[CI規約](../ci.md#配備metadataの読取り専用診断)です。[PR #18](https://github.com/ArcerJP/KOKO/pull/18)はローカル全CI相当検査（266件、E2E 7件）とGitHub CI 5 workflow・13 jobの成功後、22:21 JSTに本人がmergeしました。mainは`5a16bf4e78d4e43cde7cf0e9055c953e247c817c`、リモート作業ブランチは削除済みです。追加観測を含む実診断はまだ実行しておらず、mainへの反映と実環境の最終照合は区別します。
+実環境で最後の照合を行うため、既存[読取り診断](../../.github/scripts/api-diagnose.mjs)にR2の件数・期待した接続先との一致・jurisdictionの有無等の固定分類だけを出す変更を追加しました。Secret値・未知の名前/値は表示せず、通信は同じ7GET、workflow・権限・配備処理は変更しません。実装と分類の正本は[CI規約](../ci.md#配備metadataの読取り専用診断)です。[PR #18](https://github.com/ArcerJP/KOKO/pull/18)はローカル全CI相当検査（266件、E2E 7件）とGitHub CI 5 workflow・13 jobの成功後、22:21 JSTに本人がmergeしました。その後、方針文書の[PR #19](https://github.com/ArcerJP/KOKO/pull/19)も本人がmergeし、診断 #4はmain `d5700de32112498233c469321b9a446b2ca16de8`で1回だけ実行しました。
 
-次は自動配備OFFのまま読取り診断で`expectedPairsMatch=true`、2件とも`jurisdiction=ABSENT`かを確認する段階です。2026-10-03に本人が[自律進行と継続承認の区分](../../AGENTS.md#作業進行と承認境界)を採択しました。今後は[api-deployment](../../.agents/skills/api-deployment/SKILL.md#2-変更前後の読取り診断)の安全条件を現物確認し、毎回の許可を聞き直さず既存診断を実行できます。今回は方針文書の統一のみで、新しい実診断は起動していません。不一致・不明ならパッチを実適用せず、実応答の分類から調べ直します。ソフトウェアの不具合確定と、実環境の条件・修正後の実配備成功をひとまとめにしません。
+診断 #4は本人採択の[継続承認](../../AGENTS.md#作業進行と承認境界)に基づき、[api-deployment](../../.agents/skills/api-deployment/SKILL.md#2-変更前後の読取り診断)の安全条件を現物確認して実行しました。自動配備OFF、Environment main限定、同名Environment variableなし、競合runなし、既存Secret名・R2・Access All traffic/本人限定・Builds未接続・tokenの既存2policyと期限表示10月20日を確認し、入力/保存はしていません。Activeはa794ecf8・100%・Dashboard更新元のままです。
 
-修正の実導入方法は未決定です。上流で同じ問題を直した公式版を検証して採用すれば独自パッチの保守は減りますが、該当修正の存在・公開時期は今回確認できていません。固定4.147.0への局所パッチは今回の再現を解消できる一方、再install時の確実な適用、内容/版の一致確認、更新時の回帰試験が必要です。根拠なしの版更新、strict解除、権限追加やSupabaseキー再入力は採用しません。
+2026-10-03の再調査で[npm公式配布のlatest](https://registry.npmjs.org/wrangler/latest)は4.147.0、[上流mapper](https://github.com/cloudflare/workers-sdk/blob/main/packages/workers-utils/src/map-worker-metadata-bindings.ts)にも同じ無条件追加が残っていました。このため固定4.147.0への限定互換修正を技術判断として採用し、APIのbuild/deploy前に版・適用前後hashを検証して適用する実装を追加しました。依存追加・lockfile更新・Worker設定変更はありません。独自修正の保守が必要なため、対象不一致では停止し、公式修正版を検証できた時点で解除します。[実行・検証・解除手順](../ci.md#wrangler-r2未指定値の限定互換修正)を正本とします。根拠なしの版更新、strict解除、権限追加やSupabaseキー再入力は採用しません。
 
-19:52 JSTの終了前確認でもmainは同じSHA、自動配備false、実行中・待機中5種は各0件です。管理画面のActive a794ecf8・100%、Access All traffic・本人限定も維持されています。今回追加配備・実診断・クラウド設定変更は行っていません。
+次はこの限定修正の人間レビュー・merge、その後に対象SHA・Worker・復旧対象・実行回数を再確認して実配備を個別承認する段階です。修正後の実配備、`/me`の外部接続受入、自動配備再開は未実施です。
 
-22:24 JSTのmerge後照会ではmainが上記PR #18のmerge SHAへ進み、自動配備false、Environment main限定・同名Environment variableなし、実行中/待機中5種各0件を確認しました。merge後にCloudflareの管理画面は再照会していないため、19:52 JSTのActive/Access観測を最新の現物確認とは扱いません。今回も追加配備・実診断・クラウド設定変更は行っていません。
+履歴として、19:52 JSTの前段調査ではmainは当時のSHA、自動配備false、実行中・待機中5種は各0件でした。管理画面のActive a794ecf8・100%、Access All traffic・本人限定も維持されていました。この時点では追加配備・実診断・クラウド設定変更を行っていません。
+
+22:24 JSTのPR #18 merge後照会ではmainが同PRのmerge SHAへ進み、自動配備false、Environment main限定・同名Environment variableなし、実行中/待機中5種各0件を確認しました。その照会ではCloudflareの管理画面を再確認せず、追加配備・実診断・クラウド設定変更も行っていません。現在の診断・Active/Access等の観測は上記23:35 JSTの記録と区別します。
 
 繰り返す実行順序・停止条件は[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)に集約します。会話中断後は、本文と現物を照合し、承認済み変更・未実施操作・次の本人判断をタスク記録に残します。診断は手動の運用ゲートであり、CIが配備前に必ず自動実行する仕組みを追加したわけではありません。新しい仕様変更や別原因の障害まで防止を保証しません。
 

@@ -93,7 +93,7 @@ concurrencyはCloudflare Buildsを止めません。またmain確認とCloudflar
 - 判定：すべて成功はexit 0と`ALL_METADATA_READS_OK`。取得失敗・安全条件違反はexit 1。HTTP 401/403、APIエラー、通信例外、本文解析失敗を区別するが、通信例外の詳細は秘密非出力を優先して`REQUEST_FAILED`へ集約する。全GET成功でも、設定差分の安全性・upload・Supabase接続・受入成功を意味しない。
 - 検証：模擬通信の試験とworkflow改悪fixtureを既存`test:deploy-workflow`へ含め、ローカル`npm test`と`API Tests`で検査する。テストは実トークンを使わず、Cloudflareへ接続しない。
 
-2026-10-03の追加変更として、bindings取得成功後に`r2_binding_shape`を1行出す実装を[PR #18](https://github.com/ArcerJP/KOKO/pull/18)で追加しました。22:21 JSTにmainへmerge済み（`5a16bf4e78d4e43cde7cf0e9055c953e247c817c`）と確認しています。以下の追加観測を含む実診断は未実行です。
+2026-10-03の追加変更として、bindings取得成功後に`r2_binding_shape`を1行出す実装を[PR #18](https://github.com/ArcerJP/KOKO/pull/18)で追加しました。同日の[診断 #4](https://github.com/ArcerJP/KOKO/actions/runs/37130145092)で追加観測を確認し、R2接続先2件の一致・両方ABSENTを実証しました。実行SHAと外部状態の正本は[クラウド準備](product/cloud-setup.md#r2設定差分と読取り診断の追加2026-10-03)です。診断成功と修正後の実配備成功は区別します。
 
 - 新たな通信・権限・任意入力は追加せず、同じbindings応答をメモリ内だけで分類する。
 - 出力は固定名`ORIGINALS_BUCKET`/`DERIVED_BUCKET`、一致件数、期待Bucket名との一致boolean、R2件数、`expectedPairsMatch`だけ。応答側の未知のbinding名・bucket名は出さない。
@@ -109,6 +109,19 @@ concurrencyはCloudflare Buildsを止めません。またmain確認とCloudflar
 3. ログから取得先・HTTP・エラー番号を照合し、必要最小限の修正を別途判断する。権限追加、`--strict`解除、Secret再登録、配備再試行を自動で行いません。終了後の自動配備再開も別途承認・確認します。
 
 診断用concurrencyは配備と分離し、待機中の配備runを診断で置き換えません。そのためCloudflare設定との同時変更をロックする仕組みではなく、上記の停止・調整が必要です。Environment利用によりGitHub上でdeployment記録が作成され得ますが、Cloudflareへコードを配備することとは区別します。トークン自体は書込み権限を持つため、GET限定のコードレビューと既存Environment保護は引き続き必要です。
+
+### Wrangler R2未指定値の限定互換修正
+
+2026-10-03、実環境の診断と固定版の再現が一致したため、[patch-wrangler-r2.mjs](../.github/scripts/patch-wrangler-r2.mjs)を追加しました。配布版4.147.0のR2 metadata変換1箇所だけを変更し、APIで未指定のjurisdictionをundefinedプロパティとして生成しないようにします。null・空文字・指定済み地域は残し、実設定の変更/削除や`--strict`を緩和しません。
+
+- 適用経路：[API package](../apps/api/package.json)の`prebuild`と`predeploy`。ローカル/PRのdry-run buildと、既存ガード通過後の実deployで同じ処理を通します。`npm ci`直後は原版で、build/deploy直前に適用します。診断workflowには適用しません。
+- 対象：APIが直接解決するWrangler 4.147.0だけ。Vitest plugin内の別版や、リポジトリ外のインストールには適用しません。package名・版、実path、CLI全体の適用前後SHA-256、置換箇所が1つであることを検証します。固定値の正本はscriptです。
+- 冪等性：検証済み修正後hashなら再書込みなし。それ以外の版/hash、書込後不一致、未知引数は固定理由だけを出して非0終了。例外本文・秘密・ファイル内容は出力せず、通信やWrangler起動はしません。
+- 検査：[互換修正試験](../.github/tests/wrangler-r2-compat.test.mjs)29件を既存`test:deploy-workflow`へ含めます。hashを確認した実バンドルからmapper・設定生成・diffの純粋関数だけを抽出し、修正前の空差分を再現、修正後の解消と実差分の拒否を検証します。テスト自体はCLI・実通信・node_modules書込みを行いません。
+- 運用：npm lifecycleを無効化したり、direct Wranglerで前処理を迂回したりしません。`--check`は書込みせず修正済み状態を検証します。不一致をhash更新だけで回避せず、実際の依存と上流変更を調査します。部分書込み等で壊れた生成物は、元ソースを保持して同じlockfileの`npm ci`から再現します。
+- 解除：公式修正のある版を検証できた段階で通常PRから依存更新とこの前処理/専用試験の撤去を行います。今回の修正自体を取り消す場合も、呼出し・script・試験を通常PRで戻し、再installで原版へ戻します。曖昧な逆パッチやforce pushは使いません。
+
+版固定の局所修正により不要な依存更新・権限追加を避けられますが、独自保守と更新時検証の負担は残ります。これはローカル/CI用の実装であり、main merge・実配備受入・自動配備再開を済ませた意味ではありません。
 
 ## 開発用Lintの互換性と移行課題
 
