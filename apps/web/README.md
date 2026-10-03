@@ -23,7 +23,7 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 ## 表示名・規約同意のHTTPクライアント
 
-[client.ts](src/api/client.ts)は生成型の`getMe`、`updateMe`、`acceptTerms`を提供します。2026-10-04に更新2操作を追加しました。現段階では画面・実Cookieサーバーに接続しておらず、合成HTTP試験の完了です。Cookie発行・セッション束縛CSRF検証・Origin検証を実装するサーバーは別途必要です。クライアント側検査を認証・認可として扱いません。
+[client.ts](src/api/client.ts)は生成型の`getMe`、`updateMe`、`acceptTerms`を提供します。2026-10-04に更新2操作を追加しました。現段階では画面・実Cookieサーバーに接続しておらず、合成HTTP試験の完了です。Workerの[Cookie受信・CSRF/Origin検証](../api/README.md#cookie認証とcsrf既定無効のローカル実装)は既定無効のローカル実装であり、Cookie発行・更新・削除と同一origin転送は別途必要です。クライアント側検査を認証・認可として扱いません。
 
 - `updateMe({ display_name }, csrfToken, signal?)`は表示名だけ、`acceptTerms({ terms_version, accepted: true }, csrfToken, signal?)`は利用者が確認・同意した版だけを送信。空白のみ・長すぎる表示名・制御文字・偽同意・余分な項目と、Workerの1KiB上限を超えるUTF-8 JSONを送信前に拒否します。表示名や規約版を勝手に整形しません。
 - CSRF値は`GET /me`の応答から呼出し側が各更新へ明示的に渡します。32〜256文字のheader安全な可視ASCIIだけを受け付け、欠落/不正なら送信せず`FORBIDDEN`。クライアントは生成・永続保存・自動補完しません。呼出し側もURL、ログ、localStorage、IndexedDB、共有cacheへ保存せず、ログアウト時にはメモリ上の状態を破棄してください。
@@ -31,7 +31,7 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 - HTTP 200かつ検査済みの`Acknowledgement`だけを成功として返します。生成型だけを信頼せず、request/resource UUIDを実行時検査。本人情報とackの余分な応答項目は除外し、エラーはHTTP statusと契約codeが一致する固定メッセージへ限定します。
 - 更新を自動再送しません。古い規約で`CONSENT_REQUIRED`となった場合は再取得・再表示し、利用者の新しい明示同意が必要です。取消しや通信失敗でもサーバーで保存済みの場合があるため、失敗を「保存されていない」と断定せず、再GETで状態を確認します。取得済みの本人情報をackだけで勝手に書き換えません。
 
-[HTTP往復試験](test/account-mutations.test.ts)は、取得→表示名変更→再取得→同意→再取得、規約改訂、token欠落、不正入力/応答、認証エラー、redirect拒否、取消し、応答喪失後の状態確認を合成データで検証します。Node/MSWは実Googleセッション・ブラウザのorigin enforcement・サーバーCSRF・実DB受入を証明しません。現在のBearer限定Workerの`GET /me`にはCSRF値がないため、このクライアントから直接Cookie書込みを有効化できません。
+[HTTP往復試験](test/account-mutations.test.ts)は、取得→表示名変更→再取得→同意→再取得、規約改訂、token欠落、不正入力/応答、認証エラー、redirect拒否、取消し、応答喪失後の状態確認を合成データで検証します。Node/MSWは実Googleセッション・ブラウザのorigin enforcement・サーバーCSRF・実DB受入を証明しません。配備済みWorkerはBearer限定のままで、このクライアントから直接Cookie書込みを有効化できません。既存SSRログインのCookieを新しいAPI用Cookieと同一視しません。
 
 根拠：[Fetch標準のrequest mode](https://fetch.spec.whatwg.org/#concept-request-mode)、[OWASPのCSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)。API契約は[OpenAPI](../../packages/contract/openapi.yaml)、Workerと追加migrationの実装/未適用境界は[API README](../api/README.md#現行規約の同意保存ローカル実装)を正本とします。
 
