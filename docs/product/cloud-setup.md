@@ -201,7 +201,7 @@ Wrangler 4.147.0の[配備前処理](https://github.com/cloudflare/workers-sdk/b
 
 2026-10-03の再調査で[npm公式配布のlatest](https://registry.npmjs.org/wrangler/latest)は4.147.0、[上流mapper](https://github.com/cloudflare/workers-sdk/blob/main/packages/workers-utils/src/map-worker-metadata-bindings.ts)にも同じ無条件追加が残っていました。このため固定4.147.0への限定互換修正を技術判断として採用し、APIのbuild/deploy前に版・適用前後hashを検証して適用する実装を追加しました。依存追加・lockfile更新・Worker設定変更はありません。独自修正の保守が必要なため、対象不一致では停止し、公式修正版を検証できた時点で解除します。[実行・検証・解除手順](../ci.md#wrangler-r2未指定値の限定互換修正)を正本とします。根拠なしの版更新、strict解除、権限追加やSupabaseキー再入力は採用しません。
 
-この限定修正は[PR #20](https://github.com/ArcerJP/KOKO/pull/20)で本人がmergeしました。その後、対象SHA・Worker・復旧対象・実行回数を確認し、個別承認された[10月4日の単回配備](#r2修正後の単回配備2026-10-04)は成功しました。`/me`の外部接続受入と自動配備再開は未実施です。
+この限定修正は[PR #20](https://github.com/ArcerJP/KOKO/pull/20)で本人がmergeしました。その後、対象SHA・Worker・復旧対象・実行回数を確認し、個別承認された[10月4日の単回配備](#r2修正後の単回配備2026-10-04)は成功しました。`/me`の外部接続受入の範囲は下記の配備後記録を参照してください。自動配備は再開していません。
 
 履歴として、19:52 JSTの前段調査ではmainは当時のSHA、自動配備false、実行中・待機中5種は各0件でした。管理画面のActive a794ecf8・100%、Access All traffic・本人限定も維持されていました。この時点では追加配備・実診断・クラウド設定変更を行っていません。
 
@@ -231,6 +231,12 @@ Wrangler 4.147.0の[配備前処理](https://github.com/cloudflare/workers-sdk/b
 - 00:38 JSTのGitHub再照会でもmainは同一SHA、自動配備false、Environment main限定・変数なし、実行/待機中5種各0。自動配備は再開していません。
 
 **実配備・未認証保護・認証後healthの受入を確認しました。** 当初、既存Chromeで固定URLを開くとAccessログイン画面になったため、新規ログインは代行せず本人へ引き渡しました。その後、本人から「health正常」と回答を受け、案内した`{"service":"koko-api","status":"ok"}`の確認完了として記録しています。認証後の応答は本人報告であり、Codexによる独立した再読取りとは区別します。`/me`実装はこのSHAに含まれますが、外部Workerと実Supabaseを使う接続受入は別途未完了です。DB書込み・正式イベント作成・実R2読書き・他資源の全体監査は実施していません。health正常は自動配備再開の承認ではなく、自動配備OFFを維持します。
+
+続く本人のCloudflare Access CLI認証成功後、既存のアプリ認証を利用した読取りで固定URLのhealth200と期待JSONを独立確認しました。固定URLと新Version URLの匿名GETは引き続き既知Accessへの302です。正しい形式の`X-Event-ID`を付けた外部`GET /me`は、Bearerなし・不正Bearerとも401・`AUTH_REQUIRED`となり、応答契約も照合しました。キー・JWT・Cookie・個人情報は出力・記録していません。これは開発Accessの通過と未認証拒否の確認であり、この段階では正規Google JWTでのSupabase所属照会は本人Googleログイン待ちでした。mainは文書PR #21反映後の`42bc0a9`、自動配備false、配備runの実行/待機なしを再確認し、追加配備・アプリDB書込み・Access設定変更は行っていません。
+
+同日、本人がローカルのマスク入力とGoogleログインで読取り試験を実行し、`RESULT=CLOUD_READ_ONLY_AUTH_DB_VERIFIED`と`TEST_SESSION_SIGN_OUT=OK`を報告しました。この成功判定は、上記の保護・health・401検査に加え、実Google JWTの本人確認と、外部Workerの`GET /me`がランダムな未所属イベントに403・`FORBIDDEN`を返すことを照合した場合にだけ出力されます。**開発Worker・実Supabaseを結ぶ読取り／未所属拒否経路の受入は成功**です。根拠は本人実行の結果であり、Codexがキーや実JWTを取得して再実行したものではありません。試験用Googleセッションのsign-outも成功していますが、Cloudflare Accessの認証キャッシュ削除や全端末のログアウトを示すものではありません。
+
+今回アプリテーブルへの書込みはなく、正式イベント・所属・規約同意は作成していません。クラウド側の所属あり`GET /me`正常応答・`PATCH /me`更新、別実アカウントの境界、全テーブルRLS、Cookie／CSRF、Next.js画面、メディア実接続は未検証または未実装です。ローカルWorkerで確認済みの正常系と、今回の外部読取り／拒否系を混同しません。追加配備・権限/Secret/Access変更・自動配備再開は行っていません。
 
 #### GitHub Actionsへの移行手順（外部操作は別途承認）
 
