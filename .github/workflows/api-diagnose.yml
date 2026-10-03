@@ -1,0 +1,41 @@
+name: API Deploy Diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Separate from deploy: a diagnostic must not replace a queued deployment.
+concurrency:
+  group: koko-api-dev-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: Read-only Cloudflare Metadata Diagnostics
+    if: >-
+      github.repository == 'ArcerJP/KOKO' && github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: koko-api-dev
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: ArcerJP/KOKO
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      # Node built-ins only: no dependency install, Wrangler or artifact upload.
+      - name: Read metadata without deploying or exposing response bodies
+        run: node .github/scripts/api-diagnose.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: ""
+          NODE_DEBUG: ""
+          NODE_DEBUG_NATIVE: ""
