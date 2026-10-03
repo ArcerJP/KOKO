@@ -122,10 +122,28 @@ export async function handleAccount(
   env: AccountEnv,
   fetcher: typeof fetch = fetch,
 ): Promise<Response> {
-  if (request.method !== "GET" && request.method !== "PATCH") {
+  return handleAccountRequest(request, env, fetcher, false);
+}
+
+export async function handleConsent(
+  request: Request,
+  env: AccountEnv,
+  fetcher: typeof fetch = fetch,
+): Promise<Response> {
+  return handleAccountRequest(request, env, fetcher, true);
+}
+
+async function handleAccountRequest(
+  request: Request,
+  env: AccountEnv,
+  fetcher: typeof fetch,
+  consent: boolean,
+): Promise<Response> {
+  const allowed = consent ? ["POST"] : ["GET", "PATCH"];
+  if (!allowed.includes(request.method)) {
     return Response.json(
       { error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } },
-      { status: 405, headers: { ...headers, allow: "GET, PATCH" } },
+      { status: 405, headers: { ...headers, allow: allowed.join(", ") } },
     );
   }
 
@@ -177,7 +195,7 @@ export async function handleAccount(
     const member = members[0];
     if (!member) return failure("FORBIDDEN");
 
-    if (request.method === "PATCH") {
+    if (consent || request.method === "PATCH") {
       if (
         request.headers
           .get("Content-Type")
@@ -197,6 +215,43 @@ export async function handleAccount(
         body = JSON.parse(raw);
       } catch {
         return failure("INVALID_INPUT");
+      }
+      if (consent) {
+        if (
+          !object(body) ||
+          Object.keys(body).length !== 2 ||
+          body.accepted !== true ||
+          typeof body.terms_version !== "string" ||
+          body.terms_version.trim().length === 0
+        ) {
+          return failure("INVALID_INPUT");
+        }
+        // Compare the current version and insert in one DB transaction. Never
+        // accept a caller-supplied user ID or consent timestamp.
+        const response = await fetcher(
+          new URL("/rest/v1/rpc/accept_current_terms", settings.url),
+          {
+            method: "POST",
+            headers: {
+              apikey: settings.secretKey,
+              accept: "application/json",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              p_event_id: eventId,
+              p_user_id: user.id,
+              p_terms_version: body.terms_version,
+            }),
+            redirect: "manual",
+            cache: "no-store",
+          },
+        );
+        if (!response.ok) return failure("INTERNAL_ERROR");
+        const result: unknown = await response.json();
+        if (result === "terms_mismatch") return failure("CONSENT_REQUIRED");
+        if (result === "forbidden") return failure("FORBIDDEN");
+        if (result !== "accepted") return failure("INTERNAL_ERROR");
+        return reply({ request_id: crypto.randomUUID() }, 200);
       }
       if (
         !object(body) ||

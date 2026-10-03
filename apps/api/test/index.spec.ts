@@ -47,6 +47,18 @@ describe("KOKO API Worker", () => {
     });
   });
 
+  it("/consentsを認証必須POSTへルーティングする", async () => {
+    const get = await dispatch("/consents");
+    expect(get.status).toBe(405);
+    expect(get.headers.get("allow")).toBe("POST");
+    const post = await dispatch("/consents", {
+      method: "POST",
+      headers: { "X-Event-ID": "11111111-1111-4111-8111-111111111111" },
+    });
+    expect(post.status).toBe(401);
+    expect(await post.json()).toMatchObject({ code: "AUTH_REQUIRED" });
+  });
+
   it("原本と派生物のR2 bindingをローカルで分離する", async () => {
     const key = "tests/binding-isolation.txt";
     await env.ORIGINALS_BUCKET.put(key, "original");

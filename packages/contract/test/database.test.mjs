@@ -42,6 +42,15 @@ before(async () => {
     userA,
     userB,
   ]);
+  await db.exec(
+    await readFile(
+      new URL(
+        "../../../apps/api/supabase/migrations/20261004000000_accept_current_terms.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   for (const [event, user, slug] of [
     [eventA, userA, "fixture-a"],
     [eventB, userB, "fixture-b"],
@@ -311,5 +320,176 @@ test("初期設定は公開停止・受付停止でfail-closed", async () => {
         !row.uploads_enabled &&
         !row.thresholds_approved,
     ),
+  );
+});
+
+async function acceptTerms(event, user, version) {
+  const result = await db.query(
+    "SELECT public.accept_current_terms($1, $2, $3) AS result",
+    [event, user, version],
+  );
+  return result.rows[0].result;
+}
+
+test("同意RPCはinvokerで一般利用者・匿名・PUBLICに実行権限を与えない", async () => {
+  const { rows } = await db.query(`
+    SELECT p.prosecdef, p.provolatile, p.proconfig, pg_get_functiondef(p.oid) AS definition
+    FROM pg_proc p WHERE p.oid='public.accept_current_terms(uuid,uuid,text)'::regprocedure
+  `);
+  assert.equal(rows[0].prosecdef, false);
+  assert.equal(rows[0].provolatile, "v");
+  assert.ok(
+    rows[0].proconfig.some((value) => /^search_path=(""|)$/.test(value)),
+  );
+  assert.match(rows[0].definition, /FOR SHARE/i);
+  assert.match(rows[0].definition, /FOR KEY SHARE/i);
+  assert.equal(
+    (
+      await db.query(`
+    SELECT count(*)::integer AS total FROM pg_proc p,
+    LATERAL aclexplode(p.proacl) a
+    WHERE p.oid='public.accept_current_terms(uuid,uuid,text)'::regprocedure
+      AND a.grantee=0 AND a.privilege_type='EXECUTE'
+  `)
+    ).rows[0].total,
+    0,
+  );
+  for (const role of ["anon", "authenticated"]) {
+    await asRole(role, userA, async () => {
+      await assert.rejects(
+        acceptTerms(eventA, userA, "fixture-v1"),
+        sqlError("42501"),
+      );
+    });
+  }
+});
+
+test("同意は現行版だけをDB時刻で保存し、再送時に最初の日時を保持する", async () => {
+  await db.exec("BEGIN");
+  try {
+    await asRole("service_role", null, async () => {
+      assert.equal(await acceptTerms(eventA, userA, "fixture-v1"), "accepted");
+    });
+    const saved = await db.query(
+      `
+      SELECT event_id, user_id, terms_version, accepted_at = transaction_timestamp() AS server_time
+      FROM public.consents WHERE event_id=$1 AND user_id=$2
+    `,
+      [eventA, userA],
+    );
+    assert.deepEqual(saved.rows, [
+      {
+        event_id: eventA,
+        user_id: userA,
+        terms_version: "fixture-v1",
+        server_time: true,
+      },
+    ]);
+    // Make retention observable even though PGlite uses a single connection.
+    await db.query(
+      "UPDATE public.consents SET accepted_at='2000-01-01T00:00:00Z' WHERE event_id=$1 AND user_id=$2",
+      [eventA, userA],
+    );
+    await asRole("service_role", null, async () => {
+      assert.equal(await acceptTerms(eventA, userA, "fixture-v1"), "accepted");
+    });
+    const retry = await db.query(
+      "SELECT accepted_at FROM public.consents WHERE event_id=$1 AND user_id=$2",
+      [eventA, userA],
+    );
+    assert.equal(retry.rows.length, 1);
+    assert.equal(
+      retry.rows[0].accepted_at.toISOString(),
+      "2000-01-01T00:00:00.000Z",
+    );
+  } finally {
+    await db.exec("ROLLBACK");
+  }
+});
+
+test("同意RPCが別イベント・未所属・存在しないイベントと旧版を拒否する", async () => {
+  await db.exec("BEGIN");
+  try {
+    await asRole("service_role", null, async () => {
+      assert.equal(await acceptTerms(eventA, userB, "fixture-v1"), "forbidden");
+      assert.equal(await acceptTerms(eventB, userA, "fixture-v1"), "forbidden");
+      assert.equal(await acceptTerms(postA, userA, "fixture-v1"), "forbidden");
+      for (const version of ["old", "", " ", null]) {
+        assert.equal(
+          await acceptTerms(eventA, userA, version),
+          "terms_mismatch",
+        );
+      }
+    });
+    assert.equal(
+      (await db.query("SELECT count(*)::integer AS total FROM public.consents"))
+        .rows[0].total,
+      0,
+    );
+  } finally {
+    await db.exec("ROLLBACK");
+  }
+});
+
+test("規約更新後は旧版を拒否し、新版の同意と旧版履歴を分離する", async () => {
+  await db.exec("BEGIN");
+  try {
+    await asRole("service_role", null, async () => {
+      assert.equal(await acceptTerms(eventA, userA, "fixture-v1"), "accepted");
+      await db.query(
+        "UPDATE public.events SET terms_version='fixture-v2' WHERE event_id=$1",
+        [eventA],
+      );
+      assert.equal(
+        await acceptTerms(eventA, userA, "fixture-v1"),
+        "terms_mismatch",
+      );
+      assert.equal(await acceptTerms(eventA, userA, "fixture-v2"), "accepted");
+    });
+    assert.deepEqual(
+      (
+        await db.query(
+          "SELECT terms_version FROM public.consents WHERE event_id=$1 AND user_id=$2 ORDER BY terms_version",
+          [eventA, userA],
+        )
+      ).rows.map((row) => row.terms_version),
+      ["fixture-v1", "fixture-v2"],
+    );
+  } finally {
+    await db.exec("ROLLBACK");
+  }
+});
+
+test("BAN中の同意はBANを変更せず、transaction取消しで同意も戻る", async () => {
+  await db.exec("BEGIN");
+  try {
+    await db.query(
+      "UPDATE public.event_members SET is_banned=true,banned_at=now() WHERE event_id=$1 AND user_id=$2",
+      [eventB, userB],
+    );
+    await asRole("service_role", null, async () => {
+      assert.equal(await acceptTerms(eventB, userB, "fixture-v1"), "accepted");
+    });
+    assert.equal(
+      (
+        await db.query(
+          "SELECT is_banned FROM public.event_members WHERE event_id=$1 AND user_id=$2",
+          [eventB, userB],
+        )
+      ).rows[0].is_banned,
+      true,
+    );
+    assert.equal(
+      (await db.query("SELECT count(*)::integer AS total FROM public.consents"))
+        .rows[0].total,
+      1,
+    );
+  } finally {
+    await db.exec("ROLLBACK");
+  }
+  assert.equal(
+    (await db.query("SELECT count(*)::integer AS total FROM public.consents"))
+      .rows[0].total,
+    0,
   );
 });
