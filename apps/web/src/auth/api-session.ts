@@ -42,6 +42,31 @@ function configuredOrigin(): string | null {
   }
 }
 
+async function hasEmptyBody(request: Request): Promise<boolean> {
+  if (request.signal.aborted || request.bodyUsed) return false;
+  if (!request.body) return true;
+  if (request.body.locked) return false;
+  const reader = request.body.getReader();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    // Next.js wraps even empty Node POST/DELETE bodies in a stream. Require EOF
+    // without buffering a supplied payload or waiting indefinitely for a sender.
+    const first = await Promise.race([
+      reader.read(),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), 1000);
+      }),
+    ]);
+    return first?.done === true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+    void reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
 /** Internal Web session bridge, not an event API or a Supabase sign-out route. */
 export async function handleApiSession(request: Request): Promise<Response> {
   if (!["POST", "DELETE"].includes(request.method)) {
@@ -63,8 +88,8 @@ export async function handleApiSession(request: Request): Promise<Response> {
   // No caller-supplied identity, token, redirect target, or alternate credential.
   if (
     url.search ||
-    request.body !== null ||
-    request.headers.has("Authorization")
+    request.headers.has("Authorization") ||
+    !(await hasEmptyBody(request))
   )
     return reply(400, "INVALID_INPUT");
 

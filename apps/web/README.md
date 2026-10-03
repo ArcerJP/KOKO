@@ -43,7 +43,7 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 - サーバー専用の`KOKO_API_COOKIE_ENABLED`が小文字の`true`、`KOKO_WEB_ORIGIN`がpath・末尾slash・query・fragment・userinfoを含まない正規のHTTPS originのときだけ有効。公開用`NEXT_PUBLIC_`変数へ置かず、Worker受信側のoriginと一致させます。未設定・不正設定ではPOST/DELETEとも503 `API_SESSION_UNAVAILABLE`、Cookieを変更せずAuthにも接続しません。
 - リクエストURLのoriginと`Origin`が設定値へ完全一致し、`X-KOKO-Session-Request: 1`が必要。`Sec-Fetch-Site`があれば`same-origin`だけを許可し、なければOriginと独自headerは引き続き必須です。Host・Forwarded・Refererから補完しません。
-- 本文・query・Authorization headerは受け付けず、利用者が渡したJWT・本人ID・redirect先を採用しません。POST/DELETE以外は405 `Allow: POST, DELETE`。CORSは許可しません。送信元・入力の拒否ではCookieを変更しません。
+- 本文は0byteだけを許可し、query・Authorization headerは受け付けず、利用者が渡したJWT・本人ID・redirect先を採用しません。Next.jsの空POST/DELETEにも存在するストリームを、本文の存在と混同せず終端まで確認します。最初のchunk・読取り失敗・1秒以内に終端しない場合は拒否し、本文全体を蓄積しません。POST/DELETE以外は405 `Allow: POST, DELETE`。CORSは許可しません。送信元・入力の拒否ではCookieを変更しません。
 - 独自headerは秘密やWorkerのCSRF tokenではありません。Cookieを初めて発行するときのCSRF対策として、固定OriginとCORS非許可を組み合わせます。Worker書込みのHMAC検証やOAuthのstate/PKCEを代替しません。
 
 ### 発行・更新・消去

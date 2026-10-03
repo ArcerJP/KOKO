@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { IncomingMessage } from "node:http";
+import { Socket } from "node:net";
+import { NodeNextRequest } from "next/dist/server/base-http/node";
+import { NextRequestAdapter } from "next/dist/server/web/spec-extension/adapters/next-request";
 
 const { createClient } = vi.hoisted(() => ({ createClient: vi.fn() }));
 vi.mock("../src/auth/server", () => ({ createServerAuthClient: createClient }));
@@ -104,6 +108,92 @@ afterEach(() => {
 });
 
 describe("Web APIセッションCookie bridge", () => {
+  it.each(["POST", "DELETE"])(
+    "Next.js Node adapterの空ストリームを本文ありと誤判定しない: %s",
+    async (method) => {
+      auth();
+      const incoming = new IncomingMessage(new Socket());
+      incoming.method = method;
+      incoming.url = `${origin}/auth/api-session`;
+      incoming.headers = {
+        origin,
+        "x-koko-session-request": "1",
+        "content-length": "0",
+      };
+      incoming.push(null);
+      const req = NextRequestAdapter.fromNodeNextRequest(
+        new NodeNextRequest(incoming),
+        new AbortController().signal,
+      );
+      expect(req.body).not.toBeNull();
+      await expectResponse(await POST(req), 200);
+    },
+  );
+
+  it.each(["POST", "DELETE"])("0byteの本文は許可: %s", async (method) => {
+    auth();
+    await expectResponse(await POST(request(method, { body: "" })), 200);
+  });
+
+  it("本文の到着を1秒より長く待たずAuthへ進まない", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    const response = POST(request("POST", { body, ...{ duplex: "half" } }));
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = await response;
+    await expectResponse(result, 400, "INVALID_INPUT");
+    expect(result.headers.get("Set-Cookie")).toBeNull();
+    expect(createClient).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("最初のchunkで拒否し、本文全体をバッファーしない", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+      },
+      cancel,
+    });
+    const response = await POST(
+      request("POST", { body, ...{ duplex: "half" } }),
+    );
+    await expectResponse(response, 400, "INVALID_INPUT");
+    expect(response.headers.get("Set-Cookie")).toBeNull();
+    expect(createClient).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("読取りエラーを固定の入力エラーに閉じる", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error("private-body-canary"));
+      },
+    });
+    const response = await POST(
+      request("POST", { body, ...{ duplex: "half" } }),
+    );
+    await expectResponse(response, 400, "INVALID_INPUT");
+    expect(response.headers.get("Set-Cookie")).toBeNull();
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it.each(["used", "locked", "aborted"])(
+    "消費済み・使用中・取消済みリクエストを拒否: %s",
+    async (state) => {
+      const controller = new AbortController();
+      const req = request("POST", { body: "", signal: controller.signal });
+      if (state === "used") await req.text();
+      const reader = state === "locked" ? req.body!.getReader() : null;
+      if (state === "aborted") controller.abort();
+      const response = await POST(req);
+      await expectResponse(response, 400, "INVALID_INPUT");
+      expect(response.headers.get("Set-Cookie")).toBeNull();
+      expect(createClient).not.toHaveBeenCalled();
+      reader?.releaseLock();
+    },
+  );
+
   it("検証した同じJWTだけをCookieにして、storageの本人と寿命を信用しない", async () => {
     const mock = auth();
     const response = await POST(request());
