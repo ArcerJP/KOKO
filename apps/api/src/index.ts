@@ -1,3 +1,5 @@
+import { handleAccount, type AccountEnv } from "./account";
+
 const JSON_HEADERS = {
   "cache-control": "no-store",
   "content-type": "application/json; charset=utf-8",
@@ -12,8 +14,10 @@ function json(body: object, status: number, headers?: HeadersInit): Response {
 }
 
 export default {
-  async fetch(request): Promise<Response> {
+  async fetch(request, env): Promise<Response> {
     const { pathname } = new URL(request.url);
+
+    if (pathname === "/me") return handleAccount(request, env as AccountEnv);
 
     if (pathname === "/health") {
       if (request.method !== "GET") {

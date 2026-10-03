@@ -17,7 +17,7 @@
 | 運営           | Discord、管理画面。後日rclone→Google Drive | 監査/通知/保持の契約                | webhook、運用script、会場運営、export                              |
 | 共通           | npm workspaces・TypeScript                 | `packages/contract`、型/テスト/CI   | FE/BEから共通import                                                |
 
-第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験を追加しました。Googleログインの開始・OAuth callback・Google単独セッションの検証導線はローカル実装しましたが、実ログイン、規約同意、表示名、アプリ全体の認証ゲートは未検証・未実装です。Cloudflare Workersは`GET /health`、R2 binding、ローカル実行環境テスト、dry-run buildを実装しています。開発用Workerの初回クラウド配備と本人のhealth応答は確認済みですが、実R2操作と画像decoderは未実装です。[撮影検証の構造と制約](../product/stage-one-capture.md)と[クラウドの確認済み進捗](../product/cloud-setup.md)を参照してください。
+第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験を追加しました。Googleログインの開始・OAuth callback・Google単独セッションの導線を実装し、本人1件の実ログイン・ログアウトを確認しました。WorkerのBearer限定`/me`取得・表示名更新はローカル実装・模擬上流試験まで進めましたが、規約同意の保存、Cookie書込み/CSRF、アプリ全体の認証ゲート、実JWTを使うDB/API認可、外部配備は未実装・未検証です。初期SQLはSupabase開発DBへ適用済みで、ロール・IDを模擬した実DB試験まで確認しています。Cloudflare Workersは`GET /health`、R2 binding、ローカル実行環境テスト、dry-run buildを実装し、開発用Workerの配備と本人のhealth応答を確認しました。実R2操作と画像decoderは未実装です。[撮影検証の構造と制約](../product/stage-one-capture.md)と[クラウドの確認済み進捗](../product/cloud-setup.md)を参照してください。
 
 2026-09-29、個別Workerへ配備権限を限定するGitHub Actions workflow・回帰試験・文書をローカル実装し、その後、旧Workers Buildsを切断してActionsへ移行しました。2026-10-02までに初回手動配備と通常main更新による自動配備を確認しています。採用理由は[ADR-0003](../decisions/ADR-0003-worker-scoped-deployment.md)、配備の安全条件は[CI規約](../ci.md#開発用api配備)、外部の適用済み状態・証拠・残る検証は[クラウド準備](../product/cloud-setup.md#項目別の進捗2026-10-02更新)へ分離します。開発用Cloudflare Accessを利用者向けGoogle認証の実装と混同しません。
 

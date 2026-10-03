@@ -7,6 +7,7 @@ dist/
 coverage/
 .next/
 .wrangler/
+apps/api/supabase/.temp/
 .vercel/
 test-results/
 playwright-report/

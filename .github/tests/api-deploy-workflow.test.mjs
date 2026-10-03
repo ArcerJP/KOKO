@@ -144,6 +144,7 @@ function assertWorkflowBoundary(w) {
     deploy.steps.filter((s) => s.run).map((s) => s.run),
     [
       "npm ci --include=dev --strict-peer-deps",
+      "npm run build:contract",
       "node .github/scripts/api-deploy.mjs deploy",
     ],
   );
@@ -187,6 +188,16 @@ test("actual workflow preserves the deployment and credential boundaries", () =>
 });
 
 const mutations = {
+  "missing deployment contract build": (w) => {
+    w.jobs.deploy.steps = w.jobs.deploy.steps.filter(
+      (s) => s.run !== "npm run build:contract",
+    );
+  },
+  "credentials in contract build": (w) => {
+    w.jobs.deploy.steps.find((s) => s.run === "npm run build:contract").env = {
+      TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}",
+    };
+  },
   "PR trigger": (w) => {
     w.on.pull_request = null;
   },
@@ -253,6 +264,50 @@ for (const [name, mutate] of Object.entries(mutations)) {
     mutate(fixture);
     assert.throws(() => assertWorkflowBoundary(fixture));
   });
+}
+
+function assertApiPreparation(pkg, command, workspaceCommand) {
+  assert.equal(
+    pkg.scripts["build:contract"],
+    "npm run build --workspace @koko/contract",
+  );
+  assert.equal(
+    pkg.scripts[command],
+    `npm run build:contract && npm run ${workspaceCommand} --workspace @koko/api`,
+  );
+}
+
+for (const [command, workspaceCommand] of [
+  ["typecheck:api", "typecheck"],
+  ["test:api", "test"],
+  ["build:api", "build"],
+]) {
+  test(`${command} builds the contract before the isolated API command`, () => {
+    assertApiPreparation(
+      JSON.parse(read("../../package.json")),
+      command,
+      workspaceCommand,
+    );
+  });
+  for (const [name, script] of [
+    ["missing build", `npm run ${workspaceCommand} --workspace @koko/api`],
+    [
+      "reversed order",
+      `npm run ${workspaceCommand} --workspace @koko/api && npm run build:contract`,
+    ],
+    [
+      "ignored build failure",
+      `npm run build:contract ; npm run ${workspaceCommand} --workspace @koko/api`,
+    ],
+  ]) {
+    test(`${command} rejects ${name}`, () => {
+      const fixture = JSON.parse(read("../../package.json"));
+      fixture.scripts[command] = script;
+      assert.throws(() =>
+        assertApiPreparation(fixture, command, workspaceCommand),
+      );
+    });
+  }
 }
 
 for (const flag of [
