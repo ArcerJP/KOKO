@@ -101,6 +101,16 @@ ESLint 9は2026-08-06にEOLとなっています。[公式サポート表](https
 
 今回の承認は影響調査までで、依存・lockfileの更新、検査無効化、脆弱性の恒久受容は行っていません。npmの自動修正候補にはNext.js ESLint設定14系やmarkdownlint-cli2 0.0.4への大幅なdowngradeが含まれるため、`audit fix --force`は使用しません。対応判断は、上流修正版の確認と影響調査の継続（互換性への影響は小さいが指摘は残る）、または検証済みの依存置換／緩和（早期対処の可能性はあるが保守・互換性確認が増える）を比較して別途行います。
 
+### 2026-10-03のWrangler限定更新
+
+[API Deploy #6](https://github.com/ArcerJP/KOKO/actions/runs/37101002506)では、認証APIを含むmain `4c4a5ec`の検証jobが成功した一方、Wrangler `4.145.0`による配備はCloudflareのbindings・routes・services metadata取得で失敗しました。承認済みの再実行でも同じ失敗を確認したため、配備ツールの切り分けとして直接依存を`4.147.0`へ固定更新しました。
+
+Wranglerが指定するMiniflare `5.20261001.0-alpha`とworkerd `1.20261001.1`、および生成型を同時に更新しました。Cloudflare Vitest plugin `1.3.4`は変更せず、その内部のWrangler `4.145.0`／Miniflare `5.20260930.0-alpha`／workerd `1.20260930.2`は上流の指定どおり残します。lockfile内の旧版はこのテスト用経路であり、配備は`@koko/api`の直接依存`4.147.0`を使用します。`compatibility_date`、Worker設定、アプリの認証処理、配備ガードは変更していません。
+
+[4.146.0](https://github.com/cloudflare/workers-sdk/releases/tag/wrangler%404.146.0)と[4.147.0](https://github.com/cloudflare/workers-sdk/releases/tag/wrangler%404.147.0)の公式リリースには、今回のmetadata取得失敗に対する直接の修正は明記されていません。ローカル検査・dry-run成功を原因特定や実配備成功と扱わず、承認後の実配備で効果を確認します。同じ失敗が続く場合は認可・API応答を追加調査し、権限拡大や`--strict`の解除を自動で行いません。
+
+ローカルでは再現install、依存整合性、format、Markdown、契約生成一致、型、179件の契約・Web・API・配備ガード試験、7件のChromium E2E、Web/API buildが成功しました。Lintは作業ツリーに以前から残るGit対象外の一時ファイルを拾って失敗したため、Git管理ファイルと今回の差分だけを展開し、同じlockfileで依存を導入した一時コピー上で、除外オプションを足さない`npm run lint`の成功を確認しました。既存の一時ファイルやLint設定は変更していません。監査は引き続き開発用High 7件・本番実行依存0件で、この更新による追加指摘はありません。GitHub CIと実配備は別途確認します。
+
 ### 2026-10-02の更新
 
 2026-10-02の更新前監査では、Next.jsとCloudflare開発・配備依存を合わせて5パッケージに指摘がありました（critical 1、high 1、moderate 3。同じ間接依存からの波及を含み、5個の固有の脆弱性という意味ではありません）。修正版は各workspaceの`package.json`とrootの`package-lock.json`に固定します。
