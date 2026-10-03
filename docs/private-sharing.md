@@ -8,6 +8,8 @@
 
 共有先はPrivateで作成済みです。初回だけ承認された例外として、資料を含まない管理用README・安全設定の1commitでmainを初期化しました。資料は別の作業ブランチ・PRで共有します。ローカル保存先は公開KOKOの隣のKOKO-privateです。
 
+2026-10-03の通常Git公開の継続承認を、非公開資料の送信先・閲覧者・権限の拡大に流用しません。既存の共有許可・対象分類を確認して同期し、新たな共有範囲や権限変更は[保護操作の個別確認](../AGENTS.md#保護操作の確認)へ分離します。Private表示や包括的な続行指示だけでは新しい外部送信を許可しません。
+
 メンバー別の招待・権限、初期資料PR、対応する公開commit、資料の照合結果は、非公開側READMEとPRへ記録します。PRの作成・merge・相手PCへの取込みはそれぞれ別の確認事項であり、共有先を作っただけでは導入完了ではありません。
 
 2026-09-23時点で非公開側のbranch protection／Rulesetは未設定です。GitHubの設定画面には、OrganizationをGitHub Teamへ変更するまでPrivateのRulesetは強制されない旨が表示されました。iijimaはこの制約を確認し、**当面は追加費用をかけず、人によるPR運用を行う**と決定しました。直接pushの技術的遮断を保証する運用ではありません。mainへの通常の直接pushを避け、担当者が差分確認・承認・mergeを行います。将来の有料化や保護設定の変更は再承認を得ます。[公式のRuleset利用条件](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)

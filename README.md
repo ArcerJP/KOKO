@@ -90,7 +90,9 @@ inbox → notebook → outbox → archive
 
 ## Codexへの指示
 
-AGENTS.mdは簡潔なリポジトリルーティングを提供します。下位のAGENTS.mdは、そのサブツリーに限ったルールを追加します。.agents/skills/配下のSkillsは、タスク管理・調査実装・知識取込・Git・構成変更・費用比較・非公開共有の手順を提供します。
+AGENTS.mdは簡潔なリポジトリルーティングを提供します。下位のAGENTS.mdは、そのサブツリーに限ったルールを追加します。.agents/skills/配下のSkillsは、タスク管理・調査実装・知識取込・Git・API配備・構成変更・費用比較・非公開共有の手順を提供します。
+
+通常作業の自律進行、Git公開・既存読取り診断の継続承認、本人確認を残す重要操作は[作業進行と承認境界](AGENTS.md#作業進行と承認境界)を参照してください。確認を減らしても検証・文書更新は必須で、包括的な「勝手に進めて」で重要操作を進めることはありません。
 
 ## Git / GitHub
 
@@ -104,7 +106,7 @@ EditorConfigとPrettierで改行、空白、インデントを統一します。
 
 Pull Requestとmerge queueでPrettier、Markdownlint、OpenAPI/生成物、ESLint、TypeScript、契約単体/SQL統合・build、Web単体/統合・ブラウザ試験・production build、API実行環境テスト・dry-run buildを検査します。API配備の安全条件の回帰試験も既存のAPI Testsへ接続しています。Cloud Runのimage buildは未実装です。適用範囲と必須check登録は[CI規約](docs/ci.md)を参照してください。
 
-個別Worker限定資格情報によるAPI配備はローカル実装段階であり、外部の切替・実配備は未実施です。操作は[クラウド準備の移行手順](docs/product/cloud-setup.md#github-actionsへの移行手順外部操作は別途承認)に沿って別途承認後に進めます。
+GitHub ActionsへのAPI配備移行と初回・自動配備は確認済みです。最新の停止状態、障害原因と権限修正の結果は[クラウド準備](docs/product/cloud-setup.md#2026-10-03の配備障害と再発防止)を参照してください。配備・Secret変更・障害復旧・会話中断後の再開では[api-deployment Skill](.agents/skills/api-deployment/SKILL.md)を使用します。
 
 ## KOKOの拡張
 

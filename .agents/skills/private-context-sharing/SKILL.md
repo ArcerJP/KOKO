@@ -7,6 +7,8 @@ description: KOKOの非公開原資料・タスク記録・プロジェクト用
 
 最初に[共有方針と手順](../../../docs/private-sharing.md)、[導入手順](../../../docs/collaborator-setup.md)を読む。原資料はknowledge/AGENTS.mdとknowledge/SCHEMA.md、タスクの状態移動はwork/AGENTS.mdとwork/WORKFLOW.mdも読む。Git操作にはgit-workflowを併用する。
 
+[通常Git公開の継続承認](../../../TOOLS.md#web操作の利用条件)は、非公開資料の新たな送信先・閲覧者への共有を許可しない。承認済み共有範囲の同期と、権限/公開範囲の変更を区別し、後者は[保護操作の個別確認](../../../AGENTS.md#保護操作の確認)を適用する。
+
 ## 共有前
 
 1. 公開KOKOと非公開KOKO-privateの絶対パス・Git root・remote・branch・差分を別々に確認する。Private表示を実際に確認できなければ、資料のpushを止める。公開remoteの上書きや、公開Gitへのforce addで代用しない。

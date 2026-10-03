@@ -23,7 +23,7 @@
 13. 重複または競合する責務がないか確認する。
 14. 正本性が変わる場合はsource-of-truth.mdを更新する。
 
-この評価にはevolve-workspace Skillを使用します。変更がLevel 3に該当する場合、または確立済みのアーキテクチャを実質的に変更する場合は、research-plan-implementと人間による承認を使用します。
+この評価にはevolve-workspace Skillを使用します。非自明・Level 3の変更ではresearch-plan-implementで調査・計画・検証を行います。技術的な構造変更は[自律進行の区分](../../AGENTS.md#作業進行と承認境界)で判断して理由と結果を記録し、保護操作や本人しか決められない重要事項だけ個別確認へ分離します。構造を変えること自体を、一律の許可待ちの理由にしません。
 
 ## Skillの追加
 
@@ -32,6 +32,8 @@
 2026-09-22にユーザー承認のうえ`cost-review`を追加しました。複数サービスの課金単位・必須要件・工数を比較する反復責務であり、一般の調査実装とは別の利用量/請求条件確認が必要です。料金の値は持たず、調査→比較→選択確認の手順だけを保持します。追加する構造は既存Skills配下のSKILL.mdのみです。
 
 新しいSkillは、有効なnameとdescriptionのFront Matterを含むSKILL.mdだけで開始します。scripts、references、assets、UIメタデータは、実際の用途が確認された場合に限り追加します。
+
+2026-10-03、本人の再発防止記録の依頼に基づき[api-deployment](../../.agents/skills/api-deployment/SKILL.md)を追加しました。Dashboard変更後のmetadata診断、権限・期限の確認、実配備受入は繰り返されるKOKO固有の順序であり、汎用のresearch-plan-implementやgit-workflowへ混在させません。既存の診断を利用し、追加構造はSKILL.mdのみです。現在値・障害証拠はcloud-setup、実行定義は.github、承認の詳細はタスク記録へ分離します。
 
 2026-09-23の継続的な非公開資料共有の依頼により、`private-context-sharing`を追加しました。Publicへの誤送信、秘密・生成物の混入、他者変更の上書きを防ぐため、対象分類→双方の比較→限定的反映→hashとGit確認という順序が必要です。一般のGit手順だけではこの資料境界を扱わないため、入口となるSKILL.mdだけを追加し、運用方針は[非公開共有](../private-sharing.md)へ集約します。
 

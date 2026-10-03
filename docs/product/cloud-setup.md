@@ -1,5 +1,7 @@
 # クラウドの役割と準備ガイド
 
+**配備作業の最新記録は[2026-10-03の障害・権限修正・停止状態](#2026-10-03の配備障害と再発防止)です。** 以下の日付付き履歴を現在の設定と混同せず、再開時は[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)に従って現物を再確認します。
+
 確認日：GitHub Actionsの初回手動配備・通常main更新による自動配備と配備後の応答・保護確認は2026-10-01〜02、Cloudflare Workerの初回build・deploy成功と未認証アクセスの転送確認は2026-09-29、保存済みAccess設定の閲覧確認は2026-09-28〜29、専用トークンの作成・保存とBuilds登録成功のユーザー報告、Zero Trust Free有効化とWorker作成フォームの画面確認は2026-09-28、Vercelの初回配備・保護設定とCloudflareアカウント・R2の初期準備は2026-09-23、その他の準備・料金情報は2026-09-22。対象はB1-1〜B1-3の準備です。採用構成の正本は[プロダクト構成](../architecture/product-architecture.md)、費用判断の方針は[費用方針](cost-policy.md)です。確認済みの範囲は各節に記載し、全サービスの契約・課金・実連携や本番受け入れの完了とは区別します。
 
 ## まず何を用意するか
@@ -133,6 +135,52 @@ iijimaは通常用`koko-dev-media`と失敗退避用`koko-dev-media-dlq`の作�
 
 補助用`koko-builds-register-once`は削除直前の一覧で`Expires soon`でした。画面の失効手段が`Delete`のため、復元できないことと配備用トークン・Workerを削除しないことを説明し、iijimaから「補助用トークンだけ削除してよい」と実行時点の承認を受けました。同名の削除確認ダイアログを照合して実行し、削除後の未絞り込み一覧から補助用が消え、配備用だけが残ることを確認しました。補助用トークンは復元できません。配備用の編集保存、Builds設定変更、再登録、再配備は行っていません。
 
+#### 2026-10-03の配備障害と再発防止
+
+##### 原因と検証済みの範囲
+
+以前のGitHub Actions配備は成功していました。最初に失敗したのは、DashboardでSupabase設定を保存した後、Wranglerが配備前に追加で読むmetadataの権限です。Worker本体の消失やSupabaseキー不良を示す証拠ではありません。権限修正後の単回配備では、この段階を通過して別の設定差分チェックで停止しました。下記の最新結果と区別します。
+
+| 段階            | 確認した事実                                                                                                        | 根拠                                                                                            |
+| --------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 変更前          | 10月2日のActions配備はWrangler 4.145.0で成功                                                                        | [API Deploy #5](https://github.com/ArcerJP/KOKO/actions/runs/37004973191)                       |
+| Dashboard更新後 | 10月3日のSupabase設定保存後、更新元がDashboardのVersion `a794ecf8`を100%配信。続く4.145.0の配備はmetadata取得で失敗 | 管理画面の読取り確認、[API Deploy #6](https://github.com/ArcerJP/KOKO/actions/runs/37101002506) |
+| 版更新          | 4.147.0へ更新しても同じmetadata取得失敗。版更新だけでは解消しなかった                                               | [API Deploy #7](https://github.com/ArcerJP/KOKO/actions/runs/37105605539)                       |
+| 原因の絞込み    | 同じGitHub Environmentの資格情報で`routes`と`custom_domains`だけHTTP 403・code 10000、他5GETは200                   | [診断 #1](https://github.com/ArcerJP/KOKO/actions/runs/37110013506)                             |
+| 限定修正の検証  | 本人承認でMetadata Read-Onlyを追加後、同じmain・同じ診断の7GETすべて200 / OK、`ALL_METADATA_READS_OK`               | [診断 #2](https://github.com/ArcerJP/KOKO/actions/runs/37111614952)                             |
+| 単回配備の結果  | 権限修正後のmetadata取得は通過。R2設定の差分を`--strict`が検出し、upload前に停止。Active Versionは変更なし          | [API Deploy #9](https://github.com/ArcerJP/KOKO/actions/runs/37115832750)                       |
+
+Wrangler 4.147.0の[配備前処理](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.147.0/packages/deploy-helpers/src/deploy/helpers/validate-worker-props.ts)では、`last_deployed_from === "dash"`のときにリモート設定を取得します。[取得処理](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.147.0/packages/deploy-helpers/src/deploy/helpers/download-worker-config.ts)はbindings・routes・custom domains等を読み、どの取得失敗も共通のmetadataエラーとして表示します。実診断の`deployment_source=dash`と権限変更前後の403→200が、この原因判断の根拠です。会話履歴が見えなくなったことがCloudflare設定を変更したという証拠はありません。
+
+以前の成功を根拠に「以後も同じ権限で十分」と判断し、失敗APIを特定する前にWrangler更新へ進んだことが切り分けを長引かせました。以後は、Dashboard変更後も通る読取り診断を先に確認し、失敗箇所の証拠なしに版更新・権限拡張・キー再入力を繰り返しません。
+
+##### 承認・保存済みの権限と期限
+
+`koko-api-dev-deploy`の既存tokenを編集し、次の2policyを保存・再表示で確認しました。新規発行・秘密値の再登録はしていません。
+
+- 書込み：既存の`koko-api-dev`1件だけに`Individual Workers Editor`。
+- 追加読取り：対象アカウントのWorkers全体に`Metadata Read-Only`。現在・将来の別Workerの設定や観測データにも及ぶため、本人が承認した限定修正であり、個別Workerだけの読取りとは説明しない。
+
+公式仕様では、この読取りroleにソースコード・Secret値の閲覧は含まれませんが、ログ等に機微な内容があれば閲覧リスクは残ります。R2・Access・D1等の管理権限やWorkers Adminは追加していません。現時点の公式仕様ではCustom Domainsはper-Worker role未対応です。この2policyは今回の診断成功を示すもので、将来の全配備の必要十分条件を保証しません。[CloudflareのWorkers権限](https://developers.cloudflare.com/workers/authorization/workers/)、[追加決定](../decisions/ADR-0003-worker-scoped-deployment.md#2026-10-03の追加決定)
+
+期限は本人の希望する日本時間10月20日に合わせ、保存予定JSONの`expires_on=2026-10-19T23:59:59Z`（JST 10月20日08:59:59）を確認し、承認後に1回保存しました。開き直した画面は終了日10月20日、上記2policy・IP条件は維持されています。これは保存操作とUIの再確認であり、この最終保存後のAPIによる実失効時刻の再検証ではありません。以前の9月29日には、同じUTC/JST時刻を本人のverify結果で確認済みです。
+
+日付のみの表示、保存予定payload、保存済み時刻は区別します。今回、権限保存前後で終了日表示が20日→21日となった理由をタイムゾーンだけと断定する証拠はありません。既存の期限記録を先に読み、表示差だけを理由に繰り返し保存・再発行しません。
+
+##### 停止状態と次の受入
+
+2026-10-03 19:10〜19:31 JSTの単回配備と再確認です。継続時は現物を再確認してください。
+
+- `KOKO_API_AUTO_DEPLOY_ENABLED=false`。本人承認で一時停止し、GitHubの実行中・待機中status 5種は各0件。**手動`API Deploy`はOFFでも配備するため、診断と取り違えない。**
+- mainはPR #17を含む`836189e5b376b55bc90bd6054ea586a172a154a7`。読取り診断の実装は反映済み。
+- WorkerのProductionへ`SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`を本人が入力・保存し、登録名を確認済み。値は取得・文書化していない。
+- 期限調整後の[読取り専用診断 #3](https://github.com/ArcerJP/KOKO/actions/runs/37113946832)は、同じmainで7GETすべて200 / OK。その後、本人がmainの既存Workerへの実配備1回を承認した。
+- [API Deploy #9](https://github.com/ArcerJP/KOKO/actions/runs/37115832750)を19:15:48 JSTに1回だけ起動し、attempt 1で19:17:05にfailure。Verificationは成功したが、Wrangler 4.147.0の`--strict`が`r2_buckets`の設定差分を検出し、upload前に停止した。再実行・strict解除・強制上書き・rollbackはしていない。
+- 配備前にR2 binding 2件、Access All trafficと本人限定、既存Secret名3件、旧Builds未接続を確認。停止後もActive `a794ecf8`・100%・Dashboard更新元のままで、Version Historyに新しい版はない。完全Version IDは非公開タスク記録へ保存した。
+- 停止後にAccess All trafficと本人限定を再確認。固定URLとActive Version URLの`/health`は、Cookie・認証情報なし、リダイレクト追従なしのGETで、いずれも既知のCloudflare Accessログイン先へHTTP 302となった。認証後healthの今回の再試験は未実施。
+- GitHubの停止後確認でもauto deploy=false、実行中・待機中status 5種は各0件、mainは同じSHA。EnvironmentはBranch型mainだけ、既存Secret名2件・Environment variablesなし。tokenの2policyも維持されている。
+- 新しいmainの外部適用、配備後の`/me`とSupabase接続受入、自動配備の再開は未完了。後続のローカル調査・提案検証は下記に記録。追加配備は別承認とする。
+
 #### R2設定差分と読取り診断の追加（2026-10-03）
 
 [API Deploy #9](https://github.com/ArcerJP/KOKO/actions/runs/37115832750)はmain `836189e5b376b55bc90bd6054ea586a172a154a7`の検証成功後、Wrangler 4.147.0のR2設定差分チェックでupload前に停止しました。metadata取得を通過した後の別の停止条件です。新mainは未配備であり、自動配備OFF・Access保護・既存Active Versionを維持しています。
@@ -147,15 +195,21 @@ iijimaは通常用`koko-dev-media`と失敗退避用`koko-dev-media-dlq`の作�
 
 最小修正案は上流のR2 metadata変換1箇所に限り、`jurisdiction !== undefined`の場合だけ同項目を設定するものです。node_modules・配備経路へ適用せず、メモリ内のパッチで24件の試験に成功しました。同一設定の空差分は解消し、Bucket/Binding名変更・削除、設定済みjurisdictionの変更・削除、別bindingやrouteの削除は破壊的差分のままです。空文字/nullを未設定扱いにはせず、`wrangler.jsonc`へ空文字を追加する案では現行strictエラーが残ることも確認しました。
 
-実環境で最後の照合を行うため、既存[読取り診断](../../.github/scripts/api-diagnose.mjs)にR2の件数・期待した接続先との一致・jurisdictionの有無等の固定分類だけを出す変更を準備しました。Secret値・未知の名前/値は表示せず、通信は同じ7GET、workflow・権限・配備処理は変更しません。実装と分類の正本は[CI規約](../ci.md#配備metadataの読取り専用診断)です。配備/診断回帰試験161件、変更JavaScriptのESLintが成功しています。本人からcommit・push・PR作成の承認を得た段階であり、mainへの適用・実診断は未完了です。クラウドへ新しい配備や診断を送っていません。
+実環境で最後の照合を行うため、既存[読取り診断](../../.github/scripts/api-diagnose.mjs)にR2の件数・期待した接続先との一致・jurisdictionの有無等の固定分類だけを出す変更を追加しました。Secret値・未知の名前/値は表示せず、通信は同じ7GET、workflow・権限・配備処理は変更しません。実装と分類の正本は[CI規約](../ci.md#配備metadataの読取り専用診断)です。[PR #18](https://github.com/ArcerJP/KOKO/pull/18)はローカル全CI相当検査（266件、E2E 7件）とGitHub CI 5 workflow・13 jobの成功後、22:21 JSTに本人がmergeしました。mainは`5a16bf4e78d4e43cde7cf0e9055c953e247c817c`、リモート作業ブランチは削除済みです。追加観測を含む実診断はまだ実行しておらず、mainへの反映と実環境の最終照合は区別します。
 
-次は自動配備OFFのまま診断変更をレビュー・公開・本人mergeし、別途承認した読取り診断で`expectedPairsMatch=true`、2件とも`jurisdiction=ABSENT`かを確認する段階です。不一致・不明ならパッチを実適用せず、実応答の分類から調べ直します。ソフトウェアの不具合確定と、実環境の条件・修正後の実配備成功をひとまとめにしません。
+次は自動配備OFFのまま読取り診断で`expectedPairsMatch=true`、2件とも`jurisdiction=ABSENT`かを確認する段階です。2026-10-03に本人が[自律進行と継続承認の区分](../../AGENTS.md#作業進行と承認境界)を採択しました。今後は[api-deployment](../../.agents/skills/api-deployment/SKILL.md#2-変更前後の読取り診断)の安全条件を現物確認し、毎回の許可を聞き直さず既存診断を実行できます。今回は方針文書の統一のみで、新しい実診断は起動していません。不一致・不明ならパッチを実適用せず、実応答の分類から調べ直します。ソフトウェアの不具合確定と、実環境の条件・修正後の実配備成功をひとまとめにしません。
 
 修正の実導入方法は未決定です。上流で同じ問題を直した公式版を検証して採用すれば独自パッチの保守は減りますが、該当修正の存在・公開時期は今回確認できていません。固定4.147.0への局所パッチは今回の再現を解消できる一方、再install時の確実な適用、内容/版の一致確認、更新時の回帰試験が必要です。根拠なしの版更新、strict解除、権限追加やSupabaseキー再入力は採用しません。
 
 19:52 JSTの終了前確認でもmainは同じSHA、自動配備false、実行中・待機中5種は各0件です。管理画面のActive a794ecf8・100%、Access All traffic・本人限定も維持されています。今回追加配備・実診断・クラウド設定変更は行っていません。
 
+22:24 JSTのmerge後照会ではmainが上記PR #18のmerge SHAへ進み、自動配備false、Environment main限定・同名Environment variableなし、実行中/待機中5種各0件を確認しました。merge後にCloudflareの管理画面は再照会していないため、19:52 JSTのActive/Access観測を最新の現物確認とは扱いません。今回も追加配備・実診断・クラウド設定変更は行っていません。
+
+繰り返す実行順序・停止条件は[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)に集約します。会話中断後は、本文と現物を照合し、承認済み変更・未実施操作・次の本人判断をタスク記録に残します。診断は手動の運用ゲートであり、CIが配備前に必ず自動実行する仕組みを追加したわけではありません。新しい仕様変更や別原因の障害まで防止を保証しません。
+
 #### GitHub Actionsへの移行手順（外部操作は別途承認）
+
+以下は9月29日〜10月2日の移行履歴・初期設定案です。継続運用では[10月3日の追加権限と停止状態](#2026-10-03の配備障害と再発防止)を先に確認してください。
 
 2026-10-02時点では、PR #11のmergeとmainのpushによる検証成功・配備skip、Actionsからの初回手動配備と受入確認、旧トークン削除の本人報告、自動配備フラグ`true`の本人提供画像に続き、PR #13のmergeによる自動配備と配備後の応答・保護・設定維持を確認しました。移行手順6までの確認結果と残る検証範囲を下記へ記録します。採用理由は[ADR-0003](../decisions/ADR-0003-worker-scoped-deployment.md)、実行条件と自動テストは[CI規約](../ci.md#開発用api配備)を参照してください。下表は移行時の設定案であり、設定済みの一覧ではありません。
 
@@ -219,7 +273,7 @@ iijimaは通常用`koko-dev-media`と失敗退避用`koko-dev-media-dlq`の作�
 - 保存済みSettingsのR2 binding 2件（`ORIGINALS_BUCKET`→`koko-dev-originals`、`DERIVED_BUCKET`→`koko-dev-derived`）、Git repositoryの`Connect`だけの未接続表示、Accessの`All traffic`と本人限定policyを照合しました。Recent buildsは従前の成功Build `41b7ab63`だけで、自動配備に伴う新しいBuilds配備は表示されていません。
 - 以上により、通常main更新による自動実行と、確認対象の応答・保護・設定維持を実証しました。新資格情報の保存済みpolicy・期限は先の確認記録を根拠とし、今回秘密値を取得して再検証したわけではありません。実R2読書き、別Workerへの拒否試験、全アカウント資源の変更監査、認証方式・MFAの実効設定、対象外の認証済み利用者の拒否試験は未実施です。全サービスの準備や本番受入の完了とは扱いません。
 
-PR #12は最新mainを取り込み、上記の結果を反映して再検査・差分レビューを行う文書更新です。脆弱性修正そのものはPR #13の変更であり、本PRでアプリ・依存・workflow・外部設定を追加変更しません。PR #12もmainへmergeすると現在のworkflow条件で自動配備が起動するため、人間のレビュー・必須check成功後、配備結果を確認できる時間帯にmergeしてください。
+当時のPR #12は、上記の結果を反映する文書更新でした。脆弱性修正はPR #13の変更です。当時は文書だけのmain更新でも自動配備が起動するため、配備結果を確認できる時間帯でのmergeを案内しました。現在の自動配備フラグは最新記録と現物で確認してください。
 
 Environmentが既にあれば、Secret値は再表示せず、用途・保護・同名変数の衝突を確認してから進めます。既存設定の上書き、reviewerの削除、Repository/Organization Secretsへの代替登録は行いません。通常はmainのPRレビューを承認境界とするため、新たな毎回のEnvironment reviewerは設けない案ですが、既存reviewerがあれば確認します。main限定の保護を設定する前にworkflowを手動実行しないでください。
 
@@ -233,7 +287,7 @@ Environmentが既にあれば、Secret値は再表示せず、用途・保護・
 
 Client IP address filteringは、標準GitHub-hosted runnerから使うため今回の入力案ではIP/CIDRを空欄とし、本人のPCのIPは指定しません。GitHubは標準runnerの広いIP範囲をallowlistに使うことを推奨しておらず、範囲も更新されます。空欄ではIPによる制限がないため、トークンの漏洩時には他の場所からも権限範囲内で使用され得ます。Worker限定・期限・Environment Secretの保管を守り、発行前に確認します。固定IP方式への変更は別途構成判断とします。[GitHubのrunner IP](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#ip-addresses)、[Cloudflareのトークン制限](https://developers.cloudflare.com/fundamentals/api/how-to/restrict-tokens/)
 
-1. **ローカル変更のレビュー・PR準備**：外部設定や実配備を含まない差分と検証結果を確認。commit・push・PRは対象ファイルとbranchを示し、承認後にGit-E-z7で実施。PRのレビューとmergeは人間が担当し、この時点ではまだmergeしない。
+1. **ローカル変更のレビュー・PR準備**：外部設定や実配備を含まない差分と検証結果を確認。通常のcommit・push・PRは[継続承認の条件](../../TOOLS.md#web操作の利用条件)を照合し、対象ファイルとbranchを通知してGit-E-z7で実施。PRのレビューとmergeは人間が担当し、この時点ではまだmergeしない。
 2. **移行先の準備**：実行時点で対象・期限・保管先の承認を取り、上表のEnvironment・フラグ・新資格情報を準備。対象Worker1件とEditorを選べなければ発行せず停止。Account API TokenをBuildsへ登録しない。
 3. **旧経路の停止**：初回作業中はmain更新を止める時間帯を合意。正常なActive Deploymentの完全Version IDを記録し、実行中・待機中Buildがないことを確認して、対象WorkerのSettings → Builds → Disconnectだけを承認後に実施。設定・履歴削除を伴う画面なら、その影響も確認。Worker削除やGitHub App全体の解除はしない。
 4. **初回の手動受入**：旧経路の切断を再読込で確認した後に本人が導入PRをmerge。pushで検証だけが動き、deployがOFFであることを確認してから、本人が`API Deploy`を`main`で1回手動実行。下記の受入を行う。
@@ -244,7 +298,7 @@ Client IP address filteringは、標準GitHub-hosted runnerから使うため今
 
 ##### 初回と自動化後の受入
 
-- 新トークンの保存済みpolicyが、対象Worker1件のEditorだけ・期限ありであることを確認。All Workers／Entire Accountや追加policyの混入を除外。
+- tokenの保存済み書込policyが対象Worker1件のEditorだけ・期限ありで、読取policyも[承認済みの構成](#承認保存済みの権限と期限)に一致することを確認。未承認の追加policyや書込範囲拡大を除外。
 - GitHub runのcommit SHAとCloudflareの新Version・Active Deploymentの対応を記録。
 - Worker名・固定URL・R2 binding 2件・Access All trafficと本人限定が配備前と一致。
 - 未認証・Cookieなし・リダイレクト非追従の固定URLと新Version URLの`/health`が、既知のAccessログイン先へ302。単に302というだけでは合格にしない。
@@ -260,7 +314,7 @@ Client IP address filteringは、標準GitHub-hosted runnerから使うため今
 - 通信切断・タイムアウト・配備失敗では、書込みが未実行とは断定しません。Active Deploymentを読取りで照合し、再試行や復旧の対象を確認します。
 - 新Versionに問題があれば、承認後に事前記録した正常VersionへRollbackします。旧トークン失効後は復元できません。広いトークンの再発行やBuilds再接続を自動で行いません。
 - Rollbackはコード配備を戻す操作であり、Access設定、R2データ、GitHub設定・削除したSecretを復元しません。Access異常があれば直ちに報告し、保護復旧の操作を確認します。
-- 期限更新はiijimaが担当する案です。期限前に同じ対象・権限の後継資格情報を承認して発行し、Environment Secret更新→配備確認→旧資格情報失効の順。無断延長・自動更新用の強い資格情報・Global API Keyは使いません。
+- 期限更新はiijimaが担当する案です。現在の承認済みpolicyとUTC/JSTの期限を確認し、後継資格情報が必要なら承認後に発行。Environment Secret更新→読取り診断→配備受入→旧資格情報失効の順。無断延長・自動更新用の強い資格情報・Global API Keyは使いません。詳細は[配備Skill](../../.agents/skills/api-deployment/SKILL.md#3-secretと期限の取扱い)を参照します。
 
 公式手順：[Buildsの切断](https://developers.cloudflare.com/workers/ci-cd/builds/#disconnecting-builds)、[Environment管理](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)、[Workers Rollback](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)。適用直前にUIと仕様を再確認します。
 

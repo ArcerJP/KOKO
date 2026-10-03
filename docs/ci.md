@@ -58,7 +58,7 @@ APIが共有契約の生成済み`dist/`を参照するため、rootの`typechec
 
 2026-09-29にローカル実装・検証を完了し、その後の本人による準備と切替を経て、2026-10-02までにActionsの初回手動配備と通常main更新による自動配備を確認しました。採用理由は[ADR-0003](decisions/ADR-0003-worker-scoped-deployment.md)、配備後確認・残る検証と日付付き証拠は[クラウド準備の進捗](product/cloud-setup.md#項目別の進捗2026-10-02更新)を参照してください。PRのCI成功だけを実配備成功とは扱いません。
 
-実装の正本は[api-deploy.yml](../.github/workflows/api-deploy.yml)と[実行ガード](../.github/scripts/api-deploy.mjs)、外部設定・切替・期限更新・復旧の正本は[クラウド準備](product/cloud-setup.md#github-actionsへの移行手順外部操作は別途承認)です。
+実装の正本は[api-deploy.yml](../.github/workflows/api-deploy.yml)と[実行ガード](../.github/scripts/api-deploy.mjs)、外部の適用済み状態は[クラウド準備の最新記録](product/cloud-setup.md#2026-10-03の配備障害と再発防止)です。再開時の現物確認、診断、変更、配備受入の順序には[api-deployment Skill](../.agents/skills/api-deployment/SKILL.md)を使用します。
 
 | 境界       | 実装                                                                                                                                                       |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -93,7 +93,7 @@ concurrencyはCloudflare Buildsを止めません。またmain確認とCloudflar
 - 判定：すべて成功はexit 0と`ALL_METADATA_READS_OK`。取得失敗・安全条件違反はexit 1。HTTP 401/403、APIエラー、通信例外、本文解析失敗を区別するが、通信例外の詳細は秘密非出力を優先して`REQUEST_FAILED`へ集約する。全GET成功でも、設定差分の安全性・upload・Supabase接続・受入成功を意味しない。
 - 検証：模擬通信の試験とworkflow改悪fixtureを既存`test:deploy-workflow`へ含め、ローカル`npm test`と`API Tests`で検査する。テストは実トークンを使わず、Cloudflareへ接続しない。
 
-2026-10-03の追加変更として、bindings取得成功後に`r2_binding_shape`を1行出す実装を準備し、本人からcommit・push・PR作成の承認を得ました。以下はmainへの適用・実診断が未完了であり、上記のmain適用済み診断と区別します。
+2026-10-03の追加変更として、bindings取得成功後に`r2_binding_shape`を1行出す実装を[PR #18](https://github.com/ArcerJP/KOKO/pull/18)で追加しました。22:21 JSTにmainへmerge済み（`5a16bf4e78d4e43cde7cf0e9055c953e247c817c`）と確認しています。以下の追加観測を含む実診断は未実行です。
 
 - 新たな通信・権限・任意入力は追加せず、同じbindings応答をメモリ内だけで分類する。
 - 出力は固定名`ORIGINALS_BUCKET`/`DERIVED_BUCKET`、一致件数、期待Bucket名との一致boolean、R2件数、`expectedPairsMatch`だけ。応答側の未知のbinding名・bucket名は出さない。
@@ -102,10 +102,10 @@ concurrencyはCloudflare Buildsを止めません。またmain確認とCloudflar
 - これは追加の観測出力で、既存の終了コードと`ALL_METADATA_READS_OK`は通信/API取得の成否のまま。`OBSERVED`やexit 0を設定一致・配備可能の判定に使わない。`INVALID_BINDINGS`、想定外の分類、接続先不一致なら、修正の実適用へ進まず調べ直す。
 - 既存試験を含む配備/診断回帰161件が成功。未知値・秘密のcanary・workflow commandの非出力、同じ7GET、missing/duplicate、異常応答を確認した。
 
-公開・実行は別途承認を受け、次の順序で行います。
+2026-10-03の[継続承認方針](../AGENTS.md#作業進行と承認境界)に従い、条件を満たす通常PRの公開と既存読取り診断は毎回の許可待ちを省きます。実配備や保護設定の変更は含めず、次の順序と[api-deployment](../.agents/skills/api-deployment/SKILL.md)の条件を守ります。
 
-1. **mainへのmerge前に、既存の自動配備を止める手順を承認・実施する。** 診断workflow自体に配備処理はありませんが、診断を導入するmain更新で既存`API Deploy`が起動し得ます。既存variable `KOKO_API_AUTO_DEPLOY_ENABLED`をOFFにし、進行中・待機中の配備がないことを確認する操作は別途承認が必要です。OFFでも既存の手動配備は防げないため、診断中は手動配備・Dashboard変更も行いません。
-2. コードレビュー・CI・本人merge後、mainの診断を明示的に手動実行する。[GitHubの仕様](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)上、workflowは既定ブランチに存在する必要があります。既存Environmentの保護を緩和せず、保存済みSecretの値を表示しません。
+1. **mainへのmerge前・診断前に自動配備OFFと進行中/待機中の配備なしを読み取る。** 読取り確認は再承認不要です。診断workflow自体に配備処理はありませんが、main更新で既存`API Deploy`が起動し得ます。停止のためにvariable変更やrun取消しが必要な場合は、その対象操作の個別確認を受けます。OFFでも既存の手動配備は防げないため、診断中は手動配備・Dashboard変更も行いません。
+2. コードレビュー・CI・本人merge後、main SHA・コード・対象・アカウント・既存権限の一致を照合し、起動を通知して既存診断を1回手動実行する。[GitHubの仕様](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)上、workflowは既定ブランチに存在する必要があります。新たな認証や権限、秘密表示を必要とする場合は継続承認の対象外として止めます。既存Environmentの保護を緩和しません。
 3. ログから取得先・HTTP・エラー番号を照合し、必要最小限の修正を別途判断する。権限追加、`--strict`解除、Secret再登録、配備再試行を自動で行いません。終了後の自動配備再開も別途承認・確認します。
 
 診断用concurrencyは配備と分離し、待機中の配備runを診断で置き換えません。そのためCloudflare設定との同時変更をロックする仕組みではなく、上記の停止・調整が必要です。Environment利用によりGitHub上でdeployment記録が作成され得ますが、Cloudflareへコードを配備することとは区別します。トークン自体は書込み権限を持つため、GET限定のコードレビューと既存Environment保護は引き続き必要です。
@@ -139,7 +139,7 @@ Wranglerが指定するMiniflare `5.20261001.0-alpha`とworkerd `1.20261001.1`�
 
 [4.146.0](https://github.com/cloudflare/workers-sdk/releases/tag/wrangler%404.146.0)と[4.147.0](https://github.com/cloudflare/workers-sdk/releases/tag/wrangler%404.147.0)の公式リリースには、今回のmetadata取得失敗に対する直接の修正は明記されていません。ローカル検査・dry-run成功を原因特定や実配備成功と扱わず、承認後の実配備で効果を確認します。同じ失敗が続く場合は認可・API応答を追加調査し、権限拡大や`--strict`の解除を自動で行いません。
 
-その後、PR #16のmergeによる[API Deploy #7](https://github.com/ArcerJP/KOKO/actions/runs/37105605539)でも同じmetadata取得失敗を確認しました。版更新による解消はできていません。追加調査では、Dashboard更新後だけ実行される設定取得と、いずれの取得失敗も共通エラーで表示する処理を確認しています。失敗API・HTTPステータス・原因となる権限は未確定であり、上記の読取り専用診断で切り分けます。
+その後、PR #16のmergeによる[API Deploy #7](https://github.com/ArcerJP/KOKO/actions/runs/37105605539)でも同じmetadata取得失敗を確認しました。版更新だけでは解消していません。Dashboard更新後の追加読取りと、routes・custom_domainsの403が原因でした。限定した読取り権限の追加で診断7GETが成功した経緯と根拠は[原因記録](product/cloud-setup.md#原因と検証済みの範囲)を参照してください。今後は共通エラーだけを根拠に版更新せず、失敗APIを診断します。
 
 ローカルでは再現install、依存整合性、format、Markdown、契約生成一致、型、179件の契約・Web・API・配備ガード試験、7件のChromium E2E、Web/API buildが成功しました。Lintは作業ツリーに以前から残るGit対象外の一時ファイルを拾って失敗したため、Git管理ファイルと今回の差分だけを展開し、同じlockfileで依存を導入した一時コピー上で、除外オプションを足さない`npm run lint`の成功を確認しました。既存の一時ファイルやLint設定は変更していません。監査は引き続き開発用High 7件・本番実行依存0件で、この更新による追加指摘はありません。GitHub CIと実配備は別途確認します。
 
