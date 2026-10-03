@@ -183,7 +183,7 @@ Wrangler 4.147.0の[配備前処理](https://github.com/cloudflare/workers-sdk/b
 
 #### R2設定差分と読取り診断の追加（2026-10-03）
 
-[API Deploy #9](https://github.com/ArcerJP/KOKO/actions/runs/37115832750)はmain `836189e5b376b55bc90bd6054ea586a172a154a7`の検証成功後、Wrangler 4.147.0のR2設定差分チェックでupload前に停止しました。metadata取得を通過した後の別の停止条件です。新mainは未配備であり、自動配備OFF・Access保護・既存Active Versionを維持しています。
+[API Deploy #9](https://github.com/ArcerJP/KOKO/actions/runs/37115832750)はmain `836189e5b376b55bc90bd6054ea586a172a154a7`の検証成功後、Wrangler 4.147.0のR2設定差分チェックでupload前に停止しました。metadata取得を通過した後の別の停止条件です。この時点では新mainは未配備で、自動配備OFF・Access保護・既存Active Versionを維持しました。修正後の実配備結果は[10月4日の記録](#r2修正後の単回配備2026-10-04)を参照してください。
 
 配備ログの差分は`r2_buckets`内の空オブジェクト2件で、変更対象の値が表示されませんでした。Dashboard上のbinding名・bucket名はローカル設定と一致しています。これだけで実際のBucket変更やデータ破損とは判断しません。
 
@@ -191,7 +191,7 @@ Wrangler 4.147.0の[配備前処理](https://github.com/cloudflare/workers-sdk/b
 
 本人承認後、比較処理だけでなくAPI形式の模擬bindings → 実metadata変換 → 設定生成 → 比較まで通して追跡しました。R2の`jurisdiction`がAPIデータにないと、変換処理が`jurisdiction: undefined`を作り、ローカルの未指定との差が`jurisdiction__deleted: undefined`になります。`json-diff`はundefined値を文字列表示しない一方、strict判定は削除として扱います。このソフトウェア上の不具合を再現し、#9の実ログにある空オブジェクト2件と一致することを再確認しました。
 
-当初は実環境のbindings応答の`jurisdiction`有無が未確認でした。その後、2026-10-03 23:35 JSTの[読取り診断 #4](https://github.com/ArcerJP/KOKO/actions/runs/37130145092)で`r2Count=2`、`expectedPairsMatch=true`、`ORIGINALS_BUCKET`と`DERIVED_BUCKET`各1件・接続先一致・両方`jurisdiction=ABSENT`を確認しました。7GETすべて200 / OK、配備元はdashです。固定版の不具合再現と実環境の発生条件が一致しました。**実環境の条件照合は完了、修正後の実配備成功は未検証**です。
+当初は実環境のbindings応答の`jurisdiction`有無が未確認でした。その後、2026-10-03 23:35 JSTの[読取り診断 #4](https://github.com/ArcerJP/KOKO/actions/runs/37130145092)で`r2Count=2`、`expectedPairsMatch=true`、`ORIGINALS_BUCKET`と`DERIVED_BUCKET`各1件・接続先一致・両方`jurisdiction=ABSENT`を確認しました。7GETすべて200 / OK、配備元はdashです。固定版の不具合再現と実環境の発生条件が一致しました。**この時点では実環境の条件照合まで完了し、修正後の実配備成功は未検証**でした。
 
 最初の最小修正案は上流のR2 metadata変換1箇所に限り、`jurisdiction !== undefined`の場合だけ同項目を設定するもので、実適用せずメモリ内で24件の試験に成功しました。同一設定の空差分は解消し、Bucket/Binding名変更・削除、設定済みjurisdictionの変更・削除、別bindingやrouteの削除は破壊的差分のままです。空文字/nullを未設定扱いにはせず、`wrangler.jsonc`へ空文字を追加する案では現行strictエラーが残ることも確認しました。今回の局所実装はこの結果を基にし、実バンドルの回帰と適用ガードを29件の公開試験へ統合しています。
 
@@ -201,13 +201,36 @@ Wrangler 4.147.0の[配備前処理](https://github.com/cloudflare/workers-sdk/b
 
 2026-10-03の再調査で[npm公式配布のlatest](https://registry.npmjs.org/wrangler/latest)は4.147.0、[上流mapper](https://github.com/cloudflare/workers-sdk/blob/main/packages/workers-utils/src/map-worker-metadata-bindings.ts)にも同じ無条件追加が残っていました。このため固定4.147.0への限定互換修正を技術判断として採用し、APIのbuild/deploy前に版・適用前後hashを検証して適用する実装を追加しました。依存追加・lockfile更新・Worker設定変更はありません。独自修正の保守が必要なため、対象不一致では停止し、公式修正版を検証できた時点で解除します。[実行・検証・解除手順](../ci.md#wrangler-r2未指定値の限定互換修正)を正本とします。根拠なしの版更新、strict解除、権限追加やSupabaseキー再入力は採用しません。
 
-次はこの限定修正の人間レビュー・merge、その後に対象SHA・Worker・復旧対象・実行回数を再確認して実配備を個別承認する段階です。修正後の実配備、`/me`の外部接続受入、自動配備再開は未実施です。
+この限定修正は[PR #20](https://github.com/ArcerJP/KOKO/pull/20)で本人がmergeしました。その後、対象SHA・Worker・復旧対象・実行回数を確認し、個別承認された[10月4日の単回配備](#r2修正後の単回配備2026-10-04)は成功しました。`/me`の外部接続受入と自動配備再開は未実施です。
 
 履歴として、19:52 JSTの前段調査ではmainは当時のSHA、自動配備false、実行中・待機中5種は各0件でした。管理画面のActive a794ecf8・100%、Access All traffic・本人限定も維持されていました。この時点では追加配備・実診断・クラウド設定変更を行っていません。
 
 22:24 JSTのPR #18 merge後照会ではmainが同PRのmerge SHAへ進み、自動配備false、Environment main限定・同名Environment variableなし、実行中/待機中5種各0件を確認しました。その照会ではCloudflareの管理画面を再確認せず、追加配備・実診断・クラウド設定変更も行っていません。現在の診断・Active/Access等の観測は上記23:35 JSTの記録と区別します。
 
 繰り返す実行順序・停止条件は[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)に集約します。会話中断後は、本文と現物を照合し、承認済み変更・未実施操作・次の本人判断をタスク記録に残します。診断は手動の運用ゲートであり、CIが配備前に必ず自動実行する仕組みを追加したわけではありません。新しい仕様変更や別原因の障害まで防止を保証しません。
+
+#### R2修正merge後の配備前確認（2026-10-04）
+
+00:20:26 JST、PR #20がmain `404b7e147780ef1ec7164020639766d0d934ae34`へmergeされ、GitHub作業ブランチが削除されたことを確認しました。merge内容はPRで検証済みのtreeと同一です。[merge後のAPI Deploy](https://github.com/ArcerJP/KOKO/actions/runs/37132899236)はVerification成功・Deploy skippedであり、修正を適用したdry-runまでの成功です。実配備完了ではありません。
+
+00:25 JST、上記mainで[読取り診断 #5](https://github.com/ArcerJP/KOKO/actions/runs/37133201127)を継続承認の安全条件に従い1回実行し、attempt 1で成功しました。7GETすべて200 / OK、配備元dash、R2は期待する2件と一致・両方jurisdiction=ABSENTです。新しいmainで診断条件を再照合しましたが、upload成功やSupabase受入の証明ではありません。
+
+配備前の現物確認では、Active a794ecf8・100%・Dashboard更新元、ProductionのSupabase Secret名3件、R2 binding2件、Access All traffic・本番/Preview全URL保護・本人限定、Builds未接続を維持しています。復旧用の完全Version IDは管理画面のView logsに表示されたfilterで再照合し、非公開タスク記録へ保存しました。固定URL/当該Version URLのhealthは、Cookieなし・redirect非追従で既知のAccessログイン先への302を確認。tokenの既存2policy・期限表示10月20日・IP条件も変更ありません。
+
+自動配備false、Environmentはmain branchのみ・同名Environment variableなし、診断前は配備待機/実行中5種各0でした。ローカルの配備/診断/互換回帰190件も成功。この配備前確認の時点では、新たなログイン、秘密入力、設定/権限変更、実配備、自動配備再開は行わず、既存koko-api-devへの1回の適用について個別確認待ちとしました。
+
+#### R2修正後の単回配備（2026-10-04）
+
+本人がmain `404b7e1`から既存`koko-api-dev`への1回の配備と配備後確認を個別承認しました。直前にmain full SHA・自動配備OFF・Environment main限定・同名Environment variableなし・競合runなし・同SHA診断 #5成功を再照合し、00:35:40 JSTに既存`API Deploy`をmainで1回だけ手動起動しました。
+
+- [API Deploy #13](https://github.com/ArcerJP/KOKO/actions/runs/37133792641)：attempt 1、SHA `404b7e147780ef1ec7164020639766d0d934ae34`、Verification・Deployともsuccess。00:36:57 JSTに完了。
+- 配備ログでWrangler 4.147.0、限定互換修正`PATCHED`、uploadとtrigger配備の成功を確認。`--strict`を解除せず、以前のR2偽差分による停止を通過しました。
+- 新Version `b6f0d26d`がActive・100%・Wrangler更新元となり、全9versionへ1件増加。管理画面のView logsに表示される完全Version IDをログと照合し、一致しました。旧版と新しい完全IDは非公開タスク記録に保持しています。rollback・再配備は行っていません。
+- 固定URLと新Version URLの`/health`をCookieなし・redirect非追従でGETし、いずれもHTTP 302、既知のAccessホストと各対象ホストのログインパスへの転送を確認。
+- 配備後もProductionのSupabase Secret名3件・暗号化表示、R2 binding2件と既存接続先、Access All traffic・本番/Preview全URL保護・本人限定、旧Builds未接続を確認。秘密値の取得や権限・設定の変更はしていません。
+- 00:38 JSTのGitHub再照会でもmainは同一SHA、自動配備false、Environment main限定・変数なし、実行/待機中5種各0。自動配備は再開していません。
+
+**実配備・未認証保護・認証後healthの受入を確認しました。** 当初、既存Chromeで固定URLを開くとAccessログイン画面になったため、新規ログインは代行せず本人へ引き渡しました。その後、本人から「health正常」と回答を受け、案内した`{"service":"koko-api","status":"ok"}`の確認完了として記録しています。認証後の応答は本人報告であり、Codexによる独立した再読取りとは区別します。`/me`実装はこのSHAに含まれますが、外部Workerと実Supabaseを使う接続受入は別途未完了です。DB書込み・正式イベント作成・実R2読書き・他資源の全体監査は実施していません。health正常は自動配備再開の承認ではなく、自動配備OFFを維持します。
 
 #### GitHub Actionsへの移行手順（外部操作は別途承認）
 
