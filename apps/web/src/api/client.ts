@@ -3,6 +3,11 @@ import type { components, operations } from "@koko/contract/api";
 
 export type Me =
   operations["getMe"]["responses"][200]["content"]["application/json"];
+export type UpdateMe =
+  operations["updateMe"]["requestBody"]["content"]["application/json"];
+export type AcceptTerms =
+  operations["acceptTerms"]["requestBody"]["content"]["application/json"];
+export type Acknowledgement = components["schemas"]["Acknowledgement"];
 type ApiError = components["schemas"]["ApiError"];
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -21,6 +26,11 @@ function object(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// headerへ安全に載せられる値だけ。正当性・セッション束縛はサーバーで検証する。
+function isCsrfToken(value: unknown): value is string {
+  return typeof value === "string" && /^[\x21-\x7e]{32,256}$/.test(value);
+}
+
 function isMe(value: unknown, eventId: string): value is Me {
   if (!object(value)) return false;
   return (
@@ -37,10 +47,17 @@ function isMe(value: unknown, eventId: string): value is Me {
     typeof value.terms_version === "string" &&
     typeof value.crown === "string" &&
     ["none", "white", "gold"].includes(value.crown) &&
-    (value.csrf_token === undefined ||
-      (typeof value.csrf_token === "string" &&
-        value.csrf_token.length >= 32 &&
-        value.csrf_token.length <= 256))
+    (value.csrf_token === undefined || isCsrfToken(value.csrf_token))
+  );
+}
+
+function isAcknowledgement(value: unknown): value is Acknowledgement {
+  return (
+    object(value) &&
+    typeof value.request_id === "string" &&
+    uuid.test(value.request_id) &&
+    (value.resource_id === undefined ||
+      (typeof value.resource_id === "string" && uuid.test(value.resource_id)))
   );
 }
 
@@ -55,7 +72,7 @@ function isApiError(value: unknown): value is ApiError {
   );
 }
 
-/** GET境界の基盤。認証・Cookie発行・CSRF更新APIの実装ではない。 */
+/** 同一originのCookie API用。Cookie発行・CSRF検証を実装するサーバーとは別。 */
 export function createApiClient(
   baseUrl: URL,
   eventId: string,
@@ -74,33 +91,147 @@ export function createApiClient(
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname);
   if (baseUrl.protocol !== "https:" && !(local && baseUrl.protocol === "http:"))
     throw new TypeError("HTTPSのAPI設定が必要です。");
-  const endpoint = new URL("me", baseUrl);
+  // 呼出し元が渡したURLを後から変更しても、送信先を変えない。
+  const apiBase = new URL(baseUrl);
+  function assertSameOrigin() {
+    if (
+      typeof globalThis.location !== "undefined" &&
+      apiBase.origin !== globalThis.location.origin
+    )
+      throw new TypeError("同一originのAPI設定が必要です。");
+  }
+  assertSameOrigin();
+
+  async function request(
+    path: "me" | "consents",
+    method: "GET" | "PATCH" | "POST",
+    signal?: AbortSignal,
+    mutation?: { body: string; csrfToken: string },
+  ): Promise<unknown> {
+    signal?.throwIfAborted();
+    assertSameOrigin();
+    let response: Response;
+    try {
+      response = await fetcher(new URL(path, apiBase), {
+        method,
+        headers: {
+          Accept: "application/json",
+          "X-Event-ID": eventId,
+          ...(mutation
+            ? {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": mutation.csrfToken,
+              }
+            : {}),
+        },
+        // credentialsだけでは別originへの送信そのものを防げない。
+        mode: "same-origin",
+        credentials: "same-origin",
+        redirect: "error",
+        cache: "no-store",
+        ...(mutation ? { body: mutation.body } : {}),
+        ...(signal ? { signal } : {}),
+      });
+    } catch {
+      signal?.throwIfAborted();
+      throw new ApiFailure("NETWORK_UNAVAILABLE");
+    }
+    const body: unknown = await response.json().catch(() => null);
+    signal?.throwIfAborted();
+    if (response.status === 200) return body;
+    if (
+      !response.ok &&
+      isApiError(body) &&
+      errors[body.code].status === response.status
+    )
+      throw new ApiFailure(body.code, body.request_id);
+    throw new ApiFailure("INTERNAL_ERROR");
+  }
+
+  async function mutate(
+    path: "me" | "consents",
+    method: "PATCH" | "POST",
+    input: UpdateMe | AcceptTerms,
+    csrfToken: string,
+    signal?: AbortSignal,
+  ): Promise<Acknowledgement> {
+    signal?.throwIfAborted();
+    if (!isCsrfToken(csrfToken)) throw new ApiFailure("FORBIDDEN");
+    const body = JSON.stringify(input);
+    // 現在のWorker入力上限に合わせる。UTF-16文字数ではなくUTF-8 byte数。
+    if (new TextEncoder().encode(body).byteLength > 1024)
+      throw new ApiFailure("INVALID_INPUT");
+    const result = await request(path, method, signal, { body, csrfToken });
+    if (!isAcknowledgement(result)) throw new ApiFailure("INTERNAL_ERROR");
+    // サーバーの余分なフィールド・内部情報を呼出し元へ渡さない。
+    return {
+      request_id: result.request_id,
+      ...(result.resource_id ? { resource_id: result.resource_id } : {}),
+    };
+  }
+
   return {
     async getMe(signal?: AbortSignal): Promise<Me> {
-      let response: Response;
-      try {
-        response = await fetcher(endpoint, {
-          headers: { Accept: "application/json", "X-Event-ID": eventId },
-          credentials: "same-origin",
-          redirect: "error",
-          cache: "no-store",
-          ...(signal ? { signal } : {}),
-        });
-      } catch {
-        signal?.throwIfAborted();
-        throw new ApiFailure("NETWORK_UNAVAILABLE");
-      }
-      const body: unknown = await response.json().catch(() => null);
+      const body = await request("me", "GET", signal);
+      if (!isMe(body, eventId)) throw new ApiFailure("INTERNAL_ERROR");
+      return {
+        user_id: body.user_id,
+        event_id: body.event_id,
+        display_name: body.display_name,
+        role: body.role,
+        is_banned: body.is_banned,
+        terms_version: body.terms_version,
+        consent_required: body.consent_required,
+        crown: body.crown,
+        ...(body.csrf_token === undefined
+          ? {}
+          : { csrf_token: body.csrf_token }),
+      };
+    },
+    async updateMe(
+      input: UpdateMe,
+      csrfToken: string,
+      signal?: AbortSignal,
+    ): Promise<Acknowledgement> {
       signal?.throwIfAborted();
-      if (response.status === 200 && isMe(body, eventId)) return body;
       if (
-        !response.ok &&
-        isApiError(body) &&
-        errors[body.code].status === response.status
+        !object(input) ||
+        Object.keys(input).length !== 1 ||
+        typeof input.display_name !== "string" ||
+        input.display_name.trim().length === 0 ||
+        Array.from(input.display_name).length > 50 ||
+        /[\p{Cc}\p{Cf}]/u.test(input.display_name)
       )
-        throw new ApiFailure(body.code, body.request_id);
-      // サーバーの生レスポンス・CSRF token・内部例外を表示/ログしない。
-      throw new ApiFailure("INTERNAL_ERROR");
+        throw new ApiFailure("INVALID_INPUT");
+      return mutate(
+        "me",
+        "PATCH",
+        { display_name: input.display_name },
+        csrfToken,
+        signal,
+      );
+    },
+    async acceptTerms(
+      input: AcceptTerms,
+      csrfToken: string,
+      signal?: AbortSignal,
+    ): Promise<Acknowledgement> {
+      signal?.throwIfAborted();
+      if (
+        !object(input) ||
+        Object.keys(input).length !== 2 ||
+        input.accepted !== true ||
+        typeof input.terms_version !== "string" ||
+        input.terms_version.trim().length === 0
+      )
+        throw new ApiFailure("INVALID_INPUT");
+      return mutate(
+        "consents",
+        "POST",
+        { terms_version: input.terms_version, accepted: true },
+        csrfToken,
+        signal,
+      );
     },
   };
 }

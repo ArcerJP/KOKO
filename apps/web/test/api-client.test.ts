@@ -20,6 +20,14 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 describe("生成契約型を利用するGET境界とMSW", () => {
+  it("契約にない応答項目を呼出し元へ渡さない", async () => {
+    server.use(
+      http.get(endpoint, () =>
+        HttpResponse.json({ ...mockMe, internal: "not-for-display" }),
+      ),
+    );
+    expect(await createApiClient(base, mockEventId).getMe()).toEqual(mockMe);
+  });
   it("表示名の上限をUnicode文字数で検査する", async () => {
     const displayName = "🐱".repeat(50);
     server.use(
@@ -54,6 +62,8 @@ describe("生成契約型を利用するGET境界とMSW", () => {
       new URL(endpoint),
       expect.objectContaining({
         credentials: "same-origin",
+        mode: "same-origin",
+        method: "GET",
         cache: "no-store",
         redirect: "error",
         headers: { Accept: "application/json", "X-Event-ID": mockEventId },
@@ -90,6 +100,7 @@ describe("生成契約型を利用するGET境界とMSW", () => {
     { ...mockMe, role: "owner" },
     { ...mockMe, is_banned: "false" },
     { ...mockMe, csrf_token: "short" },
+    { ...mockMe, csrf_token: "a".repeat(32) + "\n" },
     { ...mockMe, display_name: "" },
     { ...mockMe, crown: "rainbow" },
     null,
