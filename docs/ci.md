@@ -50,6 +50,8 @@ Web向け3jobは`.github/workflows/web-check.yml`に定義します。秘密や�
 
 API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type Check`、`API Tests`、`API Build`は秘密情報やCloudflareログインなしで実行します。テストのR2はローカル保存であり、開発用実バケットとの通信成功を示しません。`API Build`もdry-runであり、Cloudflareへのdeploy成功とは区別します。
 
+APIが共有契約の生成済み`dist/`を参照するため、rootの`typecheck:api`・`test:api`・`build:api`は、それぞれ`build:contract`の成功後にworkspaceの処理を実行します。別jobや以前のローカルbuildの生成物には依存しません。APIだけを検証する場合もroot commandを使用し、workspaceの下位commandを直接実行する場合は共有契約buildを先に行います。2026-10-03のPR #15で判明した準備漏れへの対応です。再現検査ではlockfileどおり依存を導入し、各commandの前に共有契約の生成物がないことを確認します。親ディレクトリに別の`node_modules`があるコピーだけでは依存解決の独立性を保証できないため、GitHub CIの新規checkoutでも結果を照合します。
+
 `API Tests`には`npm run test:deploy-workflow`も追加しています。既存のAPI実行環境テストとjob名は維持し、配備jobをPRの必須checkには追加しません。
 
 ## 開発用API配備
@@ -63,7 +65,7 @@ API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type 
 | 開始       | `ArcerJP/KOKO`の`refs/heads/main`、pushまたは手動実行のみ。任意入力なし                                                                                    |
 | 自動配備   | Repository variable `KOKO_API_AUTO_DEPLOY_ENABLED`が小文字の`true`に完全一致するときだけ。未設定・空・false・その他はOFF。手動経路はこのフラグに依存しない |
 | 検証       | Secretなしで同じイベントSHAをcheckoutし、Node 24・lockfileによる導入、配備回帰試験、API型・テスト・dry-run build                                           |
-| 配備       | verify成功と許可出力が必須。専用Environment `koko-api-dev`で同じSHAを再checkoutし、導入後の最終stepだけSecret参照                                          |
+| 配備       | verify成功と許可出力が必須。専用Environment `koko-api-dev`で同じSHAを再checkoutし、導入・共有契約build後の最終stepだけSecret参照                           |
 | 直前ガード | イベント・repository・ref・verify結果・秘密の存在・checkout SHAを再検査。固定GitHub APIのGETで最新mainとSHA一致を確認できなければ書込み停止                |
 | 資格情報   | Cloudflareトークンとaccount IDは最終stepだけ。そのstepのGitHub tokenはmain照会にだけ使い、npm/Wranglerへは渡さない                                         |
 | 実行       | 固定済みWranglerの`npm run deploy --workspace @koko/api`。worker/config/commandの任意上書きなし                                                            |
@@ -87,6 +89,19 @@ ESLint 9は2026-08-06にEOLとなっています。[公式サポート表](https
 `package.json`のscoped overridesでNext.js配下を9系へ固定し、9／10の両方に対応するTypeScript ESLintとeslint-utilsの共有helperは既存のroot版を参照します。npmのhoistによるpeer競合を避けるための設定です。バージョン更新時は、overrideも含めて`npm ci --strict-peer-deps`と`npm ls --all`で再検証してください。
 
 ## 依存関係のセキュリティ更新
+
+### 2026-10-03の追加監査：開発用依存のHigh 7件
+
+`npm audit --json`はHigh 7パッケージ、`npm audit --omit=dev --json`は0件でした。7件は`braces@3.0.3`の[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)から間接依存へ波及した数であり、7個の独立した脆弱性ではありません。`npm ls`とlockfileで、次の開発用依存経路を確認しています。
+
+- `markdownlint-cli2` → `globby`／`micromatch` → `braces`（`globby`は`fast-glob`も使用）。
+- `eslint-config-next` → `@next/eslint-plugin-next` → `fast-glob` → `micromatch` → `braces`。
+
+[上流の報告](https://github.com/micromatch/braces/issues/70)では、信頼できない深いbraceパターンによりNode.jsのスタックを枯渇させるDoSが対象です。確認時点のアドバイザリに修正版の記載はありません。現在のアプリソースにこれらのglob処理の直接利用はなく、Markdownの対象patternは固定の`**/*.md`、Next.js Lint設定に任意の`settings.next.rootDir`はありません。このため公開APIへの直接の攻撃経路は今回確認していません。ただし本番依存の監査0件だけで安全を保証できず、設定・pattern・入力経路が変われば開発／CIの停止リスクがあります。
+
+今回の承認は影響調査までで、依存・lockfileの更新、検査無効化、脆弱性の恒久受容は行っていません。npmの自動修正候補にはNext.js ESLint設定14系やmarkdownlint-cli2 0.0.4への大幅なdowngradeが含まれるため、`audit fix --force`は使用しません。対応判断は、上流修正版の確認と影響調査の継続（互換性への影響は小さいが指摘は残る）、または検証済みの依存置換／緩和（早期対処の可能性はあるが保守・互換性確認が増える）を比較して別途行います。
+
+### 2026-10-02の更新
 
 2026-10-02の更新前監査では、Next.jsとCloudflare開発・配備依存を合わせて5パッケージに指摘がありました（critical 1、high 1、moderate 3。同じ間接依存からの波及を含み、5個の固有の脆弱性という意味ではありません）。修正版は各workspaceの`package.json`とrootの`package-lock.json`に固定します。
 
