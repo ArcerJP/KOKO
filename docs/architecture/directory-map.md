@@ -49,13 +49,17 @@
 
 ## 登録表の保守
 
+確認を減らした作業進行の区分と保護操作の停止条件は[AGENTS.md](../../AGENTS.md#作業進行と承認境界)を正本とします。USER.mdは本人の希望・採択経緯、TOOLS.mdはツール別の条件、既存Skillsは実行手順を保持します。全リストを各ファイルへ複製せず、各責務の変更時に参照と整合性を更新します。新しいトップレベル領域や専用Skillは追加しません。
+
 `docs/collaborator-setup.md`は共同開発者のWindows導入、`docs/private-sharing.md`は非公開共有の対象・権限・同期運用の正本です。導入・共有時に読み、実装や共有方針に合わせて更新し、公開可能な手順だけを追跡します。個別メンバー・資料一覧・共有時点は非公開側で管理します。`.agents/skills/private-context-sharing/SKILL.md`は確認付き非公開共有の反復手順で、該当作業時に読み、追跡対象として継続管理します。共有コピーは別のPrivateリポジトリの`context/`に保持し、公開KOKOのトップレベル領域やignore方針を変更しません。
 
 `apps/web/public/`はブラウザへ公開する静的ファイルです。現在は依存ライブラリの原文ライセンス通知とソース入手先だけを含みます。秘密・実メディア・測定記録を置きません。依存更新時に通知を確認し、上流のライセンス原文を日本語へ置換しません。
 
 第1要件では`apps/web/`の責務をトークンに加え、Next.js UI・端末内メディア処理・GET境界・MSW試験へ拡張しました。実装の正本は`src/`、自動検証は`test/`と`e2e/`です。`test/fixtures/`は小さい合成素材と生成手順だけを追跡し、実機素材・測定JSON・`.next/`・`next-env.d.ts`・`test-results/`・`playwright-report/`・ローカルブラウザ本体`.playwright/`は追跡しません。
 
-`docs/product/stage-one-capture.md`は起動・端末検証、`docs/product/cloud-setup.md`はクラウド準備の手順の正本です。いずれも対象作業時に読み、実装／公式仕様の変更時に更新し、公開可能な手順だけを継続管理します。秘密・個別請求情報・測定原資料は含めません。一般の検証フローは既存Skillsで扱うため、新しいSkillやトップレベルのサービス領域は追加しません。
+`docs/product/stage-one-capture.md`は起動・端末検証、`docs/product/cloud-setup.md`はクラウド準備と適用済み状態の正本です。いずれも対象作業時に読み、実装／公式仕様の変更時に更新し、公開可能な内容だけを継続管理します。秘密・個別請求情報・測定原資料は含めません。一般の検証フローは既存Skillsで扱い、トップレベルのサービス領域は追加しません。
+
+KOKO固有のAPI配備・診断・復旧の反復手順は[api-deployment](../../.agents/skills/api-deployment/SKILL.md)に置きます。WorkerのSecret・配備tokenの変更や会話中断後の再開も対象です。公開可能な手順としてGit追跡し、配備方式・権限仕様・診断の変更時に更新します。クラウドの現在値やタスク証拠は複製しません。
 
 費用比較の反復手順は`.agents/skills/cost-review/`（手順の正本、費用判断時に読込、承認済み手順だけ編集、追跡対象、継続更新）へ配置します。個別の見積りや請求情報はここへ保存しません。`docs/architecture/native-readiness.md`は将来クライアントの境界、`docs/product/cost-policy.md`は現在の費用判断方針であり、いずれも対応領域の規範的文書として扱います。
 

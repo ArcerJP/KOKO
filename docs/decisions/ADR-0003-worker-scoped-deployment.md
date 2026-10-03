@@ -20,7 +20,17 @@ Accepted — 個別Worker限定の資格情報とGitHub Actionsによる配備�
 
 実行条件の正本は[workflowとガード](../ci.md#開発用api配備)、外部設定・切替・復旧の正本は[クラウド準備](../product/cloud-setup.md#github-actionsへの移行手順外部操作は別途承認)です。
 
+## 2026-10-03の追加決定
+
+Dashboard更新後の配備前metadata取得に必要なため、iijimaの承認により、既存の個別Worker EditorにWorkers製品全体のMetadata Read-Onlyを併用しました。**書込みは引き続き対象Worker1件、追加の読取りは対象アカウントの現在・将来のWorkers全体**です。以前の「全権限が個別Workerだけ」という説明は現在の構成には適用しません。初期移行の決定と、後から検証した追加読取りを区別します。
+
+利点は書込範囲を拡大せずDashboard変更後のmetadata取得を可能にすること、負担は別Workerの設定・ログ等も読取り対象になることです。Admin化や他サービスの管理権限追加は採用しません。失敗API、限定試験の前後比較、保存済みpolicy・期限と未完了の実配備受入は[クラウド準備](../product/cloud-setup.md#2026-10-03の配備障害と再発防止)を正本とします。公式仕様は2026-10-03に[Workers権限](https://developers.cloudflare.com/workers/authorization/workers/)で再確認しました。
+
+この追加決定も将来の権限拡張や自動配備再開の包括承認ではありません。[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)で現物確認・診断・配備を分離します。
+
 ## 検討した代替案
+
+初期移行時の比較です。
 
 | 案                                            | 利点                                             | 採用しない理由・負担                                |
 | --------------------------------------------- | ------------------------------------------------ | --------------------------------------------------- |
