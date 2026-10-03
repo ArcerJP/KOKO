@@ -133,6 +133,28 @@ iijimaは通常用`koko-dev-media`と失敗退避用`koko-dev-media-dlq`の作�
 
 補助用`koko-builds-register-once`は削除直前の一覧で`Expires soon`でした。画面の失効手段が`Delete`のため、復元できないことと配備用トークン・Workerを削除しないことを説明し、iijimaから「補助用トークンだけ削除してよい」と実行時点の承認を受けました。同名の削除確認ダイアログを照合して実行し、削除後の未絞り込み一覧から補助用が消え、配備用だけが残ることを確認しました。補助用トークンは復元できません。配備用の編集保存、Builds設定変更、再登録、再配備は行っていません。
 
+#### R2設定差分と読取り診断の追加（2026-10-03）
+
+[API Deploy #9](https://github.com/ArcerJP/KOKO/actions/runs/37115832750)はmain `836189e5b376b55bc90bd6054ea586a172a154a7`の検証成功後、Wrangler 4.147.0のR2設定差分チェックでupload前に停止しました。metadata取得を通過した後の別の停止条件です。新mainは未配備であり、自動配備OFF・Access保護・既存Active Versionを維持しています。
+
+配備ログの差分は`r2_buckets`内の空オブジェクト2件で、変更対象の値が表示されませんでした。Dashboard上のbinding名・bucket名はローカル設定と一致しています。これだけで実際のBucket変更やデータ破損とは判断しません。
+
+固定版4.147.0の[metadata変換](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.147.0/packages/workers-utils/src/map-worker-metadata-bindings.ts)はR2に`jurisdiction`を無条件で追加し、[比較処理](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.147.0/packages/deploy-helpers/src/deploy/helpers/config-diffs.ts)へ渡します。同じインストール済み比較処理のオフライン再現では、リモート側だけに`jurisdiction: undefined`があると、削除差分・`nonDestructive=false`となり、今回と同じ空の差分表示になりました。単なる配列の並び順では差分なし、空文字の場合は値の差分が表示されました。
+
+本人承認後、比較処理だけでなくAPI形式の模擬bindings → 実metadata変換 → 設定生成 → 比較まで通して追跡しました。R2の`jurisdiction`がAPIデータにないと、変換処理が`jurisdiction: undefined`を作り、ローカルの未指定との差が`jurisdiction__deleted: undefined`になります。`json-diff`はundefined値を文字列表示しない一方、strict判定は削除として扱います。このソフトウェア上の不具合を再現し、#9の実ログにある空オブジェクト2件と一致することを再確認しました。
+
+ただし、当該実環境のbindings応答の`jurisdiction`有無はまだ直接観測していません。UIの既存binding/bucket名一致、R2 defaultのリンク、実ログ一致は根拠ですが、API応答の直接証拠とは区別します。**不具合の再現・修正案のローカル検証済み、実環境の発生条件の最終照合は未完了**です。
+
+最小修正案は上流のR2 metadata変換1箇所に限り、`jurisdiction !== undefined`の場合だけ同項目を設定するものです。node_modules・配備経路へ適用せず、メモリ内のパッチで24件の試験に成功しました。同一設定の空差分は解消し、Bucket/Binding名変更・削除、設定済みjurisdictionの変更・削除、別bindingやrouteの削除は破壊的差分のままです。空文字/nullを未設定扱いにはせず、`wrangler.jsonc`へ空文字を追加する案では現行strictエラーが残ることも確認しました。
+
+実環境で最後の照合を行うため、既存[読取り診断](../../.github/scripts/api-diagnose.mjs)にR2の件数・期待した接続先との一致・jurisdictionの有無等の固定分類だけを出す変更を準備しました。Secret値・未知の名前/値は表示せず、通信は同じ7GET、workflow・権限・配備処理は変更しません。実装と分類の正本は[CI規約](../ci.md#配備metadataの読取り専用診断)です。配備/診断回帰試験161件、変更JavaScriptのESLintが成功しています。本人からcommit・push・PR作成の承認を得た段階であり、mainへの適用・実診断は未完了です。クラウドへ新しい配備や診断を送っていません。
+
+次は自動配備OFFのまま診断変更をレビュー・公開・本人mergeし、別途承認した読取り診断で`expectedPairsMatch=true`、2件とも`jurisdiction=ABSENT`かを確認する段階です。不一致・不明ならパッチを実適用せず、実応答の分類から調べ直します。ソフトウェアの不具合確定と、実環境の条件・修正後の実配備成功をひとまとめにしません。
+
+修正の実導入方法は未決定です。上流で同じ問題を直した公式版を検証して採用すれば独自パッチの保守は減りますが、該当修正の存在・公開時期は今回確認できていません。固定4.147.0への局所パッチは今回の再現を解消できる一方、再install時の確実な適用、内容/版の一致確認、更新時の回帰試験が必要です。根拠なしの版更新、strict解除、権限追加やSupabaseキー再入力は採用しません。
+
+19:52 JSTの終了前確認でもmainは同じSHA、自動配備false、実行中・待機中5種は各0件です。管理画面のActive a794ecf8・100%、Access All traffic・本人限定も維持されています。今回追加配備・実診断・クラウド設定変更は行っていません。
+
 #### GitHub Actionsへの移行手順（外部操作は別途承認）
 
 2026-10-02時点では、PR #11のmergeとmainのpushによる検証成功・配備skip、Actionsからの初回手動配備と受入確認、旧トークン削除の本人報告、自動配備フラグ`true`の本人提供画像に続き、PR #13のmergeによる自動配備と配備後の応答・保護・設定維持を確認しました。移行手順6までの確認結果と残る検証範囲を下記へ記録します。採用理由は[ADR-0003](../decisions/ADR-0003-worker-scoped-deployment.md)、実行条件と自動テストは[CI規約](../ci.md#開発用api配備)を参照してください。下表は移行時の設定案であり、設定済みの一覧ではありません。
