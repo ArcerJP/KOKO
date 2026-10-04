@@ -35,6 +35,9 @@ export default async function UploadPage() {
       <p>
         <Link href="/account">アカウント・規約を確認</Link>
       </p>
+      <p>
+        <Link href="/account/posts">送信後の処理結果・自分の投稿状況へ</Link>
+      </p>
       <UploadScreen owner={data.claims.sub.toLowerCase()} />
     </main>
   );

@@ -1,5 +1,11 @@
 import { errors, type ErrorCode } from "@koko/contract";
 import type { components, operations } from "@koko/contract/api";
+import {
+  ownPostsSearch,
+  parseOwnPost,
+  parseOwnPostsPage,
+  type OwnPostsQuery,
+} from "./own-posts-contract";
 
 export type Me =
   operations["getMe"]["responses"][200]["content"]["application/json"];
@@ -112,7 +118,7 @@ export function createApiClient(
   assertSameOrigin();
 
   async function request(
-    path: "me" | "consents",
+    path: string,
     method: "GET" | "PATCH" | "POST",
     signal?: AbortSignal,
     mutation?: { body: string; csrfToken: string },
@@ -180,6 +186,22 @@ export function createApiClient(
   }
 
   return {
+    async getPostStatus(id: string, signal?: AbortSignal) {
+      if (!uuid.test(id)) throw new ApiFailure("INVALID_INPUT");
+      const normalized = id.toLowerCase();
+      const body = await request(`posts/${normalized}/status`, "GET", signal);
+      const post = parseOwnPost(body, eventId, normalized);
+      if (!post) throw new ApiFailure("INTERNAL_ERROR");
+      return post;
+    },
+    async listOwnPosts(query: OwnPostsQuery = {}, signal?: AbortSignal) {
+      const search = ownPostsSearch(query);
+      if (search === null) throw new ApiFailure("INVALID_INPUT");
+      const body = await request(`me/posts${search}`, "GET", signal);
+      const page = parseOwnPostsPage(body, eventId, query.limit ?? 30);
+      if (!page) throw new ApiFailure("INTERNAL_ERROR");
+      return page;
+    },
     async getMe(signal?: AbortSignal): Promise<Me> {
       const body = await request("me", "GET", signal);
       if (!isMe(body, eventId)) throw new ApiFailure("INTERNAL_ERROR");

@@ -74,9 +74,11 @@ it.each([
 ] as const)(
   "forwards only %s JSON and strips request/response secrets",
   async (path, body, output, status) => {
+    // Signed fixtures depend on the current second; compare the same snapshot.
+    const expected = output();
     const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json(
-        { ...output(), private: "discard" },
+        { ...expected, private: "discard" },
         {
           status,
           headers: {
@@ -96,7 +98,7 @@ it.each([
       fetcher,
     );
     expect(response.status).toBe(status);
-    expect(await response.json()).toEqual(output());
+    expect(await response.json()).toEqual(expected);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.has("set-cookie")).toBe(false);
     expect(response.headers.has("access-control-allow-origin")).toBe(false);

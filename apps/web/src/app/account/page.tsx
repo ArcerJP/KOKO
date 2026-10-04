@@ -45,6 +45,9 @@ export default async function AccountPage() {
         <Link href="/upload">写真・動画の送信と端末の保存状況へ</Link>
       </p>
       <p>
+        <Link href="/account/posts">自分の投稿状況へ</Link>
+      </p>
+      <p>
         <Link href="/">端末内の撮影・トリム検証へ</Link>
       </p>
       <p className="caption">

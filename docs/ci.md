@@ -52,6 +52,8 @@ Web Testsにはアップロード制御・同一origin JSON中継・R2直接転�
 
 F2-1のキュー試験では本人分離・永続化失敗・retry上限・曖昧なPUT/complete結果を検査します。Web Browser Testsは既存Chromiumで実IndexedDB・複数tab lock・reload・quota例外rollback・送信UI遷移を合成写真で検証。esbuildはWebの直接dev依存に固定し、テスト内bundleをPlaywright routeで供給します。製品へ認証回避routeやfixtureを配信せず、実秘密/実写真/外部R2を使いません。新送信UIの実動画・実Authの受入は別です。
 
+本人投稿画面も既存Web Testsでquery/応答投影・前後の本人照合・BAN中の読取り・cursor期限切れ・取消しを検査します。Web Browser Testsでは合成Auth/HTTPと実Reactを用い、390/1280pxで読込み/続き/単一更新・終了時破棄・期限切れ回復と、production routeの既定OFFを確認します。実Google/Cookie/Access/DBを通す受入ではありません。[画面の検証境界](../apps/web/README.md#本人の投稿一覧状態画面f2-4f3-4の一部既定無効)を参照してください。
+
 API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type Check`、`API Tests`、`API Build`は秘密情報やCloudflareログインなしで実行します。テストのR2はローカル保存であり、開発用実バケットとの通信成功を示しません。`API Build`もdry-runであり、Cloudflareへのdeploy成功とは区別します。
 
 本人投稿の状態・一覧は既存`Contract Tests`でread-only SQLの所有権/権限・状態・精度を、`API Tests`で実Web Cryptoの署名cursor・改ざん/期限・最小応答・認証/異常通信を検査します。追加のjobや秘密は不要です。合成Auth/RPCとPGliteの成功は実Supabase適用・Web画面・メディア配信の受入ではありません。[本人投稿APIの実装境界](../apps/api/README.md#本人の投稿状態と一覧b2-6の一部既定無効)を参照してください。

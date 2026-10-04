@@ -162,7 +162,7 @@ DLQ監視/回収、スキャンの滞留・負荷検証、未完了uploadの失�
 
 将来の有効化には`KOKO_OWN_POSTS_ENABLED`が文字列`true`であることが必要です。未設定/その他はAuth・DB前に404。一覧には独立した乱数32byteを64桁hexで表す専用`KOKO_POST_CURSOR_SECRET`も必要で、欠落/不正なら500です（単一状態取得には不要）。Supabase/Access/CSRFの秘密を再利用せず、サーバーだけに保存します。今回は実鍵の生成・登録、Wrangler設定・公開範囲の変更、DB適用・配備を行っていません。
 
-[SQL試験](../../packages/contract/test/own-posts.test.mjs)と[Workers試験](test/own-posts.spec.ts)で全状態・本人/他人/別event/管理者・read-only transaction・microsecond/同時刻/途中削除・署名の独立既知ベクトル・改ざん/期限・不正応答・中断を検証します。公開フィード/詳細/10秒内部cache、Web中継・本人状態画面・申立て導線、AI/Streamの実処理、実Supabase RPCの受入は後続です。B2-6全体やF2-4の完成とは扱いません。
+[SQL試験](../../packages/contract/test/own-posts.test.mjs)と[Workers試験](test/own-posts.spec.ts)で全状態・本人/他人/別event/管理者・read-only transaction・microsecond/同時刻/途中削除・署名の独立既知ベクトル・改ざん/期限・不正応答・中断を検証します。[Web中継・本人投稿画面](../web/README.md#本人の投稿一覧状態画面f2-4f3-4の一部既定無効)も既定無効でローカル実装しました。公開フィード/詳細/10秒内部cache、正式理由分類・申立て/削除導線、AI/Streamの実処理、実Supabase RPCとWebの通し受入は後続です。B2-6全体やF2-4の完成とは扱いません。
 
 根拠（2026-10-05確認）：[PostgreSQLの行比較](https://www.postgresql.org/docs/current/functions-comparisons.html)、[STABLEとsnapshot](https://www.postgresql.org/docs/current/xfunc-volatility.html)、[Workers Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/)。
 
