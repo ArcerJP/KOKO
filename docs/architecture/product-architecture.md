@@ -17,7 +17,7 @@
 | 運営           | Discord、管理画面。後日rclone→Google Drive | 監査/通知/保持の契約                | webhook、運用script、会場運営、export                              |
 | 共通           | npm workspaces・TypeScript                 | `packages/contract`、型/テスト/CI   | FE/BEから共通import                                                |
 
-第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験、Googleログイン導線、WorkerのBearer本人情報APIを実装しています。2026-10-04に規約同意APIとDB関数、および既定無効のCookie認証・CSRF受信境界をローカル追加しました。現在の実装・未完了は[開発計画](../product/development-plan.md)、認証プロトコル・同意保存のtransaction・未適用の境界は[API README](../../apps/api/README.md)を正本とします。Cookie発行・更新・削除と同一origin転送は未実装で、アプリ全体の認証ゲートを完成扱いにしません。ローカル試験と実クラウドの受入証拠は[クラウド準備](../product/cloud-setup.md)、撮影処理と実機の制約は[撮影検証](../product/stage-one-capture.md)へ分離し、ここへ進捗の完全な複製を置きません。
+第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験、Googleログイン導線、WorkerのBearer本人情報APIを実装しています。2026-10-04に規約同意APIとDB関数、既定無効のCookie認証・CSRF受信境界、およびWeb内部のCookie発行・更新・削除処理をローカル追加しました。現在の実装・未完了は[開発計画](../product/development-plan.md)、Cookie発行プロトコルは[Web README](../../apps/web/README.md#api用cookieの発行処理既定無効)、受信・同意保存のtransaction・未適用の境界は[API README](../../apps/api/README.md)を正本とします。画面・SSRログアウトへの統合と同一origin転送は未実装で、アプリ全体の認証ゲートを完成扱いにしません。ローカル試験と実クラウドの受入証拠は[クラウド準備](../product/cloud-setup.md)、撮影処理と実機の制約は[撮影検証](../product/stage-one-capture.md)へ分離し、ここへ進捗の完全な複製を置きません。
 
 2026-09-29、個別Workerへ配備権限を限定するGitHub Actions workflow・回帰試験・文書をローカル実装し、その後、旧Workers Buildsを切断してActionsへ移行しました。2026-10-02までに初回手動配備と通常main更新による自動配備を確認しています。採用理由は[ADR-0003](../decisions/ADR-0003-worker-scoped-deployment.md)、配備の安全条件は[CI規約](../ci.md#開発用api配備)、外部の適用済み状態・証拠・残る検証は[クラウド準備](../product/cloud-setup.md#項目別の進捗2026-10-02更新)へ分離します。開発用Cloudflare Accessを利用者向けGoogle認証の実装と混同しません。
 

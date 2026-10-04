@@ -6,7 +6,7 @@ TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置�
 
 - Worker名：`koko-api-dev`
 - 開発Workerへ配備済みの処理：`GET /health`、Bearer認証の`GET /me`と`PATCH /me`。全URLをCloudflare Accessで保護し、一般公開した意味ではありません。実クラウドでは読取り／未所属拒否まで受入済みで、所属ありの取得・更新は未検証です。
-- 本人情報API：Supabase Authで本人を検証し、Google単独ログインとイベント所属を確認した後、WorkerだけがDB Secretを使用します。`POST /consents`と既定無効のCookie認証・CSRF受信境界は下記のローカル実装を追加しましたが未配備です。Cookie自体の発行・更新・削除は未実装です。
+- 本人情報API：Supabase Authで本人を検証し、Google単独ログインとイベント所属を確認した後、WorkerだけがDB Secretを使用します。`POST /consents`と既定無効のCookie認証・CSRF受信境界は下記のローカル実装を追加しましたが未配備です。Cookie発行・更新・削除のWeb内部処理も既定無効で、画面・実環境へ未接続です。
 - 未定義route：JSONの404
 - `/health`へのGET以外のmethod：JSONの405
 - R2 binding：`ORIGINALS_BUCKET`と`DERIVED_BUCKET`
@@ -39,7 +39,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義していますが、現�
 
 ### 未実装・実接続前の条件
 
-Cookie発行側は未実装です。将来の発行側で`Secure; HttpOnly; Path=/`、Domain属性なし、適切なSameSite・寿命・更新・削除を実装し、refresh tokenをこのCookieへ入れないでください。受信Cookie headerだけではこれらの属性を検証できません。既存のSupabase SSRログインからコピーしただけで完成とは扱いません。
+発行側の正本は[WebのAPI用Cookie処理](../web/README.md#api用cookieの発行処理既定無効)です。既定無効の専用routeをローカル追加しましたが、画面・callback・logoutへの統合は未実装です。受信Cookie headerだけではSecure・HttpOnly等の属性を検証できません。既存のSupabase SSRログインからコピーしただけで完成とは扱いません。
 
 同一origin転送、CookieとOriginの伝搬、Accessとの両立、鍵の登録、実Google認証・refresh・logout・失効を確認してから有効化します。Secret登録・認証設定変更・実配備は[保護操作の個別確認](../../AGENTS.md#保護操作の確認)へ分離します。API境界の模擬試験は実ブラウザCookieや実クラウド受入を証明しません。
 
