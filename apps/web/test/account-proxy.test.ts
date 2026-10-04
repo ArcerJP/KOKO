@@ -5,7 +5,11 @@ import { mockEventId, mockMe } from "../src/mocks/handlers";
 
 const origin = "https://web.example.test";
 const upstream = "https://koko-api-dev.arcer-jp.workers.dev";
-const cookie = "__Host-koko_session=synthetic.access.signature";
+const rawCookie = "__Host-koko_session=synthetic.access.signature";
+const generation = `22222222-2222-4222-8222-222222222222.${"a".repeat(64)}`;
+const generationCookie = `__Host-koko_generation=${generation}`;
+const apiCookie = `__Host-koko_session=v1.${generation}.synthetic.access.signature`;
+const cookie = `${generationCookie}; ${apiCookie}`;
 const csrf = "synthetic-csrf-value-for-tests-only";
 const requestId = "00000000-0000-4000-8000-000000000001";
 const config = {
@@ -114,7 +118,7 @@ describe("固定された本人情報中継", () => {
       expect(init?.signal).toBeInstanceOf(AbortSignal);
       expect(Object.fromEntries(new Headers(init?.headers))).toEqual({
         accept: "application/json",
-        cookie,
+        cookie: rawCookie,
         origin,
         "sec-fetch-site": "same-origin",
         "x-event-id": mockEventId,
@@ -204,13 +208,25 @@ describe("固定された本人情報中継", () => {
     ["X-Event-ID", null, "INVALID_INPUT"],
     ["X-Event-ID", "not-uuid", "INVALID_INPUT"],
     ["Cookie", null, "AUTH_REQUIRED"],
-    ["Cookie", `${cookie}; ${cookie}`, "AUTH_REQUIRED"],
+    ["Cookie", `${cookie}; ${apiCookie}`, "AUTH_REQUIRED"],
     ["Cookie", `${cookie}; __Host-koko_session.0=chunk`, "AUTH_REQUIRED"],
-    ["Cookie", "__Host-koko_session", "AUTH_REQUIRED"],
-    ["Cookie", "__Host-koko_session=", "AUTH_REQUIRED"],
-    ["Cookie", "__Host-koko_session=%61.b.c", "AUTH_REQUIRED"],
-    ["Cookie", ' __Host-koko_session="a.b.c"', "AUTH_REQUIRED"],
-    ["Cookie", `__Host-koko_session=${"a".repeat(3500)}.b.c`, "AUTH_REQUIRED"],
+    ["Cookie", `${generationCookie}; __Host-koko_session`, "AUTH_REQUIRED"],
+    ["Cookie", `${generationCookie}; __Host-koko_session=`, "AUTH_REQUIRED"],
+    [
+      "Cookie",
+      `${generationCookie}; __Host-koko_session=v1.${generation}.%61.b.c`,
+      "AUTH_REQUIRED",
+    ],
+    [
+      "Cookie",
+      `${generationCookie}; __Host-koko_session="v1.${generation}.a.b.c"`,
+      "AUTH_REQUIRED",
+    ],
+    [
+      "Cookie",
+      `${generationCookie}; __Host-koko_session=v1.${generation}.${"a".repeat(3500)}.b.c`,
+      "AUTH_REQUIRED",
+    ],
     [
       "Cookie",
       `${cookie}; unrelated=${"a".repeat(16 * 1024)}`,

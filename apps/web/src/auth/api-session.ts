@@ -1,71 +1,19 @@
-import { NextResponse } from "next/server";
 import { isGoogleOnlySession } from "./google-session";
 import { createServerAuthClient } from "./server";
+import {
+  apiCookieName,
+  apiCookieOptions,
+  apiGeneration,
+  generationFingerprint,
+  clearApiCookie as clear,
+} from "./api-session-cookies";
+import {
+  sessionReply as reply,
+  validateSessionRequest,
+} from "./api-session-request";
 
-const cookieName = "__Host-koko_session";
-const cookieOptions = {
-  secure: true,
-  httpOnly: true,
-  sameSite: "lax",
-  path: "/",
-} as const;
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function reply(status: number, code?: string) {
-  return NextResponse.json(code ? { code } : { ok: true }, {
-    status,
-    headers: {
-      "Cache-Control": "private, no-store",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
-}
-
-function clear(response: NextResponse) {
-  response.cookies.set(cookieName, "", {
-    ...cookieOptions,
-    maxAge: 0,
-    expires: new Date(0),
-  });
-  return response;
-}
-
-function configuredOrigin(): string | null {
-  if (process.env.KOKO_API_COOKIE_ENABLED !== "true") return null;
-  try {
-    const origin = process.env.KOKO_WEB_ORIGIN;
-    const url = new URL(origin ?? "");
-    return url.protocol === "https:" && url.origin === origin ? origin : null;
-  } catch {
-    return null;
-  }
-}
-
-async function hasEmptyBody(request: Request): Promise<boolean> {
-  if (request.signal.aborted || request.bodyUsed) return false;
-  if (!request.body) return true;
-  if (request.body.locked) return false;
-  const reader = request.body.getReader();
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    // Next.js wraps even empty Node POST/DELETE bodies in a stream. Require EOF
-    // without buffering a supplied payload or waiting indefinitely for a sender.
-    const first = await Promise.race([
-      reader.read(),
-      new Promise<null>((resolve) => {
-        timeout = setTimeout(() => resolve(null), 1000);
-      }),
-    ]);
-    return first?.done === true;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timeout);
-    void reader.cancel().catch(() => {});
-    reader.releaseLock();
-  }
-}
 
 /** Internal Web session bridge, not an event API or a Supabase sign-out route. */
 export async function handleApiSession(request: Request): Promise<Response> {
@@ -74,27 +22,14 @@ export async function handleApiSession(request: Request): Promise<Response> {
     response.headers.set("Allow", "POST, DELETE");
     return response;
   }
-  const origin = configuredOrigin();
-  if (!origin) return reply(503, "API_SESSION_UNAVAILABLE");
-  const url = new URL(request.url);
-  const site = request.headers.get("Sec-Fetch-Site");
-  if (
-    url.origin !== origin ||
-    request.headers.get("Origin") !== origin ||
-    request.headers.get("X-KOKO-Session-Request") !== "1" ||
-    (site !== null && site !== "same-origin")
-  )
-    return reply(403, "FORBIDDEN");
-  // No caller-supplied identity, token, redirect target, or alternate credential.
-  if (
-    url.search ||
-    request.headers.has("Authorization") ||
-    !(await hasEmptyBody(request))
-  )
-    return reply(400, "INVALID_INPUT");
+  const rejected = await validateSessionRequest(request, "/auth/api-session");
+  if (rejected) return rejected;
 
   // Only expires the API cookie; never claims to revoke the Supabase session.
   if (request.method === "DELETE") return clear(reply(200));
+
+  const generation = apiGeneration(request.headers);
+  if (!generation) return clear(reply(401, "AUTH_REQUIRED"));
 
   try {
     const supabase = await createServerAuthClient({
@@ -133,11 +68,14 @@ export async function handleApiSession(request: Request): Promise<Response> {
     )
       return clear(reply(401, "AUTH_REQUIRED"));
     if (!isGoogleOnlySession(claims)) return clear(reply(403, "FORBIDDEN"));
+    const fingerprint = await generationFingerprint(claims);
+    if (!fingerprint || !generation.endsWith(`.${fingerprint}`))
+      return clear(reply(401, "AUTH_REQUIRED"));
 
     const maxAge = Math.min(claims.exp - now, 300);
     const response = reply(200);
-    response.cookies.set(cookieName, token, {
-      ...cookieOptions,
+    response.cookies.set(apiCookieName, `v1.${generation}.${token}`, {
+      ...apiCookieOptions,
       maxAge,
       expires: new Date((now + maxAge) * 1000),
     });

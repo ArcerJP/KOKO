@@ -1,4 +1,5 @@
 import { errors, type ErrorCode } from "@koko/contract";
+import { apiCookieName, apiTokenForProxy } from "../auth/api-session-cookies";
 import {
   ApiFailure,
   createApiClient,
@@ -14,7 +15,6 @@ type Configuration = {
   KOKO_API_UPSTREAM_ORIGIN?: string | undefined;
 };
 const upstreamOrigin = "https://koko-api-dev.arcer-jp.workers.dev";
-const sessionName = "__Host-koko_session";
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const responseHeaders = {
@@ -47,23 +47,8 @@ function configuredOrigin(config: Configuration): string | null {
 }
 
 function sessionCookie(headers: Headers): string | null {
-  if (headers.has("authorization")) return null;
-  const cookie = headers.get("cookie") ?? "";
-  if (new TextEncoder().encode(cookie).byteLength > 16 * 1024) return null;
-  let token: string | undefined;
-  for (const part of cookie.split(";")) {
-    const item = part.trim();
-    const separator = item.indexOf("=");
-    const name = separator < 0 ? item : item.slice(0, separator);
-    if (name.startsWith(`${sessionName}.`)) return null;
-    if (name !== sessionName) continue;
-    if (token !== undefined) return null;
-    token = item.slice(separator + 1);
-  }
-  // 署名・claimsの信頼判定はWorker。ここでは発行側上限と転送形式だけ。
-  return token && token.length <= 3500 && /^[\w-]+\.[\w-]+\.[\w-]+$/.test(token)
-    ? `${sessionName}=${token}`
-    : null;
+  const token = apiTokenForProxy(headers);
+  return token ? `${apiCookieName}=${token}` : null;
 }
 
 async function deadline<T>(
