@@ -238,11 +238,24 @@ Wrangler 4.147.0の[配備前処理](https://github.com/cloudflare/workers-sdk/b
 
 今回アプリテーブルへの書込みはなく、正式イベント・所属・規約同意は作成していません。クラウド側の所属あり`GET /me`正常応答・`PATCH /me`更新、別実アカウントの境界、全テーブルRLS、Cookie／CSRF、Next.js画面、メディア実接続は未検証または未実装です。ローカルWorkerで確認済みの正常系と、今回の外部読取り／拒否系を混同しません。追加配備・権限/Secret/Access変更・自動配備再開は行っていません。
 
-#### WebからのAccessサービス認証の準備（2026-10-04、実設定未適用）
+#### WebからのAccessサービス認証（2026-10-04）
 
-Webサーバーの固定API中継へ、サーバー専用資格情報を付与するローカル処理を追加しました。[設定条件と本人ゲート](../../apps/web/README.md#accessサービス認証ローカル実装実設定未適用)、[選定理由](../decisions/ADR-0005-web-access-service-auth.md)を参照してください。合成資格情報での検証であり、実service tokenの発行・登録、Access policyの追加/変更、Web/Worker設定・DB変更、実配備・有効化・接続受入を実施した記録ではありません。
+Webサーバーの固定API中継へ、サーバー専用資格情報を付与するローカル処理を追加しました。[設定条件と本人ゲート](../../apps/web/README.md#accessサービス認証)、[選定理由](../decisions/ADR-0005-web-access-service-auth.md)を参照してください。PR #31でのローカル実装は合成資格情報による検証であり、下記の本人発行・個別承認による外部設定とは別の段階です。
 
 同日21:40 JSTのGitHub読取り確認ではmain `d420509`、`KOKO_API_AUTO_DEPLOY_ENABLED=false`、[API Deploy](https://github.com/ArcerJP/KOKO/actions/runs/37202834155)はVerification成功/Deploy skip、実行中・待機中の配備0件でした。既存Access設定は変更していません。この確認からCloudflare管理画面の設定やアプリ受入を新たに検証済みとは扱いません。
+
+同日22:31に本人が`koko-web-dev-access`を発行しました。一覧でEnabled・期間1年・期限表示2027年10月4日22:31を確認しています。これは管理画面の表示であり、UTCの保存値は取得していません。Client ID/Secretの値や発行直後の秘密表示画面は取得していません。
+
+その後、本人が「限定設定を追加・保存してよいです」と個別承認した範囲で、既存`koko-api-dev - Cloudflare Workers` applicationへ`koko-web-dev-service-auth`を追加・保存しました。policy作成時刻のUI表示は22:43。同applicationを開き直し、以下を確認しました。
+
+- 新policyはAction=`Service Auth`、Include=`Service Token`、値=`koko-web-dev-access`の1件だけ。使用先applicationも対象1件だけ。
+- 既存`koko-dev-iijima-only`のAllowを残し、Worker scopeは`koko-api-dev`のproduction/preview URL群を維持。Bypass、Everyone、Any Access Service Token、組織全体設定は追加・変更していません。
+- 資格情報・Cookieなし、redirect非追従の固定`/health` GETはHTTP 302でAccessログインへ転送され、匿名公開にはなっていません。これは外周保護の確認であり、発行したtokenでの認証成功ではありません。
+- 22:45 JSTのGitHub照会ではmain `7aabb5c`、自動配備false、[API Deploy](https://github.com/ArcerJP/KOKO/actions/runs/37204667448)はVerification成功・Deploy skipped、実行中/待機中5状態各0件。追加配備・自動配備再開は行っていません。
+
+このpolicyは、当該token所持者が対象Workerのproduction/preview全URLのAccess保護を対話的ログインなしで通過できる許可です。Web中継の3操作限定とは別の外周権限であり、Worker内の利用者JWT・所属・DB認可等を免除しません。漏洩や不要時の失効/許可解除は影響を確認して個別承認で行います。
+
+**完了はtoken発行と限定Access policyの適用までです。** Web側の2項目のSecret登録、Cookie/CSRF設定、追加migration・正式イベント/所属・規約採択、実配備/有効化、service tokenでの認証疎通、Webからの通し受入は未完了です。既定無効を維持し、今回の承認をこれらの操作へ流用しません。次は本人による安全なSecret保管の確認と、登録するWeb環境の特定が必要です。
 
 #### GitHub Actionsへの移行手順（外部操作は別途承認）
 

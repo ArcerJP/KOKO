@@ -1,10 +1,10 @@
 # KOKO 開発計画
 
-更新日：2026-10-04（表示名・規約同意UIとAccessサーバー認証のローカル準備。既定無効・実受入前を維持）。原開発計画v1.0の担当・タスクID・日程を維持し、追加指示の第6要件を追補します。要求の詳細は[要件](requirements.md)、契約合意は[第0日](day-zero.md)を参照してください。
+更新日：2026-10-04（Accessの個別service token許可を適用。Web側は既定無効・実受入前を維持）。原開発計画v1.0の担当・タスクID・日程を維持し、追加指示の第6要件を追補します。要求の詳細は[要件](requirements.md)、契約合意は[第0日](day-zero.md)を参照してください。
 
 ## 分担と現在地
 
-Web中継には[Accessサービス認証](../../apps/web/README.md#accessサービス認証ローカル実装実設定未適用)のローカル処理を追加しました。固定開発APIへのサーバー専用2header・不完全設定の拒否・秘密非公開を合成試験の対象とします。実token作成/登録、Service Auth policy、Cookie/CSRF設定、DB適用・配備/有効化・通し受入は未実施です。F1-4/B1-4全体は未完了で、次の外部適用は本人ゲートへ分離します。
+Web中継には[Accessサービス認証](../../apps/web/README.md#accessサービス認証)のローカル処理を追加しました。固定開発APIへのサーバー専用2header・不完全設定の拒否・秘密非公開を合成試験の対象とします。[クラウド準備の適用記録](cloud-setup.md#webからのaccessサービス認証2026-10-04)のとおり、実tokenの本人発行とService Authの個別許可まで確認しました。Web側のSecret登録、Cookie/CSRF設定、追加DB適用・配備/有効化・通し受入は未完了です。F1-4/B1-4全体は未完了で、次の外部適用は本人ゲートへ分離します。
 
 FEはFigma、Next.js UI、OSカメラ、トリム、IndexedDB、一覧/フィード/管理画面を担当。BEはSupabase、Cloudflare、Cloud Run、認証、DB/RLS、API、変換・判定、通知・運用を担当します。FE/BE契約の承認者はともにiijimaです。第0日の承認記録は[チェックリスト](day-zero.md)を参照します。
 

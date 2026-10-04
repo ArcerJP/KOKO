@@ -153,7 +153,7 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 
 成功は既存clientで検査・投影した本人情報/ackだけで、Cookie経路の本人情報にはCSRF値が必須です。エラーは契約code/status/request UUIDを照合します。上流のSet-Cookie/Location/CORS/cache header・例外詳細を返さず、全応答を`private, no-store`とします。API Cookieの更新・消去は発行処理の責務であり、中継の401で暗黙に更新しません。429の任意`retry_after_seconds`など、既存clientが保持しない補助情報は透過しません。
 
-### Accessサービス認証（ローカル実装・実設定未適用）
+### Accessサービス認証
 
 2026-10-04、固定開発Workerへの3操作に限り、サーバー専用の`KOKO_API_ACCESS_CLIENT_ID`・`KOKO_API_ACCESS_CLIENT_SECRET`から`CF-Access-Client-Id`・`CF-Access-Client-Secret`を付与する処理を追加しました。上記の有効化条件に加え、**両方の資格情報が必須**です。各値は空白/制御文字/非ASCIIを含まない1〜512文字の可視ASCIIとして検査し、欠落・片方のみ・不正なら通信前に500で閉じます。新旧token形式の認証や期限・policyの判定はCloudflareが担当します。
 
@@ -161,7 +161,7 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 
 リダイレクトを追わず、Access拒否/ログインHTMLも固定エラーで閉じ、認証方式のfallbackや自動再送は行いません。上流のheaderは透過せず、JSONをdecodeしたkey/valueに資格情報の完全値が含まれた場合も拒否します。これは既知の値の反射対策であり、分割・変換等を含むあらゆる漏洩を検出する保証ではありません。上流やプラットフォームのログにも認証headerを記録させない運用が必要です。
 
-**実際のtoken発行・登録・Access policy変更・有効化・配備・通し受入は未実施です。** 採用理由と権限境界は[ADR-0005](../../docs/decisions/ADR-0005-web-access-service-auth.md)。service tokenはWebサーバーが開発用外周保護を通るための資格情報であり、利用者のGoogle JWTやDB権限、Worker配備用tokenとは別です。
+実tokenの本人発行と対象Access applicationへの個別許可を確認しました。**Web側のSecret登録・有効化・実配備・通し受入は未完了です。** 日時・適用範囲・検証結果の正本は[クラウド準備](../../docs/product/cloud-setup.md#webからのaccessサービス認証2026-10-04)、採用理由と権限境界は[ADR-0005](../../docs/decisions/ADR-0005-web-access-service-auth.md)です。service tokenはWebサーバーが開発用外周保護を通るための資格情報であり、利用者のGoogle JWTやDB権限、Worker配備用tokenとは別です。
 
 #### 実接続前の本人ゲート
 
