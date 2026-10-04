@@ -55,7 +55,7 @@
 
 `apps/web/public/`はブラウザへ公開する静的ファイルです。現在は依存ライブラリの原文ライセンス通知とソース入手先だけを含みます。秘密・実メディア・測定記録を置きません。依存更新時に通知を確認し、上流のライセンス原文を日本語へ置換しません。
 
-第1要件では`apps/web/`の責務をトークンに加え、Next.js UI・端末内メディア処理・認証Cookie発行・本人情報3操作の同一origin中継・HTTP試験へ拡張しました。業務認可とDBアクセスはWorkerに残します。実装の正本は`src/`、自動検証は`test/`と`e2e/`です。`test/fixtures/`は小さい合成素材と生成手順だけを追跡し、実機素材・測定JSON・`.next/`・`next-env.d.ts`・`test-results/`・`playwright-report/`・ローカルブラウザ本体`.playwright/`は追跡しません。
+第1要件では`apps/web/`の責務をトークンに加え、Next.js UI・端末内メディア処理・認証Cookie発行/終了とログイン世代検査・本人情報3操作の同一origin中継・HTTP試験へ拡張しました。業務認可とDBアクセスはWorkerに残します。実装の正本は`src/`、自動検証は`test/`と`e2e/`です。`test/fixtures/`は小さい合成素材と生成手順だけを追跡し、実機素材・測定JSON・`.next/`・`next-env.d.ts`・`test-results/`・`playwright-report/`・ローカルブラウザ本体`.playwright/`は追跡しません。
 
 `docs/product/stage-one-capture.md`は起動・端末検証、`docs/product/cloud-setup.md`はクラウド準備と適用済み状態の正本です。いずれも対象作業時に読み、実装／公式仕様の変更時に更新し、公開可能な内容だけを継続管理します。秘密・個別請求情報・測定原資料は含めません。一般の検証フローは既存Skillsで扱い、トップレベルのサービス領域は追加しません。
 

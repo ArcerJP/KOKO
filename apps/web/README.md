@@ -37,7 +37,7 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 ## API用Cookieの発行処理（既定無効）
 
-2026-10-04にWeb内部の`/auth/api-session`を追加しました。[Route Handler](src/app/auth/api-session/route.ts)から[発行処理](src/auth/api-session.ts)を呼びます。イベントAPIとは別のWeb専用経路であり、OpenAPIの本人情報契約を変更しません。**既存のログイン画面・OAuth callback・proxy・ログアウトへは接続していません。設定値の登録・実環境での有効化も未実施です。**
+2026-10-04にWeb内部の`/auth/api-session`を追加しました。[Route Handler](src/app/auth/api-session/route.ts)から[発行処理](src/auth/api-session.ts)を呼びます。イベントAPIとは別のWeb専用経路であり、OpenAPIの本人情報契約を変更しません。**callback・中継・ログアウトとの条件付き連携はローカル実装済みです。画面からの発行/期限前更新、設定値の登録・実環境での有効化は未実施です。**
 
 ### 設定と送信元の条件
 
@@ -48,24 +48,47 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 ### 発行・更新・消去
 
-1. POSTは既存SSR Cookieから`getSession()`でaccess JWTの候補を取得します。保存由来の`session.user`や`expires_at`は認可・寿命の証拠にしません。候補はJWTの3区切り形式、最大3,500文字です。ブラウザのCookie容量に余裕を持たせるため、Worker受信上限より厳しく制限します。
+1. POSTは下記の有効なログイン世代を要求し、既存SSR Cookieから`getSession()`でaccess JWTの候補を取得します。保存由来の`session.user`や`expires_at`は認可・寿命の証拠にしません。候補はJWTの3区切り形式、最大3,500文字です。世代を含めてもブラウザのCookie容量に余裕を持たせるため、Worker受信上限より厳しく制限します。
 2. **同じJWT**を`getUser(token)`でAuthサーバーと照合し、`getClaims(token)`で署名検証します。Google単独・非匿名・authenticatedを両方で確認し、検証済み本人UUIDとsubの一致、整数のexpが未来であることを検査します。独自JWT検証やブラウザの本人情報へ依存しません。
-3. 検証成功時だけ`__Host-koko_session`へ未加工access JWTを設定。`Secure; HttpOnly; Path=/; SameSite=Lax`、Domain属性なし、Max-Ageは検証済みJWTの残り寿命と300秒の短い方、Expiresも同じ期限です。refresh tokenをAPI用Cookieへ入れません。再POSTは同じCookieを更新します。
+3. 検証済み`sub`・`session_id`と世代の結び付きを検査し、成功時だけ`__Host-koko_session`へ`v1.<世代>.<access JWT>`を設定。JWT自体は改変しません。`Secure; HttpOnly; Path=/; SameSite=Lax`、Domain属性なし、Max-Ageは検証済みJWTの残り寿命と300秒の短い方、Expiresも同じ期限です。refresh tokenをAPI用Cookieへ入れません。再POSTは同じCookieだけを更新し、世代は上書きしません。
 4. DELETEは同じ送信元検査後にAPI用CookieだけをMax-Age=0で期限切れにし、Auth接続・Supabase signOutは行いません。再実行可能ですが、セッションの失効やアプリ全体のログアウト完了を意味しません。
 
 応答は成功200の`{ ok: true }`または固定の`{ code }`だけで、常に`private, no-store`です。認証不成立401、Google条件違反403、想定外例外500。POSTでAuth処理へ進んだ後の失敗は古いAPI用Cookieも消去します。JWT・refresh token・個人情報・生のAuth例外をJSON・URL・ログへ返しません。SSRの更新CookieはSDK既存方式のままであり、この変更で既存SSR Cookie全体をHttpOnly化したとは扱いません。
 
-[サーバーAuthアダプター](src/auth/server.ts)はこのrouteだけCookie書込み失敗を固定エラーとして伝播する厳密モードを使います。既存の読取り専用Server Componentの動作は維持します。複数Cookieの保存・応答送達を原子的に保証するものではありません。
+[サーバーAuthアダプター](src/auth/server.ts)はこのrouteと、API Cookieを有効にしたcallbackでCookie書込み失敗を固定エラーとして伝播する厳密モードを使います。既存の読取り専用Server Componentの動作は維持します。複数Cookieの保存・応答送達を原子的に保証するものではありません。
 
 ### 有効化前に残る作業
 
-画面からの発行/期限前更新、更新とログアウトの競合、SSR signOutとAPI Cookie消去・メモリ上CSRF破棄の統合、下記の同一origin中継とAccess保護の実環境での両立、実Googleセッションとブラウザでのrefresh・失効を検証してから有効化します。現在のログアウトボタンにこのCookieの削除処理はないため、設定だけ先に有効化してはいけません。
+画面からの発行/期限前更新、本人情報・規約同意画面とメモリ上CSRFの破棄、下記の同一origin中継とAccess保護の実環境での両立、実Googleセッションとブラウザでのrefresh・終了競合・失効を検証してから有効化します。ログアウトの条件付き実装だけで受入完了とはせず、設定だけ先に有効化してはいけません。
 
 将来停止する場合は、設定を外す前のCookie消去経路と、停止後の既発行Cookie/JWTの扱いを決めます。flagをOFFにするだけでは残存Cookieを消去せず、DELETEも無効になります。Cookieの300秒制限をJWTの即時失効や漏洩対策の代わりにしません。設定・認証・公開範囲・実配備は[保護操作の個別確認](../../AGENTS.md#保護操作の確認)へ分離します。
 
 [発行処理試験](test/api-session.test.ts)はNextResponseの実Cookieシリアライズと合成Auth応答を使用し、未設定、送信元・別資格情報の拒否、本人/署名結果/期限の異常、更新・消去・秘密非出力を検証します。[アダプター試験](test/auth-server.test.ts)はCookie writerの失敗伝播、[Playwright試験](e2e/login.spec.ts)は設定なしの実Next.js HTTP経路の503・Cookie非変更を検査します。成功時のブラウザCookie保存、暗号署名そのもの、SDKの実refresh、実クラウド接続を証明するものではありません。
 
 根拠（2026-10-04確認）：[Next.jsのCookie書込み境界](https://nextjs.org/docs/app/api-reference/functions/cookies)、[Supabase getSessionの注意事項](https://supabase.com/docs/reference/javascript/auth-getsession)、[getUserの本人照合](https://supabase.com/docs/reference/javascript/auth-getuser)、[getClaimsの署名検証](https://supabase.com/docs/reference/javascript/auth-getclaims)、[OWASPの独自headerによるCSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi)。
+
+## API用Cookieを含むログアウト（既定無効）
+
+[ログアウト処理](src/auth/sign-out.ts)を既存ボタンへ接続しました。サーバーから渡すのは`KOKO_API_COOKIE_ENABLED`の真偽だけです。無効時は従来のブラウザSupabase `signOut()`、有効時は固定の`POST /auth/api-sign-out`→Supabase `signOut()`の順で両方を試します。既存のglobal scopeを維持します。両方が成功した場合だけ`/login`へ完全遷移し、一部失敗は固定メッセージで再試行を案内します。同一ボタンの二重実行を抑止し、自動再送はしません。
+
+API終了要求は同一origin・独自header・本文なし、redirect拒否・no-storeです。応答本文を含む10秒・128byte以内のJSON `{ ok: true }`だけを成功とします。この時間制限はAPI終了段階のもので、Supabase SDKの通信全体を10秒に制限するものではありません。JWT・CSRF・Cookie値をJavaScript引数として扱いません。
+
+終了routeは発行routeと同じ設定・送信元・空本文の検査を共用し、POST以外は405です。検査成功時にAPI Cookieを消し、下記の世代を`ended`へ置換します。Supabase/DBへ接続せず、Cookie欠落時も再実行可能です。**DELETE `/auth/api-session`はCookieの保守用消去であり、世代を終了しないためログアウトの代用にはできません。**
+
+### 遅延応答への世代検査
+
+[Cookie helper](src/auth/api-session-cookies.ts)が次のWeb内部プロトコルを管理します。採用理由と代替案は[ADR-0004](../../docs/decisions/ADR-0004-web-session-generation.md)を参照してください。
+
+- API Cookie有効時の成功Google callbackだけが、新しい`__Host-koko_generation`を発行し、旧API Cookieを消去。世代はランダムUUIDと、検証済み`sub:session_id`（小文字UUID）のSHA-256を連結した値です。本人/セッションIDそのものはCookieへ入れませんが、hashを匿名化や認証署名とは扱いません。
+- 世代CookieもSecure・HttpOnly・Path=/・SameSite=Lax・Domainなし。最大1年の識別子であり、認証・JWT・API Cookieの寿命は延長しません。欠落・期限切れ・`ended`・重複・chunk・不正形式なら発行と中継を拒否します。
+- 発行要求の世代をAPI Cookieへ束縛し、中継は現在の世代との完全一致を要求します。発行routeは世代を更新しないため、終了や再ログイン後に届いた古い発行応答は中継できません。古いSSR更新Cookieが戻った場合も、発行時に検証したAuthの本人/セッションが新世代と異なれば拒否します。
+- 中継は一致確認後に包みを外し、Workerには従来どおりraw JWTのAPI Cookieだけを渡します。世代Cookie・包み・SSR Cookieを転送しません。旧raw JWTだけのWeb Cookieへの互換fallbackはありません。有効化時は関連処理を揃え、改めてログインが必要です。
+
+これは通常ブラウザの応答順序対策であり、JWTの即時失効、盗まれたCookieの再送、XSS、既にWorkerへ渡した処理の取消しを保証しません。別端末のCookieは削除できず、同時に進行中のOAuth callbackは新たなログインを成立させ得ます。Supabaseのglobal signOutも既発行JWTを即時失効させません。実ブラウザの複数タブ・refresh競合の受入は後続です。今後追加する本人情報/CSRFの画面内状態も終了時に破棄し、古い取得結果を再表示しない設計が必要です。
+
+[競合試験](test/api-sign-out.test.ts)は合成Authと実NextResponseのCookieを用い、終了/再ログイン→旧発行応答適用→中継拒否、別本人/同一本人の旧Authセッションから新世代への発行拒否を検査します。[順序・失敗試験](test/sign-out.test.ts)はAPI失敗時もAuth終了を試すこと、部分失敗、時間/容量上限を検査します。実Next E2Eは無効時の503・Cookie非変更とmethod拒否だけであり、有効な実ブラウザ/SDK/クラウドの完了を証明しません。
+
+根拠（2026-10-04確認）：[Supabase signOutのscopeとJWTの残存](https://supabase.com/docs/reference/javascript/auth-signout)、[検証対象のJWT claim](https://supabase.com/docs/guides/auth/jwt-fields)、[Next.jsのCookie書込み境界](https://nextjs.org/docs/app/api-reference/functions/cookies)。
 
 ## 本人情報の同一origin中継（既定無効）
 
@@ -75,7 +98,7 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 - サーバー専用`KOKO_API_PROXY_ENABLED`と`KOKO_API_COOKIE_ENABLED`がともに小文字の`true`、`KOKO_WEB_ORIGIN`が正規HTTPS origin、`KOKO_API_UPSTREAM_ORIGIN`が`https://koko-api-dev.arcer-jp.workers.dev`へ完全一致する場合だけ通信します。`NEXT_PUBLIC_`へ置きません。未設定・不完全・不正設定は契約の500 `INTERNAL_ERROR`となり、外部通信・Cookie変更はありません。別のWorkerやproductionを追加する場合は許可先・試験をコードレビューします。
 - 要求URLのorigin/pathを固定し、query等は拒否。書込みは完全一致の`Origin`必須、GETも指定があれば照合します。`Sec-Fetch-Site`は指定時に`same-origin`のみ（GETは`none`も可）。欠落しても書込みOriginとCSRFは省略しません。CORS非許可、未対応methodは405、Host/Forwardedから補完しません。
-- イベントUUID、単一の`__Host-koko_session`（発行側と同じ3,500文字上限）を要求。Cookie全体16KiB超過・重複・chunk・Authorization併送は拒否します。Supabase SSR/Cloudflare Access/その他のCookie、アクセス用秘密header、任意headerを透過せず、転送はAPI用Cookie・固定Origin・同一origin metadata・イベントID・JSON用headerと書込みCSRFに限定します。
+- イベントUUID、単一の`__Host-koko_session`と一致する世代を要求（包み内JWTは発行側と同じ3,500文字上限）。Cookie全体16KiB超過・重複・chunk・Authorization併送は拒否します。Supabase SSR/Cloudflare Access/世代/その他のCookie、アクセス用秘密header、任意headerを透過せず、転送はraw JWTのAPI用Cookie・固定Origin・同一origin metadata・イベントID・JSON用headerと書込みCSRFに限定します。
 - 書込みJSONは実ストリームで1KiB・UTF-8・1秒以内を検査し、content encodingは受け付けません。既存clientの実行時検査で表示名/同意/CSRFを検査・投影します。JWTの署名・Google条件・イベント所属・CSRFのHMAC・DB認可はWorkerが再検査し、Webの形式検査で代替しません。
 
 ### 応答・失敗時の扱い

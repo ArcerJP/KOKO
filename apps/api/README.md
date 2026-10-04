@@ -39,7 +39,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義していますが、現�
 
 ### 未実装・実接続前の条件
 
-発行側の正本は[WebのAPI用Cookie処理](../web/README.md#api用cookieの発行処理既定無効)です。既定無効の専用routeをローカル追加しましたが、画面・callback・logoutへの統合は未実装です。受信Cookie headerだけではSecure・HttpOnly等の属性を検証できません。既存のSupabase SSRログインからコピーしただけで完成とは扱いません。
+発行側の正本は[WebのAPI用Cookie処理](../web/README.md#api用cookieの発行処理既定無効)です。callback・ログアウト・中継への条件付き連携はローカル実装済みですが、画面からの発行/更新・実環境での有効化は未実施です。Web内部の世代付きCookieは中継で包みを外し、Workerには従来のraw JWTだけを送ります。Workerの受信契約は変更しません。受信Cookie headerだけではSecure・HttpOnly等の属性を検証できません。既存のSupabase SSRログインからコピーしただけで完成とは扱いません。
 
 [本人情報3操作の同一origin中継](../web/README.md#本人情報の同一origin中継既定無効)をWeb側へ既定無効で追加しました。CookieとOriginの実伝搬、Accessとの両立、鍵の登録、実Google認証・refresh・logout・失効を確認してから有効化します。中継はJWT/CSRFの形式検査だけで、Workerの本人・所属・HMAC検証を代替しません。Secret登録・認証設定変更・実配備は[保護操作の個別確認](../../AGENTS.md#保護操作の確認)へ分離します。API境界の模擬試験は実ブラウザCookieや実クラウド受入を証明しません。
 

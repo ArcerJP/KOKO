@@ -62,3 +62,16 @@ test("本人情報中継は既定無効で、未対応methodも閉じる", async
     expect(response.headers()["access-control-allow-origin"]).toBeUndefined();
   }
 });
+
+test("API終了routeは既定無効で、未対応methodとCookie変更を拒否", async ({
+  request,
+}) => {
+  const response = await request.post("/auth/api-sign-out");
+  expect(response.status()).toBe(503);
+  expect(await response.json()).toEqual({ code: "API_SESSION_UNAVAILABLE" });
+  expect(response.headers()["set-cookie"]).toBeUndefined();
+  expect(response.headers()["cache-control"]).toBe("private, no-store");
+  const get = await request.get("/auth/api-sign-out");
+  expect(get.status()).toBe(405);
+  expect(get.headers()["allow"]).toBe("POST");
+});

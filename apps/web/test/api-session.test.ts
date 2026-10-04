@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IncomingMessage } from "node:http";
 import { Socket } from "node:net";
+import { createHash } from "node:crypto";
 import { NodeNextRequest } from "next/dist/server/base-http/node";
 import { NextRequestAdapter } from "next/dist/server/web/spec-extension/adapters/next-request";
 
@@ -19,13 +20,20 @@ import {
 const origin = "https://web.example.test";
 const userId = "11111111-1111-4111-8111-111111111111";
 const token = "synthetic.access.signature";
+const sessionId = "33333333-3333-4333-8333-333333333333";
+const generation = `22222222-2222-4222-8222-222222222222.${createHash("sha256").update(`${userId}:${sessionId}`).digest("hex")}`;
 const epoch = 1791000000;
 const google = {
   role: "authenticated",
   is_anonymous: false,
   app_metadata: { provider: "google", providers: ["google"] },
 };
-const claims = { ...google, sub: userId, exp: epoch + 600 };
+const claims = {
+  ...google,
+  sub: userId,
+  session_id: sessionId,
+  exp: epoch + 600,
+};
 
 function request(
   method = "POST",
@@ -39,7 +47,7 @@ function request(
       Origin: origin,
       "X-KOKO-Session-Request": "1",
       "Sec-Fetch-Site": "same-origin",
-      Cookie: "sb-project-auth-token=synthetic-ssr-cookie",
+      Cookie: `__Host-koko_generation=${generation}; sb-project-auth-token=synthetic-ssr-cookie`,
       ...init?.headers,
     },
   });
@@ -119,6 +127,7 @@ describe("Web APIセッションCookie bridge", () => {
         origin,
         "x-koko-session-request": "1",
         "content-length": "0",
+        cookie: `__Host-koko_generation=${generation}`,
       };
       incoming.push(null);
       const req = NextRequestAdapter.fromNodeNextRequest(
@@ -201,7 +210,9 @@ describe("Web APIセッションCookie bridge", () => {
     expect(createClient).toHaveBeenCalledWith({ requireCookieWrites: true });
     expect(mock.getUser).toHaveBeenCalledExactlyOnceWith(token);
     expect(mock.getClaims).toHaveBeenCalledExactlyOnceWith(token);
-    expect(cookie(response)).toContain(`__Host-koko_session=${token};`);
+    expect(cookie(response)).toContain(
+      `__Host-koko_session=v1.${generation}.${token};`,
+    );
     expect(cookie(response)).toContain("Max-Age=300");
     expect(cookie(response)).toContain(
       `Expires=${new Date((epoch + 300) * 1000).toUTCString()}`,
@@ -224,13 +235,13 @@ describe("Web APIセッションCookie bridge", () => {
     const second = await POST(
       request("POST", {
         headers: {
-          Cookie: `__Host-koko_session=${token}; sb-project-auth-token=refreshed`,
+          Cookie: `__Host-koko_generation=${generation}; __Host-koko_session=v1.${generation}.${token}; sb-project-auth-token=refreshed`,
         },
       }),
     );
     await expectResponse(second, 200);
     expect(cookie(second)).toContain(
-      "__Host-koko_session=fresh.access.signature;",
+      `__Host-koko_session=v1.${generation}.fresh.access.signature;`,
     );
     expect(cookie(second)).toContain("Max-Age=45");
     expect(mock.getUser).toHaveBeenLastCalledWith("fresh.access.signature");

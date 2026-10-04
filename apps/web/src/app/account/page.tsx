@@ -19,7 +19,9 @@ export default async function AccountPage() {
       <h1>ログイン状態の確認</h1>
       <section className="panel">
         <p role="status">Googleアカウントでログインしています。</p>
-        <LogoutButton />
+        <LogoutButton
+          apiEnabled={process.env.KOKO_API_COOKIE_ENABLED === "true"}
+        />
       </section>
       <p>
         <Link href="/">端末内の撮影・トリム検証へ</Link>

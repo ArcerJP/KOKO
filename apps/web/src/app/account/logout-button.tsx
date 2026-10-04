@@ -1,23 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createBrowserAuthClient } from "../../auth/browser";
+import { completeSignOut } from "../../auth/sign-out";
 
-export function LogoutButton() {
+export function LogoutButton({ apiEnabled = false }: { apiEnabled?: boolean }) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const running = useRef(false);
 
   const signOut = async () => {
+    if (running.current) return;
+    running.current = true;
     setPending(true);
     setFailed(false);
     try {
-      const supabase = createBrowserAuthClient();
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      await completeSignOut(apiEnabled, () =>
+        createBrowserAuthClient().auth.signOut(),
+      );
       window.location.replace("/login");
     } catch {
       setFailed(true);
       setPending(false);
+      running.current = false;
     }
   };
 
