@@ -44,7 +44,7 @@ TypeScriptは型生成ツールのpeer範囲を優先して5.9.3を固定して�
 
 FEの配信はVercel、API/メディアは同一originの経路からWorkersへルーティングします。ルーティング方式の具体設定とCookie/Rangeの伝搬をB1-8で検証し、外向きキャッシュを無効化します。rewriteを認証機構と見なしません。FE側のOAuth callback/セッション処理はNode runtimeを基本とし、メディアの主処理をNext.jsのServer Actionへ載せません。
 
-本人情報3操作だけは、静的Node Route Handlerで入力・送信先・転送header・応答を制限する中継を採用します。汎用rewriteより検査とサーバー1 hopの負担が増しますが、SSR/Access Cookieや上流の秘密headerを透過せず、既存クライアントの契約検査を再利用できます。業務認可とDBアクセスはWorkerに残し、このJSON専用経路をメディア/Rangeへ拡張しません。既定無効・Accessとの未接続条件は[Web README](../../apps/web/README.md#本人情報の同一origin中継既定無効)へ集約します。
+本人情報3操作だけは、静的Node Route Handlerで入力・送信先・転送header・応答を制限する中継を採用します。汎用rewriteより検査とサーバー1 hopの負担が増しますが、SSR/Access Cookieや上流の秘密headerを透過せず、既存クライアントの契約検査を再利用できます。固定開発APIへのAccessサービス認証はサーバー専用設定から付与するローカル実装です（[ADR-0005](../decisions/ADR-0005-web-access-service-auth.md)）。業務認可とDBアクセスはWorkerに残し、このJSON専用経路をメディア/Rangeへ拡張しません。既定無効・Access実設定前の条件は[Web README](../../apps/web/README.md#本人情報の同一origin中継既定無効)へ集約します。
 
 認証Cookieを利用するメディアは、公開のNext.js画像最適化経路へ流さず、認証ゲートを直接参照する`Image unoptimized`等で扱います。共有画像変換cacheがログイン境界を迂回しないことを否定系で検証します。
 

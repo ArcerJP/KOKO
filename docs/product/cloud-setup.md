@@ -238,6 +238,12 @@ Wrangler 4.147.0の[配備前処理](https://github.com/cloudflare/workers-sdk/b
 
 今回アプリテーブルへの書込みはなく、正式イベント・所属・規約同意は作成していません。クラウド側の所属あり`GET /me`正常応答・`PATCH /me`更新、別実アカウントの境界、全テーブルRLS、Cookie／CSRF、Next.js画面、メディア実接続は未検証または未実装です。ローカルWorkerで確認済みの正常系と、今回の外部読取り／拒否系を混同しません。追加配備・権限/Secret/Access変更・自動配備再開は行っていません。
 
+#### WebからのAccessサービス認証の準備（2026-10-04、実設定未適用）
+
+Webサーバーの固定API中継へ、サーバー専用資格情報を付与するローカル処理を追加しました。[設定条件と本人ゲート](../../apps/web/README.md#accessサービス認証ローカル実装実設定未適用)、[選定理由](../decisions/ADR-0005-web-access-service-auth.md)を参照してください。合成資格情報での検証であり、実service tokenの発行・登録、Access policyの追加/変更、Web/Worker設定・DB変更、実配備・有効化・接続受入を実施した記録ではありません。
+
+同日21:40 JSTのGitHub読取り確認ではmain `d420509`、`KOKO_API_AUTO_DEPLOY_ENABLED=false`、[API Deploy](https://github.com/ArcerJP/KOKO/actions/runs/37202834155)はVerification成功/Deploy skip、実行中・待機中の配備0件でした。既存Access設定は変更していません。この確認からCloudflare管理画面の設定やアプリ受入を新たに検証済みとは扱いません。
+
 #### GitHub Actionsへの移行手順（外部操作は別途承認）
 
 以下は9月29日〜10月2日の移行履歴・初期設定案です。継続運用では[10月3日の追加権限と停止状態](#2026-10-03の配備障害と再発防止)を先に確認してください。

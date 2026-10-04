@@ -389,6 +389,9 @@ describe("遅れた発行応答とlogout・別ログインの交差", () => {
         KOKO_API_PROXY_ENABLED: "true",
         KOKO_WEB_ORIGIN: origin,
         KOKO_API_UPSTREAM_ORIGIN: "https://koko-api-dev.arcer-jp.workers.dev",
+        KOKO_API_ACCESS_CLIENT_ID: "synthetic-access-client-id-for-tests-only",
+        KOKO_API_ACCESS_CLIENT_SECRET:
+          "synthetic-access-client-secret-for-tests-only",
       };
       const call = () =>
         handleAccountProxy(

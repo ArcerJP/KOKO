@@ -12,11 +12,15 @@ const apiCookie = `__Host-koko_session=v1.${generation}.synthetic.access.signatu
 const cookie = `${generationCookie}; ${apiCookie}`;
 const csrf = "synthetic-csrf-value-for-tests-only";
 const requestId = "00000000-0000-4000-8000-000000000001";
+const accessId = "synthetic-access-client-id-for-tests-only";
+const accessSecret = "synthetic-access-client-secret-for-tests-only";
 const config = {
   KOKO_API_PROXY_ENABLED: "true",
   KOKO_API_COOKIE_ENABLED: "true",
   KOKO_WEB_ORIGIN: origin,
   KOKO_API_UPSTREAM_ORIGIN: upstream,
+  KOKO_API_ACCESS_CLIENT_ID: accessId,
+  KOKO_API_ACCESS_CLIENT_SECRET: accessSecret,
 };
 type Resource = "me" | "consents";
 function request(
@@ -72,7 +76,10 @@ async function expectError(response: Response, code: keyof typeof errors) {
   expect(response.headers.get("cache-control")).toBe("private, no-store");
   expect(response.headers.has("set-cookie")).toBe(false);
 }
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 describe("固定された本人情報中継", () => {
   it.each([
@@ -118,6 +125,8 @@ describe("固定された本人情報中継", () => {
       expect(init?.signal).toBeInstanceOf(AbortSignal);
       expect(Object.fromEntries(new Headers(init?.headers))).toEqual({
         accept: "application/json",
+        "cf-access-client-id": accessId,
+        "cf-access-client-secret": accessSecret,
         cookie: rawCookie,
         origin,
         "sec-fetch-site": "same-origin",
@@ -133,6 +142,8 @@ describe("固定された本人情報中継", () => {
         "set-cookie",
         "location",
         "access-control-allow-origin",
+        "cf-access-client-id",
+        "cf-access-client-secret",
       ])
         expect(response.headers.has(header)).toBe(false);
       expect(response.headers.get("cache-control")).toBe("private, no-store");
@@ -145,6 +156,22 @@ describe("固定された本人情報中継", () => {
     { ...config, KOKO_API_PROXY_ENABLED: undefined },
     { ...config, KOKO_API_PROXY_ENABLED: "TRUE" },
     { ...config, KOKO_API_COOKIE_ENABLED: "false" },
+    ...["KOKO_API_ACCESS_CLIENT_ID", "KOKO_API_ACCESS_CLIENT_SECRET"].flatMap(
+      (key) =>
+        [
+          undefined,
+          "",
+          " value",
+          "value ",
+          "a b",
+          "a\rb",
+          "a\nb",
+          "a\tb",
+          "a\0b",
+          "あ",
+          "a".repeat(513),
+        ].map((value) => ({ ...config, [key]: value })),
+    ),
     ...[
       undefined,
       "http://web.example.test",
@@ -462,6 +489,176 @@ describe("固定された本人情報中継", () => {
       "INTERNAL_ERROR",
     );
     expect(saves).toBe(1);
+  });
+});
+
+describe("サーバー専用Access資格情報", () => {
+  it("呼出しごとに環境値を読み、欠落時は利用者headerでも補完しない", async () => {
+    for (const [key, value] of Object.entries(config)) vi.stubEnv(key, value);
+    const fetcher = vi.fn<typeof fetch>(async () => success());
+    expect(
+      (await handleAccountProxy(request(), "me", undefined, fetcher)).status,
+    ).toBe(200);
+    const rotated = "synthetic-rotated-secret-for-tests-only";
+    vi.stubEnv("KOKO_API_ACCESS_CLIENT_SECRET", rotated);
+    expect(
+      (await handleAccountProxy(request(), "me", undefined, fetcher)).status,
+    ).toBe(200);
+    expect(
+      new Headers(fetcher.mock.calls[0]?.[1]?.headers).get(
+        "cf-access-client-secret",
+      ),
+    ).toBe(accessSecret);
+    expect(
+      new Headers(fetcher.mock.calls[1]?.[1]?.headers).get(
+        "cf-access-client-secret",
+      ),
+    ).toBe(rotated);
+    vi.stubEnv("KOKO_API_ACCESS_CLIENT_SECRET", undefined);
+    await expectError(
+      await handleAccountProxy(
+        request("GET", "me", {
+          "CF-Access-Client-Id": accessId,
+          "CF-Access-Client-Secret": rotated,
+        }),
+        "me",
+        undefined,
+        fetcher,
+      ),
+      "INTERNAL_ERROR",
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["a".repeat(64), `cfast_${"a".repeat(48)}`, "a".repeat(512)])(
+    "安全なopaque形式を上流へ委譲 %#",
+    async (value) => {
+      const fetcher = vi.fn<typeof fetch>(async () => success());
+      expect(
+        (
+          await handleAccountProxy(
+            request(),
+            "me",
+            {
+              ...config,
+              KOKO_API_ACCESS_CLIENT_SECRET: value,
+            },
+            fetcher,
+          )
+        ).status,
+      ).toBe(200);
+      expect(
+        new Headers(fetcher.mock.calls[0]?.[1]?.headers).get(
+          "cf-access-client-secret",
+        ),
+      ).toBe(value);
+    },
+  );
+
+  it.each([401, 403, 302, 307, 503])(
+    "Access拒否 %s は再送/redirect/生本文公開なし",
+    async (status) => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const fetcher = vi.fn<typeof fetch>(
+        async () =>
+          new Response(accessSecret, {
+            status,
+            headers: {
+              "Content-Type": "text/html",
+              Location: "https://evil.example.test",
+              "Set-Cookie": accessSecret,
+            },
+          }),
+      );
+      await expectError(
+        await handleAccountProxy(request(), "me", config, fetcher),
+        "INTERNAL_ERROR",
+      );
+      expect(fetcher).toHaveBeenCalledOnce();
+      expect(log).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([accessId, accessSecret])(
+    "応答headerに反射された資格情報を除外 %#",
+    async (value) => {
+      const response = await handleAccountProxy(
+        request(),
+        "me",
+        config,
+        async () =>
+          Response.json(
+            { ...mockMe, csrf_token: csrf },
+            {
+              headers: {
+                "CF-Access-Client-Id": value,
+                "CF-Access-Client-Secret": value,
+                "Set-Cookie": value,
+              },
+            },
+          ),
+      );
+      expect(response.status).toBe(200);
+      expect(JSON.stringify([...response.headers])).not.toContain(value);
+      expect(await response.text()).not.toContain(value);
+    },
+  );
+
+  it.each([
+    JSON.stringify({ ...mockMe, csrf_token: csrf, display_name: accessId }),
+    JSON.stringify({
+      ...mockMe,
+      csrf_token: csrf,
+      display_name: `x${accessSecret}y`,
+    }),
+    JSON.stringify({ ...mockMe, csrf_token: csrf, [accessId]: "value" }),
+    JSON.stringify({ ...mockMe, csrf_token: csrf, nested: [accessSecret] }),
+    JSON.stringify({
+      ...mockMe,
+      csrf_token: csrf,
+      display_name: accessSecret,
+    }).replace(
+      accessSecret,
+      [...accessSecret]
+        .map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`)
+        .join(""),
+    ),
+  ])("decoded JSONに反射された資格情報を拒否 %#", async (body) => {
+    await expectError(
+      await handleAccountProxy(
+        request(),
+        "me",
+        config,
+        async () =>
+          new Response(body, {
+            headers: { "Content-Type": "application/json" },
+          }),
+      ),
+      "INTERNAL_ERROR",
+    );
+  });
+
+  it("契約エラーのrequest UUIDへの反射も返さない", async () => {
+    await expectError(
+      await handleAccountProxy(
+        request(),
+        "me",
+        {
+          ...config,
+          KOKO_API_ACCESS_CLIENT_ID: requestId,
+        },
+        async () =>
+          Response.json(
+            { code: "FORBIDDEN", request_id: requestId },
+            { status: 403 },
+          ),
+      ),
+      "INTERNAL_ERROR",
+    );
   });
 });
 

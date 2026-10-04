@@ -153,9 +153,25 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 
 成功は既存clientで検査・投影した本人情報/ackだけで、Cookie経路の本人情報にはCSRF値が必須です。エラーは契約code/status/request UUIDを照合します。上流のSet-Cookie/Location/CORS/cache header・例外詳細を返さず、全応答を`private, no-store`とします。API Cookieの更新・消去は発行処理の責務であり、中継の401で暗黙に更新しません。429の任意`retry_after_seconds`など、既存clientが保持しない補助情報は透過しません。
 
-**Access保護されたWorkerへのサーバー間認証は未実装です。** WebサーバーはブラウザのWorker用Accessセッションを自動継承しません。今回service tokenの発行・設定・転送、保護解除を行っておらず、実Workerが302を返す場合は失敗します。認証方式の追加・本人による設定・通し試験を別工程にし、設定だけ先に有効化しません。
+### Accessサービス認証（ローカル実装・実設定未適用）
 
-[中継試験](test/account-proxy.test.ts)は合成Cookie/上流応答で3操作・秘密header非転送・不正入力/応答・時間/容量上限・取消し・更新非再送を検証します。[実Next E2E](e2e/login.spec.ts)は既定無効の500とOPTIONS拒否です。有効時のブラウザCookie保存、実Access/Supabase/DB接続やアプリ全体の認証ゲートの完成を証明しません。
+2026-10-04、固定開発Workerへの3操作に限り、サーバー専用の`KOKO_API_ACCESS_CLIENT_ID`・`KOKO_API_ACCESS_CLIENT_SECRET`から`CF-Access-Client-Id`・`CF-Access-Client-Secret`を付与する処理を追加しました。上記の有効化条件に加え、**両方の資格情報が必須**です。各値は空白/制御文字/非ASCIIを含まない1〜512文字の可視ASCIIとして検査し、欠落・片方のみ・不正なら通信前に500で閉じます。新旧token形式の認証や期限・policyの判定はCloudflareが担当します。
+
+値はNode Route Handlerで要求ごとに読み、`server-only`でClient Componentへのimportを禁止します。`.env.example`は空欄のままです。`NEXT_PUBLIC_`、クライアントprops、URL、ログ、応答、Gitへ値を渡しません。既存の転送header許可リストへこのサーバー由来2項目だけを追加し、ブラウザからの同名headerや`CF_Authorization`は引き続き使用しません。資格情報の存在で利用者Cookie・Origin・CSRF・Worker認可を省略しません。
+
+リダイレクトを追わず、Access拒否/ログインHTMLも固定エラーで閉じ、認証方式のfallbackや自動再送は行いません。上流のheaderは透過せず、JSONをdecodeしたkey/valueに資格情報の完全値が含まれた場合も拒否します。これは既知の値の反射対策であり、分割・変換等を含むあらゆる漏洩を検出する保証ではありません。上流やプラットフォームのログにも認証headerを記録させない運用が必要です。
+
+**実際のtoken発行・登録・Access policy変更・有効化・配備・通し受入は未実施です。** 採用理由と権限境界は[ADR-0005](../../docs/decisions/ADR-0005-web-access-service-auth.md)。service tokenはWebサーバーが開発用外周保護を通るための資格情報であり、利用者のGoogle JWTやDB権限、Worker配備用tokenとは別です。
+
+#### 実接続前の本人ゲート
+
+1. 対象Access application・固定Worker・既存All traffic/本人限定policyを読取り確認。変更案はこのapplicationへの個別service tokenを許可する`Service Auth`に限定。`Bypass`、`Everyone`、`Any Access Service Token`、組織全体strict設定の変更で代替しません。
+2. token名・期限・許可するWeb環境を本人が決定し、対象を明示して作成/権限変更を個別確認。`koko-api-dev-deploy`やSupabaseキーを流用しません。値は本人がSecret保管先へ直接入力し、チャットへ貼りません。
+3. 承認されたWebサーバー環境にだけ2項目を登録。Preview全体へ無条件配布せず、環境変更に伴う配備も別に確認。全flagは準備完了までOFFを維持します。
+4. Worker Cookie/CSRF設定・追加migration・正式イベント/所属・規約採択を含む実受入計画と対象SHAを照合。実配備・DB書込み・有効化は個別確認し、自動配備OFFを維持します。
+5. 本人Googleセッションで正常系、未認証/無効service token、JWT欠落、Origin/CSRF違反、所属なし・旧規約・BAN、終了/更新競合を確認。失効日、更新責任者、停止/失効手順を記録。合成試験を実接続成功と扱いません。
+
+[中継試験](test/account-proxy.test.ts)は合成Cookie/資格情報/上流応答で3操作・利用者の秘密header非転送・不完全設定・環境値の都度読取り・反射拒否（JSON escape含む）・不正入力/応答・時間/容量上限・取消し・更新非再送を検証します。VitestだけNext同梱の空markerへ解決し、productionの`server-only`境界は変更しません。[実Next E2E](e2e/login.spec.ts)は既定無効の500とOPTIONS拒否です。有効時のブラウザCookie保存、実Access/Supabase/DB接続やアプリ全体の認証ゲートの完成を証明しません。
 
 根拠（2026-10-04確認）：[Next.js BFFの境界](https://nextjs.org/docs/app/guides/backend-for-frontend)、[OWASP SSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)、[Cloudflare Accessのサーバー間資格情報](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)。
 
