@@ -118,6 +118,8 @@ function isJson(headers: Headers) {
 
 export type JsonOperation = {
   path: string;
+  // Exact request search, supplied only by a descriptor that validated its schema.
+  search?: string;
   upstreamPath?: string;
   methods: readonly string[];
   inputLimit: number;
@@ -169,7 +171,7 @@ export async function handleJsonProxy(
   if (
     url.origin !== origin ||
     url.pathname !== `/api/${operation.path}` ||
-    url.search ||
+    url.search !== (operation.search ?? "") ||
     url.hash ||
     url.username ||
     url.password ||

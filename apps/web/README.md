@@ -35,6 +35,23 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 根拠：[Fetch標準のrequest mode](https://fetch.spec.whatwg.org/#concept-request-mode)、[OWASPのCSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)。API契約は[OpenAPI](../../packages/contract/openapi.yaml)、Workerと追加migrationの実装/未適用境界は[API README](../api/README.md#現行規約の同意保存ローカル実装)を正本とします。
 
+## 本人の投稿一覧・状態画面（F2-4/F3-4の一部、既定無効）
+
+2026-10-05、`/account/posts`へ[本人投稿画面](src/app/account/posts/page.tsx)を追加しました。アカウント/送信画面から移動でき、[型付きclient](src/api/client.ts)の`listOwnPosts`/`getPostStatus`と[本人専用API](../api/README.md#本人の投稿状態と一覧b2-6の一部既定無効)を接続します。実環境は未有効化です。
+
+- **入口**：[設定検査](src/api/own-posts-config.ts)でサーバー専用`KOKO_OWN_POSTS_UI_ENABLED`・`KOKO_OWN_POSTS_PROXY_ENABLED`と既存のアカウント画面/Cookie/API中継flagがすべて小文字の`true`、event IDがUUIDである場合だけ有効。Google単独の検証済みclaimsから期待本人を固定します。SSRで投稿/理由/cursorを取得せず、秘密をClientへ渡しません。未設定時は案内だけです。
+- **中継**：[専用descriptor](src/api/own-posts-proxy.ts)から既存の固定先JSON中継を使い、`GET /api/me/posts`と`GET /api/posts/{post_id}/status`だけを許可します。中継flagが未設定なら全methodで404、設定時もGET以外は405。一覧queryは重複なしの`limit`（1〜100、既定30）/`cursor`だけ、単一状態queryは不可。既存の本人情報/更新経路は引き続きqueryを拒否します。Cookie世代・Origin・Accessのサーバー専用header・上流10秒/256KiB・redirect拒否・応答秘密検出・`private, no-store`を維持し、CORSを追加しません。
+- **表示**：処理中・保留・BLOCK等の全契約状態、投稿ID・日本時間の作成日時・固定理由だけです。[応答投影](src/api/own-posts-contract.ts)で任意の分類・判定自由文・URL・所有者情報を捨てます。型/日付/並び順/重複/別eventを検査し、Postgresのmicrosecondを保ってページ境界を比較します。cursor署名/期限の最終検証と本人認可はWorkerの責務です。
+- **操作**：[controller](src/api/own-posts-controller.ts)は初期自動取得なし。「本人確認・先頭から読み込む」、30件ずつの「続きを読み込む」、表示済み投稿の単一更新だけです。各操作はCookie発行/更新→本人/event確認→投稿取得→本人/event再確認の順で最大30秒、同時1操作・自動再送/ポーリングなし。BAN・未同意でも本人の状態確認は妨げません。操作時の追加通信と手動更新は必要ですが、背景通信/古いセッションの自動使用を抑えます。
+- **保持と破棄**：最大300件まで画面メモリのみ、履歴/cursorをstorageや共有cacheへ保存しません。各操作中と失敗時は旧表示を消去。期限切れ/不正cursorは先頭再読込みを案内します。単一更新以外の行は前回取得時点であると表示し、一覧を固定snapshotとは扱いません。Auth通知、非表示、unmountで中断・破棄、別本人へのログイン/ログアウト・`pagehide`・既存のタブ間終了通知で画面を閉じ、遅延応答を拒否します。通知遅延/未配信・他端末の即時失効・取得済み画面の回収までは保証しません。
+- **未実装の区別**：写真/動画、原本/判定詳細は表示せず、公開フィードへのリンクや未実装の削除/異議申立て送信ボタンを作りません。保留/BLOCK/非表示では申立ては準備中、削除状態は保存先の物理削除完了を意味しないと明記します。正式な理由分類、申立て/本人削除、公開フィードは後続です。
+
+[client試験](test/own-posts-client.test.ts)・[中継試験](test/own-posts-proxy.test.ts)・[controller試験](test/own-posts-controller.test.ts)・[入口/表示試験](test/own-posts-page.test.ts)で境界と失敗を検証します。[Chromium試験](e2e/own-posts.spec.ts)はローカル限定bundleと合成Auth/HTTPを使い、実Reactの読込み/ページ送り/単一更新、期限切れ、別tabの終了通知、Auth変化/非表示/離脱と390/1280px表示を検査します。productionにはharnessや偽認証routeを追加しません。実Next経路の既定OFFも確認しますが、実Google→Cookie→Access→DBの通し受入や実機受入の代替ではありません。
+
+有効化は既存Cookie/Access受入、追加DBの実適用、Workerの本人読取りflag/専用cursor鍵とWeb設定の整合確認後です。秘密登録・設定変更・DB適用・実配備は[本人の保護操作](../../AGENTS.md#保護操作の確認)に分離し、この実装では行いません。第2・第3やF2-4/F3-4全体の完了とは扱いません。
+
+根拠（2026-10-05確認）：[Next.js Route Handlers](https://nextjs.org/docs/app/getting-started/route-handlers)、[Reactの購読とsnapshot](https://react.dev/reference/react/useSyncExternalStore)、[MDN pagehide](https://developer.mozilla.org/en-US/docs/Web/API/Window/pagehide_event)。
+
 ## API用Cookieの発行処理（既定無効）
 
 2026-10-04にWeb内部の`/auth/api-session`を追加しました。[Route Handler](src/app/auth/api-session/route.ts)から[発行処理](src/auth/api-session.ts)を呼びます。イベントAPIとは別のWeb専用経路であり、OpenAPIの本人情報契約を変更しません。**callback・中継・ログアウト・表示名/規約同意画面の操作時発行/更新は条件付きでローカル実装済みです。設定値の登録・実環境での有効化は未実施です。**
