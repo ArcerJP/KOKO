@@ -121,7 +121,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 
 署名期限はPUTの有効期限です。completeは新しいURLを発行せず、期限を延長しません。署名期限後でもイベント/お題の受付中なら原本確認を受け付けます。保存済みでも受付終了やBAN等によりcommitできない原本、固定後の誤ETag、provisioning結果不明は自動で作り直さず、後続の回収/運用手順へ残します。原本は既存singleの条件付きPUTと1投稿1multipartで上書きを防ぎ、将来の処理consumerも記録したobject version/ETagを確認する必要があります。
 
-**追加migrationは実DB未適用、completeは未配備。R2通知/定期照合の回復コードは下記のローカル実装までで、実購読・Cronは未設定です。未完了uploadの孤児回収、outbox dispatcher・変換/公開consumer、FE送信キューと通し受入は未実装です。** B1-6全体や原本保存の実受入が完了したとは扱いません。
+**追加migrationは実DB未適用、completeは未配備。R2通知/定期照合の回復とoutbox配送は下記のローカル実装までで、実Queue・購読・Cronは未設定です。未完了uploadの孤児回収、変換/公開consumer、実環境の通し受入は未完了です。** [FE送信キュー](../web/README.md#端末内送信キューと投稿画面f1-5f2-1既定無効)もローカル実装済みですが、B1-6全体や原本保存の実受入が完了したとは扱いません。
 
 [SQL試験](../../packages/contract/test/upload-completion.test.mjs)は全migration・service専用権限・再送・guard変化・実測不一致・outbox失敗時取消しを検証します。[HTTP試験](test/upload-completion.spec.ts)は上流mock、[R2試験](test/r2-completion.spec.ts)は公式ETagベクトルとローカルR2を使用します。固定Miniflareはpart ETagにランダム値を使うため、multipart試験だけ合成内容のMD5からlocal part識別子へ変換するfixtureを挟み、実ローカル組立てと最終HEADを検証します。本番コードのチェックは緩めません。実S3転送、多接続DB競合、Google/Accessを通した実受入は未検証です。
 
@@ -148,6 +148,24 @@ DLQ監視/回収、スキャンの滞留・負荷検証、未完了uploadの失�
 [SQL試験](../../packages/contract/test/upload-completion.test.mjs)はAPI/回復の順序・同じoutboxへの合流・guard変化・権限・claim上限/繰下げを検証します。[Workers試験](test/upload-recovery.spec.ts)は通知hint・RPC/R2異常・HEAD限定・個別再試行・定期候補検証・既定無効入口を検証します。共通の[応答parser](src/completion-result.ts)と既存HTTP試験で、公開受領票へ内部情報を混入させません。
 
 根拠（2026-10-05確認）：[R2通知schema](https://developers.cloudflare.com/r2/buckets/event-notifications/)、[Queuesのack/retry・DLQへの遷移](https://developers.cloudflare.com/queues/configuration/batching-retries/)。
+
+## メディア処理予約のQueue配送（B1-6の後段、既定無効）
+
+[配送Worker](src/media-dispatch.ts)と[追加migration](supabase/migrations/20261005050000_dispatch_media_outbox.sql)は、complete/回復が作った`process_media` outboxをCloudflare Queuesのproducerへ渡すローカル実装です。**Queue受付は変換・判定・公開の成功ではありません。consumerは未実装のため、有効化しません。** 新依存や公開HTTP route、実binding/Cronは追加していません。
+
+- **入口**：文字列`KOKO_MEDIA_DISPATCH_ENABLED=true`かつ専用cron `* * * * *`だけ。`MEDIA_PROCESSING_QUEUE` producer bindingと既存Supabase設定を検証してからDBへ接続します。indexで5分間隔のR2回復cronと振り分け、R2通知consumerをメディア処理用として共用しません。受付flagと独立して停止できます。
+- **claim**：service-role限定`claim_media_dispatch(10)`。`READ COMMITTED`・`FOR UPDATE SKIP LOCKED`で、未完了/未配送・配送期限到来・leaseなし/期限切れの`process_media`だけを最大10件、配送可能時刻/作成時刻/ID順で取得します。全eventを対象とし、120秒のleaseと単調増加する配送attemptを同transactionで記録します。
+- **配送状態の分離**：`dispatch_attempt`、`dispatch_available_at`、`dispatch_locked_until`、`dispatched_at`を追加。従来の処理用`attempt`/`available_at`/`locked_until`/`completed_at`、投稿状態/version/counter/payloadには触れません。送信成功時でも処理完了にはしません。
+- **最小message**：`version:1`、`kind:process_media`、`job_id`/`event_id`/`post_id`/`asset_id`/`post_version`のみ。UUIDは小文字正規形、versionは正の32bit整数。raw payload、原本キー/URL、object version/ETag、利用者ID、秘密は送信しません。再送でも同じID/versionを使用し、配送attemptはmessageに含めません。不正payloadはQueueへ渡さず有限再試行へ残します。
+- **送信と確定**：1 batchをawaitし、正常受付後にだけservice専用`settle_media_dispatch`へ`sent`を渡します。現在のattemptと有効なleaseが一致する場合だけ更新し、期限切れ/旧世代/完了済みは`stale`。一括入力は全件検証後、ID順にlockして更新します。
+- **障害**：送信失敗/10秒timeoutは結果不明として`retry`。DB時刻から15/30/60/120/240/480/900秒の指数backoff、最大8 claimで停止し、行を削除・処理完了にしません。claim応答喪失や送信後DB失敗はlease満了後の再取得になり、重複配送があり得ます。8回目の失敗/lease満了は`exhausted=true`で検出します。これは件数でなく枯渇行の存在、既存8回目の送信中はまだ枯渇としません。
+- **境界**：RPCは固定2本のPOST、redirect禁止、各5秒（本文読取り込み）・64KiB上限。Queue送信10秒を含め通常1 invocationは最大約20秒。生例外・ID・本文をログへ出さず、固定集計`claimed/sent/retry/invalid/settled/stale/exhausted/failed`だけ。`sent`はproducer受付件数、`settled`はsent/retry両方のDB更新件数であり、両者は一致するとは限りません。
+
+将来のconsumerはDB正本のjob/post/asset・object version/ETagを読み直し、削除/BAN/公開停止・post versionを再照合し、job IDとpost versionで冪等化する必要があります。Queueのat-least-onceと「送信→DB確定」の間の障害をexactly-onceと扱いません。配送済み後のconsumer失敗はQueue retry/DLQ側の責務です。
+
+有効化前にconsumer・DLQ/滞留/枯渇監視と回収手順を実装し、実Queue作成・binding/Cron・migration適用・配備を本人の個別確認へ分離します。枯渇行のpayload/attemptを自動修正・リセットしません。現時点は集計出力までで通知連携なし。10件/分は初期上限で、負荷・SLO達成の保証ではありません。
+
+[SQL試験](../../packages/contract/test/media-dispatch.test.mjs)と[Worker試験](test/media-dispatch.spec.ts)で権限・期限/世代・原子性・有限再送・不正/重複/遅延・最小投影を検査します。PGlite単一接続と模擬Queueの成功を、多接続PostgreSQL競合・実Queue配送・変換完了の証拠にはしません。根拠（2026-10-05確認）：[Queues producer API](https://developers.cloudflare.com/queues/configuration/javascript-apis/)、[配送保証](https://developers.cloudflare.com/queues/reference/delivery-guarantees/)、[PostgreSQL行lock](https://www.postgresql.org/docs/current/sql-select.html#SQL-FOR-UPDATE-SHARE)。
 
 ## 本人の投稿状態と一覧（B2-6の一部、既定無効）
 

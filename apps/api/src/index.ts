@@ -2,6 +2,11 @@ import { handleAccount, handleConsent, type AccountEnv } from "./account";
 import { handleUploads, type UploadEnv } from "./uploads";
 import { handleOwnPosts, type OwnPostsEnv } from "./own-posts";
 import {
+  handleMediaDispatchScheduled,
+  mediaDispatchCron,
+  type MediaDispatchEnv,
+} from "./media-dispatch";
+import {
   handleUploadCompletion,
   type CompletionEnv,
 } from "./upload-completion";
@@ -32,6 +37,14 @@ export default {
     );
   },
   async scheduled(controller, env) {
+    if (controller.cron === mediaDispatchCron) {
+      const counts = await handleMediaDispatchScheduled(
+        controller,
+        env as MediaDispatchEnv,
+      );
+      if (counts) console.info("media_outbox_dispatch", counts);
+      return;
+    }
     const counts = await handleUploadRecoveryScheduled(
       controller,
       env as RecoveryEnv,
