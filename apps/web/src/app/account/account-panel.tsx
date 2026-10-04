@@ -7,8 +7,16 @@ import { createBrowserAuthClient } from "../../auth/browser";
 import { postApiSession } from "../../auth/session-post";
 import { LogoutButton } from "./logout-button";
 import { ProfileForm } from "./profile-form";
+import { ConsentForm } from "./consent-form";
+import type { TermsDocument } from "../../api/terms-document";
 
-export function AccountPanel({ eventId }: { eventId: string }) {
+export function AccountPanel({
+  eventId,
+  termsDocument,
+}: {
+  eventId: string;
+  termsDocument: TermsDocument | null;
+}) {
   const [profile] = useState(() => {
     // SSRでは通信を開始しない。実URLは明示操作時にブラウザで確定する。
     const client = () =>
@@ -18,8 +26,11 @@ export function AccountPanel({ eventId }: { eventId: string }) {
         getMe: (signal) => client().getMe(signal),
         updateMe: (input, csrf, signal) =>
           client().updateMe(input, csrf, signal),
+        acceptTerms: (input, csrf, signal) =>
+          client().acceptTerms(input, csrf, signal),
       },
       (signal) => postApiSession("/auth/api-session", signal),
+      termsDocument,
     );
   });
   const state = useSyncExternalStore(
@@ -56,6 +67,11 @@ export function AccountPanel({ eventId }: { eventId: string }) {
         onLoad={() => void profile.load()}
         onEdit={profile.edit}
         onSave={() => void profile.save()}
+      />
+      <ConsentForm
+        state={state}
+        onCheck={profile.checkConsent}
+        onAccept={() => void profile.accept()}
       />
       <LogoutButton apiEnabled onStart={profile.close} />
     </>

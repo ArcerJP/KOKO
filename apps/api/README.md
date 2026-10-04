@@ -6,7 +6,7 @@ TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置�
 
 - Worker名：`koko-api-dev`
 - 開発Workerへ配備済みの処理：`GET /health`、Bearer認証の`GET /me`と`PATCH /me`。全URLをCloudflare Accessで保護し、一般公開した意味ではありません。実クラウドでは読取り／未所属拒否まで受入済みで、所属ありの取得・更新は未検証です。
-- 本人情報API：Supabase Authで本人を検証し、Google単独ログインとイベント所属を確認した後、WorkerだけがDB Secretを使用します。`POST /consents`と既定無効のCookie認証・CSRF受信境界は下記のローカル実装を追加しましたが未配備です。Cookie発行・更新・削除のWeb内部処理も既定無効で、画面・実環境へ未接続です。
+- 本人情報API：Supabase Authで本人を検証し、Google単独ログインとイベント所属を確認した後、WorkerだけがDB Secretを使用します。`POST /consents`と既定無効のCookie認証・CSRF受信境界は下記のローカル実装を追加しましたが未配備です。Cookie発行・更新・削除のWeb内部処理と表示名/規約同意画面は既定無効の条件付き実装で、実環境へ未接続です。
 - 未定義route：JSONの404
 - `/health`へのGET以外のmethod：JSONの405
 - R2 binding：`ORIGINALS_BUCKET`と`DERIVED_BUCKET`
@@ -57,7 +57,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義していますが、現�
 
 **追加migrationは実Supabase未適用、同意APIは未配備です。** 既存初期SQL、正式な規約・イベント・所属・同意は変更していません。ローカルのPGliteは関数実行・権限・版更新・再送・transaction取消しを検証しますが、単一接続のため実PostgreSQLの多接続競合試験とは区別します。Worker試験の上流はmockであり、実RPC・Google・Cookie／CSRF・FE画面の通し試験は後続です。
 
-実適用時は別途本人確認のうえ、追加migrationと権限・schema cacheの反映を確認してからWorkerを配備します。migrationにはPostgRESTのschema cache更新通知を含めています。失敗時に旧版の直接INSERTへ迂回したり、既存同意を削除して再実行したりしません。正式規約の内容・版の採択は運営の確認事項です。
+実適用時は別途本人確認のうえ、追加migrationと権限・schema cacheの反映を確認してからWorkerを配備します。migrationにはPostgRESTのschema cache更新通知を含めています。失敗時に旧版の直接INSERTへ迂回したり、既存同意を削除して再実行したりしません。正式規約の内容・版の採択は運営の確認事項です。[Web同意画面](../web/README.md#現行規約の明示同意画面本文未採択既定無効)は条件付きでローカル実装済みですが、採択本文の一覧は空であり、正式な同意受付を有効にしていません。
 
 根拠：[PostgREST RPC](https://docs.postgrest.org/en/stable/references/api/functions.html)、[Supabaseの関数権限](https://supabase.com/docs/guides/database/functions)、[PostgreSQLの行ロック](https://www.postgresql.org/docs/current/explicit-locking.html)（2026-10-04確認）。
 
