@@ -1,3 +1,4 @@
+import "server-only";
 import { errors, type ErrorCode } from "@koko/contract";
 import { apiCookieName, apiTokenForProxy } from "../auth/api-session-cookies";
 import {
@@ -13,6 +14,8 @@ type Configuration = {
   KOKO_API_COOKIE_ENABLED?: string | undefined;
   KOKO_WEB_ORIGIN?: string | undefined;
   KOKO_API_UPSTREAM_ORIGIN?: string | undefined;
+  KOKO_API_ACCESS_CLIENT_ID?: string | undefined;
+  KOKO_API_ACCESS_CLIENT_SECRET?: string | undefined;
 };
 const upstreamOrigin = "https://koko-api-dev.arcer-jp.workers.dev";
 const uuid =
@@ -49,6 +52,12 @@ function configuredOrigin(config: Configuration): string | null {
 function sessionCookie(headers: Headers): string | null {
   const token = apiTokenForProxy(headers);
   return token ? `${apiCookieName}=${token}` : null;
+}
+
+// Opaque credentials: reject unsafe header values, not old/new token formats.
+// This is not authentication; Cloudflare validates the credential and policy.
+function accessCredential(value: string | undefined): string | null {
+  return value && /^[\x21-\x7e]{1,512}$/.test(value) ? value : null;
 }
 
 async function deadline<T>(
@@ -113,7 +122,7 @@ function isJson(headers: Headers) {
   );
 }
 
-/** Node Route Handler専用。秘密値やAccess認証を自動補完しない。 */
+/** Node Route Handler専用。Access資格情報を利用者のheaderから補完しない。 */
 export async function handleAccountProxy(
   request: Request,
   resource: Resource,
@@ -122,6 +131,8 @@ export async function handleAccountProxy(
     KOKO_API_COOKIE_ENABLED: process.env.KOKO_API_COOKIE_ENABLED,
     KOKO_WEB_ORIGIN: process.env.KOKO_WEB_ORIGIN,
     KOKO_API_UPSTREAM_ORIGIN: process.env.KOKO_API_UPSTREAM_ORIGIN,
+    KOKO_API_ACCESS_CLIENT_ID: process.env.KOKO_API_ACCESS_CLIENT_ID,
+    KOKO_API_ACCESS_CLIENT_SECRET: process.env.KOKO_API_ACCESS_CLIENT_SECRET,
   },
   fetcher: typeof fetch = fetch,
 ): Promise<Response> {
@@ -135,7 +146,9 @@ export async function handleAccountProxy(
       },
     );
   const origin = configuredOrigin(config);
-  if (!origin) return failure("INTERNAL_ERROR");
+  const accessId = accessCredential(config.KOKO_API_ACCESS_CLIENT_ID);
+  const accessSecret = accessCredential(config.KOKO_API_ACCESS_CLIENT_SECRET);
+  if (!origin || !accessId || !accessSecret) return failure("INTERNAL_ERROR");
   const url = new URL(request.url);
   const mutation = request.method !== "GET";
   const sentOrigin = request.headers.get("origin");
@@ -183,6 +196,8 @@ export async function handleAccountProxy(
             Origin: origin,
             "Sec-Fetch-Site": "same-origin",
             "X-Event-ID": eventId,
+            "CF-Access-Client-Id": accessId,
+            "CF-Access-Client-Secret": accessSecret,
           });
           if (mutation) {
             headers.set("Content-Type", "application/json");
@@ -209,6 +224,19 @@ export async function handleAccountProxy(
             throw new Error("Invalid upstream response");
           }
           const body = await readBody(response.body, 16 * 1024, signal);
+          // Reject literal/JSON-escaped credential reflection, including keys and
+          // error payloads. Never log upstream data; this is not a general DLP.
+          JSON.parse(body, (key: string, value: unknown) => {
+            if (
+              [accessId, accessSecret].some(
+                (credential) =>
+                  key.includes(credential) ||
+                  (typeof value === "string" && value.includes(credential)),
+              )
+            )
+              throw new Error("Invalid upstream response");
+            return value;
+          });
           return new Response(body, {
             status: response.status,
             headers: { "Content-Type": "application/json" },
