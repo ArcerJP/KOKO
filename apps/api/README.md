@@ -61,6 +61,23 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義していますが、現�
 
 根拠：[PostgREST RPC](https://docs.postgrest.org/en/stable/references/api/functions.html)、[Supabaseの関数権限](https://supabase.com/docs/guides/database/functions)、[PostgreSQLの行ロック](https://www.postgresql.org/docs/current/explicit-locking.html)（2026-10-04確認）。
 
+## 投稿受付のDB予約（B1-5、ローカル実装）
+
+[追加migration](supabase/migrations/20261004010000_reserve_upload.sql)の`reserve_upload(event_id, user_id, request)`は、既存`UploadRequest`の申告内容を受け、投稿と原本資産の保存先を1 transactionで予約します。**HTTPの`POST /uploads`・URL署名・R2への保存・upload session発行はまだ未実装です。** 内部RPCの結果は`UploadTicket`ではなく、原本キーを含むため利用者向け応答へそのまま返しません。実Supabaseへのmigration適用も行っていません。
+
+- WorkerがGoogle本人とCookie利用時のOrigin/CSRFを検証した後の内部呼出し専用です。`SECURITY INVOKER`・空`search_path`・`service_role`だけに実行権限を限定し、クライアント入力の本人IDを信用しません。今回このRPCを呼ぶHTTP経路は追加していません。
+- イベント所属、BAN、`live`かつ開始以上・終了未満、受付有効、公開停止なし、現行規約への同意、お題の同一イベント・公開中・期間内を再照合します。再送でもこれらを省略しません。
+- イベント/設定を共有ロックし、本人の所属行を排他ロックして、同じイベント・本人の予約を直列化します。同意、既存投稿、お題、原本資産も順に保持します。ロック順序はevent→settings→member→consent→post→theme→asset。`READ COMMITTED`以外では拒否し、将来の管理・BAN・complete実装でもロック順序と競合を検証します。
+- 新規投稿は直近60秒の本人別件数で制限します。上限は10件で、設定による引下げは可能です。削除済み投稿もその期間の件数に含め、同じ受付IDの再送は追加枠を使いません。拒否時の`retry_after_seconds`は1〜60秒です。
+- 初回入力を内部列`posts.upload_request`へ保存します。UUID表記と未指定/NULLのお題を正規化し、同じID・同じ内容なら同じ投稿/原本資産、異なる内容なら`IDEMPOTENCY_CONFLICT`です。後日のテーマ変更などから初回入力を再構成しません。旧行のNULL snapshot、`uploading`以外、BANラッチ、テーマ付替え・原本削除予約等は再発行せず閉じます。`upload_failed`からの回復は後続の明示処理です。
+- サイズは申告値であり、`original_bytes`/`byte_size`を実測済みとして埋めません。形式のallowlistや業務独自の容量制限は追加せず、R2の実オブジェクト上限（5 TiB − 5 GiB）超だけを`PROVIDER_LIMIT`で拒否します。single PUT上限より大きい予約を受け付けても、multipartや転送成功を実装済みとは扱いません。
+
+[SQL試験](../../packages/contract/test/upload-admission.test.mjs)は全migrationを順に適用し、権限・不正入力・別イベント/本人・同意/BAN/停止・お題・再送・quota・資産保存失敗時の原子的取消しを検証します。PGliteは単一接続なので、実PostgreSQLでの多接続競合・負荷試験は未完了です。
+
+次は、認証済みWorkerからのRPC呼出し、R2用の限定資格情報を使うsingle/multipart署名・再発行、実在/サイズ確認と処理予約へ接続します。秘密登録・migrationの実適用・実配備・受付有効化は本人の個別確認が必要です。
+
+根拠（2026-10-04確認）：[PostgreSQLの行ロック](https://www.postgresql.org/docs/current/explicit-locking.html)、[Supabase関数の実行権限](https://supabase.com/docs/guides/database/functions)、[R2の上限と脚注](https://developers.cloudflare.com/r2/platform/limits/)。
+
 ## ローカル検証
 
 リポジトリルートで次を実行します。
