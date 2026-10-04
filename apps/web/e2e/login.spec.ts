@@ -1,5 +1,29 @@
 import { expect, test } from "@playwright/test";
 
+test("upload制御4経路は既定無効で秘密/CORS/Cookieを返さない", async ({
+  request,
+}) => {
+  const id = "00000000-0000-4000-8000-000000000001";
+  for (const path of [
+    "/api/uploads",
+    `/api/uploads/${id}/refresh`,
+    `/api/uploads/${id}/parts`,
+    `/api/posts/${id}/complete`,
+  ]) {
+    for (const method of ["POST", "OPTIONS"]) {
+      const response = await request.fetch(path, { method });
+      expect(response.status()).toBe(404);
+      expect(await response.json()).toEqual({
+        code: "NOT_FOUND",
+        request_id: expect.any(String),
+      });
+      expect(response.headers()["cache-control"]).toBe("private, no-store");
+      expect(response.headers()["set-cookie"]).toBeUndefined();
+      expect(response.headers()["access-control-allow-origin"]).toBeUndefined();
+    }
+  }
+});
+
 test("設定なしではGoogle認証を開始せず、撮影検証を維持する", async ({
   page,
 }, info) => {

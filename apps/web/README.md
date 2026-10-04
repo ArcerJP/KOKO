@@ -155,7 +155,7 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 
 ### Accessサービス認証
 
-2026-10-04、固定開発Workerへの3操作に限り、サーバー専用の`KOKO_API_ACCESS_CLIENT_ID`・`KOKO_API_ACCESS_CLIENT_SECRET`から`CF-Access-Client-Id`・`CF-Access-Client-Secret`を付与する処理を追加しました。上記の有効化条件に加え、**両方の資格情報が必須**です。各値は空白/制御文字/非ASCIIを含まない1〜512文字の可視ASCIIとして検査し、欠落・片方のみ・不正なら通信前に500で閉じます。新旧token形式の認証や期限・policyの判定はCloudflareが担当します。
+2026-10-04、固定開発Workerへの本人情報3操作に、サーバー専用の`KOKO_API_ACCESS_CLIENT_ID`・`KOKO_API_ACCESS_CLIENT_SECRET`から`CF-Access-Client-Id`・`CF-Access-Client-Secret`を付与する処理を追加しました。2026-10-05に安全境界を[json-proxy.ts](src/api/json-proxy.ts)へ集約し、下記のアップロード制御4操作も共用します。上記の有効化条件に加え、**両方の資格情報が必須**です。各値は空白/制御文字/非ASCIIを含まない1〜512文字の可視ASCIIとして検査し、欠落・片方のみ・不正なら通信前に500で閉じます。新旧token形式の認証や期限・policyの判定はCloudflareが担当します。
 
 値はNode Route Handlerで要求ごとに読み、`server-only`でClient Componentへのimportを禁止します。`.env.example`は空欄のままです。`NEXT_PUBLIC_`、クライアントprops、URL、ログ、応答、Gitへ値を渡しません。既存の転送header許可リストへこのサーバー由来2項目だけを追加し、ブラウザからの同名headerや`CF_Authorization`は引き続き使用しません。資格情報の存在で利用者Cookie・Origin・CSRF・Worker認可を省略しません。
 
@@ -174,6 +174,41 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 [中継試験](test/account-proxy.test.ts)は合成Cookie/資格情報/上流応答で3操作・利用者の秘密header非転送・不完全設定・環境値の都度読取り・反射拒否（JSON escape含む）・不正入力/応答・時間/容量上限・取消し・更新非再送を検証します。VitestだけNext同梱の空markerへ解決し、productionの`server-only`境界は変更しません。[実Next E2E](e2e/login.spec.ts)は既定無効の500とOPTIONS拒否です。有効時のブラウザCookie保存、実Access/Supabase/DB接続やアプリ全体の認証ゲートの完成を証明しません。
 
 根拠（2026-10-04確認）：[Next.js BFFの境界](https://nextjs.org/docs/app/guides/backend-for-frontend)、[OWASP SSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)、[Cloudflare Accessのサーバー間資格情報](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)。
+
+## アップロード制御とR2直接転送（F1-5、既定無効）
+
+2026-10-05、[upload-client.ts](src/api/upload-client.ts)、[upload-proxy.ts](src/api/upload-proxy.ts)、[upload-transfer.ts](src/media/upload-transfer.ts)をローカル追加しました。**撮影検証画面からは呼び出しません。送信UI、IndexedDBキュー、最大3回の再試行・再開（F2-1）、実クラウド受入は未実装/未完了です。** BEの[受付](../api/README.md)と生成OpenAPI型を利用し、ブラウザでの形式検査を認証や保存済みの証拠にしません。
+
+### 固定JSON経路
+
+| Web側のPOST経路                    | クライアント操作 | 本文上限               | 成功                                 |
+| ---------------------------------- | ---------------- | ---------------------- | ------------------------------------ |
+| `/api/uploads`                     | `open`           | 4KiB                   | 200 UploadTicket                     |
+| `/api/uploads/{upload_id}/refresh` | `refresh`        | 0byte                  | 200 同じuploadのTicket               |
+| `/api/uploads/{upload_id}/parts`   | `parts`          | 4KiB・一度に1〜100part | 200 指定partだけの署名               |
+| `/api/posts/{post_id}/complete`    | `complete`       | 1MiB・最大10,000part   | 202 同じevent/postのuploaded receipt |
+
+- 既存のAPI proxy/Cookie/固定origin/Access条件に加え、サーバー専用`KOKO_UPLOAD_PROXY_ENABLED=true`と、非秘密の`KOKO_R2_ACCOUNT_ID`（小文字32桁hex）が必要。未設定のupload flagは404で閉じ、通信しません。有効時はPOSTのみ、他methodは405。設定例はOFF/空欄、実環境へは登録していません。
+- 同じ世代のCookie、Origin、CSRF、header許可リスト、secret反射拒否を既存本人情報経路と共用。Blobを中継せず、入力ストリームは1秒・上表容量、上流通信と本文は合わせて10秒。上流応答はpartsのみ1MiB、他は16KiB。署名URLを含む成功応答も`private, no-store`で、上流headerは透過しません。
+- `createUploadClient(baseUrl, { eventId, r2AccountId })`のAPI通信はsame-origin・Cookie・redirect拒否。CSRFを操作ごとに明示入力し、受付のclient_request_idを勝手に生成し直しません。署名/CSRFの永続保存・ログ出力・自動再送なし。ID、metadata、parts、署名先、応答statusを実行時検査し、余分な項目を除外します。
+- complete成功はR2保存の検証と処理予約の受付です。変換/AI/公開の成功ではありません。202のevent/post/versionを照合し、任意エラー詳細やR2生応答は利用者へ返しません。
+
+### Blobの転送境界
+
+`transferOriginal(blob, request, ticket, destination, options)`は保存申告用manifestを返します。呼出し側が別途`complete`し、必要に応じてAPI Cookieの更新とfresh CSRF取得を行います。R2にCookie・CSRF・Access資格情報・Refererは送りません。PUTのみ、CORS、credentials omit、redirect error、no-storeです。
+
+- 送信先は指定accountのR2 S3 HTTPS endpoint、`koko-dev-originals`、同じevent/postの正規原本キーに限定。署名queryの形式・重複・期限（最大900秒）・signed headersを検査します。これは宛先制限であり、署名の真正性はR2が検証します。署名URLは短命でも権限を持つため、メモリ内だけで使用してください。
+- singleは申告サイズとBlobサイズ、Content-Typeの一致を確認し、`If-None-Match: *`を維持。412も自動上書き/再送せず`STATE_CONFLICT`で止め、呼出し側で同じuploadの完了照合を判断します。
+- multipartはBlob.sliceで逐次PUT。一つのpartを送る直前に`signParts`で署名を取得するため、遅い回線で後方partの期限を消費しません。各URLのpost/key/provider uploadの一貫性を確認し、R2の200と公開ETag（32桁MD5、引用符可）だけを記録。`onPart`は検査済みpartのコピーを通知します。署名URL自体はcheckpointへ保存しません。
+- 1 PUTは120秒でabort。中断・期限切れ・ETag欠落・通信不明時に後続PUT/completeへ進みません。応答喪失でも保存済みの可能性があるため、新規投稿IDでのやり直しやblind retryをこの層で実施しません。ページ終了後の継続・バックグラウンド再開は未保証です。
+
+### 有効化前のゲートと検証
+
+送信UIの明示操作・本人同意・永続キューと、Worker upload/Cookie/CSRF設定・追加migration・署名鍵・R2 CORSを確認してから個別承認で有効化します。CORSは採用Web origin・PUT・必要headerだけ、ETagを公開する限定設定が必要です。設定変更や実データ送信は本PRに含めません。R2署名鍵をWebや`NEXT_PUBLIC_`へ置いてはいけません。将来UIへ渡すaccount IDは送信先識別子だけで、署名資格情報ではありません。
+
+[クライアント試験](test/upload-client.test.ts)、[中継試験](test/upload-proxy.test.ts)、[転送試験](test/upload-transfer.test.ts)は合成受付→single/multipart→完了、容量・宛先・秘密・期限・取消し・ETag・失敗非再送を検証。[Next E2E](e2e/login.spec.ts)は4経路の既定無効を確認します。実ブラウザのR2 CORS・実Google/Access/DB・実R2保存・実機メモリは別の受入です。
+
+公式確認（2026-10-05）：[R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)、[R2 CORSとETag公開](https://developers.cloudflare.com/r2/buckets/cors/)、[Next Route Handlers](https://nextjs.org/docs/app/api-reference/file-conventions/route)。
 
 ## Googleログインの検証導線
 
