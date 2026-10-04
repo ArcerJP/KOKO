@@ -80,7 +80,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 
 ## R2アップロード署名（B1-5、ローカル実装）
 
-[R2アダプター](src/r2-upload.ts)は原本のsingle PUT署名、multipart分割計画・開始・part PUT署名・中止を実装します。`POST /uploads`、refresh、partsは下記の既定無効なHTTP受付へ接続しました。**completeは未実装です。** 単体の署名成功やローカルR2試験を、実クラウドへの保存成功とは扱いません。
+[R2アダプター](src/r2-upload.ts)は原本のsingle PUT署名、multipart分割計画・開始・part PUT署名・中止を実装します。`POST /uploads`、refresh、partsは下記の既定無効なHTTP受付へ接続しました。completeは下記の[原本検証・処理予約](#アップロード完了と原本検証b1-6既定無効)へ分離しています。単体の署名成功やローカルR2試験を、実クラウドへの保存成功とは扱いません。
 
 - 既存開発用`koko-dev-originals`専用です。呼出し元から任意のbucket・host・URL・key・methodを受けず、検証済みevent/post/assetのUUIDから共有契約の原本キーを生成します。派生物や閲覧用GET、DELETE、multipart完了を署名しません。
 - 署名はAPI専用の`aws4fetch`固定依存を利用し、暗号処理の独自実装を避けます。`sign()`だけを使い、署名時の外部通信やライブラリの自動再試行を行いません。公開契約packageへ依存を持ち込みません。
@@ -109,6 +109,23 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 [session SQL試験](../../packages/contract/test/upload-sessions.test.mjs)は全migrationをメモリDBへ適用して権限・所有者・単一winner・期限・guard更新・保存失敗の取消しを検証します。[HTTP試験](test/uploads.spec.ts)はWorkers上の実署名と模擬Auth/RPC/provider応答で受付・再発行・part・CSRF・応答不明を検証します。実PostgreSQLの多接続競合、実PostgRESTからR2までの通し試験、実配備は未実施です。
 
 根拠（2026-10-05確認）：[PostgreSQLの行lock](https://www.postgresql.org/docs/current/explicit-locking.html)、[R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)（resume自体はprovider uploadの実在を確認しません）。
+
+## アップロード完了と原本検証（B1-6、既定無効）
+
+[POST /posts/{post_id}/complete](src/upload-completion.ts)は同じ`KOKO_UPLOADS_ENABLED`で既定無効です。Google本人・Cookie時のOrigin/CSRFを確認し、[内部RPC](supabase/migrations/20261005020000_complete_upload.sql)と[R2完了アダプター](src/r2-completion.ts)を接続します。入力は`upload_id`とmultipart時の`parts`だけで、本人ID・原本キー・実サイズは受け取りません。制御JSONは1MiBまで（メディア容量制限ではありません）、partsは1〜10,000件の連続した番号・R2の32桁MD5 ETagを正規化します。
+
+1. `prepare`は所有者とevent/post/asset/sessionの所属、現行同意・BAN・受付/公開停止・お題を検証します。既存のlock順序を維持し、初回partsを固定します。同じ一覧は再送可能、異なる一覧は`IDEMPOTENCY_CONFLICT`。singleは内部で空一覧を記録します。準備だけでは投稿をuploadedにしません。
+2. canonical keyをHEADし、multipartで未存在の場合だけDB保存済みprovider uploadをcompleteします。例外・応答不明でもHEADを再照合し、勝手な再作成・abort・削除はしません。サイズは初回申告と完全一致、multipartは固定partsからの合成ETag一致、完了応答がある場合はHEADとversion/ETag/サイズも一致させます。実測metadataのみを保存対象にします。MD5はR2互換照合用であり、安全性判定・SHA256・MIME検出ではありません。
+3. `commit`でguardと投稿versionを再照合し、原本の実測byte_size/ETag/version、`uploaded`とversion加算、session完了、`process_media` outboxを同一transactionで確定します。outboxの一意keyはupload IDごとに固定し、挿入失敗なら更新全体を取消します。202は処理予約の受付であり、変換・判定・公開の成功ではありません。
+4. 同じcompleteの再送は初回の202受領票（`PostStatus`形式）を返します。現在の処理状態を表す応答ではありません。期間終了・受付停止後も本人/所属/現行同意/BANを確認して確定済み受領票だけを再送し、R2操作・version加算・処理再登録をしません。削除済み/BANラッチは拒否します。未確定の場合は毎回期間・受付停止等を再確認します。
+
+署名期限はPUTの有効期限です。completeは新しいURLを発行せず、期限を延長しません。署名期限後でもイベント/お題の受付中なら原本確認を受け付けます。保存済みでも受付終了やBAN等によりcommitできない原本、固定後の誤ETag、provisioning結果不明は自動で作り直さず、後続の回収/運用手順へ残します。原本は既存singleの条件付きPUTと1投稿1multipartで上書きを防ぎ、将来の処理consumerも記録したobject version/ETagを確認する必要があります。
+
+**追加migrationは実DB未適用、completeは未配備。R2イベント購読、取りこぼし/孤児の自動回収、outbox dispatcher・変換/公開consumer、FE送信キューと通し受入は未実装です。** B1-6全体や原本保存の実受入が完了したとは扱いません。
+
+[SQL試験](../../packages/contract/test/upload-completion.test.mjs)は全migration・service専用権限・再送・guard変化・実測不一致・outbox失敗時取消しを検証します。[HTTP試験](test/upload-completion.spec.ts)は上流mock、[R2試験](test/r2-completion.spec.ts)は公式ETagベクトルとローカルR2を使用します。固定Miniflareはpart ETagにランダム値を使うため、multipart試験だけ合成内容のMD5からlocal part識別子へ変換するfixtureを挟み、実ローカル組立てと最終HEADを検証します。本番コードのチェックは緩めません。実S3転送、多接続DB競合、Google/Accessを通した実受入は未検証です。
+
+根拠（2026-10-05確認）：[R2 completeとHEAD](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)、[multipart ETag](https://developers.cloudflare.com/r2/objects/upload-objects/#etags)、[R2強整合性](https://developers.cloudflare.com/r2/reference/consistency/)、[WorkersのMD5互換処理](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/)。
 
 ## ローカル検証
 
