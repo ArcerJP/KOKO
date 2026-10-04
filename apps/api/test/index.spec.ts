@@ -47,6 +47,14 @@ describe("KOKO API Worker", () => {
     });
   });
 
+  it.each(["/uploads", "/uploads/example/refresh", "/uploads/example/parts"])(
+    "%sはprovider署名を追加しただけでは公開しない",
+    async (path) => {
+      const response = await dispatch(path, { method: "POST" });
+      expect(response.status).toBe(404);
+    },
+  );
+
   it("/consentsを認証必須POSTへルーティングする", async () => {
     const get = await dispatch("/consents");
     expect(get.status).toBe(405);
