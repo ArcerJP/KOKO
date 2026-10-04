@@ -26,6 +26,15 @@ function object(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export function isValidDisplayName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    Array.from(value).length <= 50 &&
+    !/[\p{Cc}\p{Cf}]/u.test(value)
+  );
+}
+
 // headerへ安全に載せられる値だけ。正当性・セッション束縛はサーバーで検証する。
 function isCsrfToken(value: unknown): value is string {
   return typeof value === "string" && /^[\x21-\x7e]{32,256}$/.test(value);
@@ -197,10 +206,7 @@ export function createApiClient(
       if (
         !object(input) ||
         Object.keys(input).length !== 1 ||
-        typeof input.display_name !== "string" ||
-        input.display_name.trim().length === 0 ||
-        Array.from(input.display_name).length > 50 ||
-        /[\p{Cc}\p{Cf}]/u.test(input.display_name)
+        !isValidDisplayName(input.display_name)
       )
         throw new ApiFailure("INVALID_INPUT");
       return mutate(

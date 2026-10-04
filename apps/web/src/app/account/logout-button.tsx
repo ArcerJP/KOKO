@@ -4,7 +4,13 @@ import { useRef, useState } from "react";
 import { createBrowserAuthClient } from "../../auth/browser";
 import { completeSignOut } from "../../auth/sign-out";
 
-export function LogoutButton({ apiEnabled = false }: { apiEnabled?: boolean }) {
+export function LogoutButton({
+  apiEnabled = false,
+  onStart,
+}: {
+  apiEnabled?: boolean;
+  onStart?: () => void;
+}) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const running = useRef(false);
@@ -15,6 +21,7 @@ export function LogoutButton({ apiEnabled = false }: { apiEnabled?: boolean }) {
     setPending(true);
     setFailed(false);
     try {
+      onStart?.();
       await completeSignOut(apiEnabled, () =>
         createBrowserAuthClient().auth.signOut(),
       );
