@@ -60,6 +60,8 @@ API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type 
 
 APIが共有契約の生成済み`dist/`を参照するため、rootの`typecheck:api`・`test:api`・`build:api`は、それぞれ`build:contract`の成功後にworkspaceの処理を実行します。別jobや以前のローカルbuildの生成物には依存しません。APIだけを検証する場合もroot commandを使用し、workspaceの下位commandを直接実行する場合は共有契約buildを先に行います。2026-10-03のPR #15で判明した準備漏れへの対応です。再現検査ではlockfileどおり依存を導入し、各commandの前に共有契約の生成物がないことを確認します。親ディレクトリに別の`node_modules`があるコピーだけでは依存解決の独立性を保証できないため、GitHub CIの新規checkoutでも結果を照合します。
 
+[メディア処理予約の配送](../apps/api/README.md#メディア処理予約のqueue配送b1-6の後段既定無効)は既存`Contract Tests`でservice限定RPC・lease/世代・有限retry・処理状態不変を、`API Tests`で模擬Queueの遅延/失敗・曖昧結果・最小message・RPC期限/サイズ・既定OFFを検査します。新job・秘密・実bindingは追加しません。PGlite単一接続と模擬producerは実PostgreSQLの多接続競合・実Queue/DLQ・変換consumerを検証しません。
+
 `API Tests`には`npm run test:deploy-workflow`も追加しています。既存のAPI実行環境テストとjob名は維持し、配備jobをPRの必須checkには追加しません。
 
 ## 開発用API配備
