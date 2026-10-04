@@ -54,6 +54,8 @@ F2-1のキュー試験では本人分離・永続化失敗・retry上限・曖�
 
 API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type Check`、`API Tests`、`API Build`は秘密情報やCloudflareログインなしで実行します。テストのR2はローカル保存であり、開発用実バケットとの通信成功を示しません。`API Build`もdry-runであり、Cloudflareへのdeploy成功とは区別します。
 
+本人投稿の状態・一覧は既存`Contract Tests`でread-only SQLの所有権/権限・状態・精度を、`API Tests`で実Web Cryptoの署名cursor・改ざん/期限・最小応答・認証/異常通信を検査します。追加のjobや秘密は不要です。合成Auth/RPCとPGliteの成功は実Supabase適用・Web画面・メディア配信の受入ではありません。[本人投稿APIの実装境界](../apps/api/README.md#本人の投稿状態と一覧b2-6の一部既定無効)を参照してください。
+
 APIが共有契約の生成済み`dist/`を参照するため、rootの`typecheck:api`・`test:api`・`build:api`は、それぞれ`build:contract`の成功後にworkspaceの処理を実行します。別jobや以前のローカルbuildの生成物には依存しません。APIだけを検証する場合もroot commandを使用し、workspaceの下位commandを直接実行する場合は共有契約buildを先に行います。2026-10-03のPR #15で判明した準備漏れへの対応です。再現検査ではlockfileどおり依存を導入し、各commandの前に共有契約の生成物がないことを確認します。親ディレクトリに別の`node_modules`があるコピーだけでは依存解決の独立性を保証できないため、GitHub CIの新規checkoutでも結果を照合します。
 
 `API Tests`には`npm run test:deploy-workflow`も追加しています。既存のAPI実行環境テストとjob名は維持し、配備jobをPRの必須checkには追加しません。
