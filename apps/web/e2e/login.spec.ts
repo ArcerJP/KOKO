@@ -40,3 +40,25 @@ test("API Cookie bridgeは既定無効でCookieを変更しない", async ({ req
     expect(response.headers()["cache-control"]).toBe("private, no-store");
   }
 });
+
+test("本人情報中継は既定無効で、未対応methodも閉じる", async ({ request }) => {
+  for (const [method, path] of [
+    ["GET", "/api/me"],
+    ["PATCH", "/api/me"],
+    ["POST", "/api/consents"],
+  ] as const) {
+    const response = await request.fetch(path, { method });
+    expect(response.status()).toBe(500);
+    expect(await response.json()).toEqual({
+      code: "INTERNAL_ERROR",
+      request_id: expect.any(String),
+    });
+    expect(response.headers()["cache-control"]).toBe("private, no-store");
+    expect(response.headers()["set-cookie"]).toBeUndefined();
+  }
+  for (const path of ["/api/me", "/api/consents"]) {
+    const response = await request.fetch(path, { method: "OPTIONS" });
+    expect(response.status()).toBe(405);
+    expect(response.headers()["access-control-allow-origin"]).toBeUndefined();
+  }
+});

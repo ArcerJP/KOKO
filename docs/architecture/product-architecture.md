@@ -17,7 +17,7 @@
 | 運営           | Discord、管理画面。後日rclone→Google Drive | 監査/通知/保持の契約                | webhook、運用script、会場運営、export                              |
 | 共通           | npm workspaces・TypeScript                 | `packages/contract`、型/テスト/CI   | FE/BEから共通import                                                |
 
-第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験、Googleログイン導線、WorkerのBearer本人情報APIを実装しています。2026-10-04に規約同意APIとDB関数、既定無効のCookie認証・CSRF受信境界、およびWeb内部のCookie発行・更新・削除処理をローカル追加しました。現在の実装・未完了は[開発計画](../product/development-plan.md)、Cookie発行プロトコルは[Web README](../../apps/web/README.md#api用cookieの発行処理既定無効)、受信・同意保存のtransaction・未適用の境界は[API README](../../apps/api/README.md)を正本とします。画面・SSRログアウトへの統合と同一origin転送は未実装で、アプリ全体の認証ゲートを完成扱いにしません。ローカル試験と実クラウドの受入証拠は[クラウド準備](../product/cloud-setup.md)、撮影処理と実機の制約は[撮影検証](../product/stage-one-capture.md)へ分離し、ここへ進捗の完全な複製を置きません。
+第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験、Googleログイン導線、WorkerのBearer本人情報APIを実装しています。2026-10-04に規約同意APIとDB関数、既定無効のCookie認証・CSRF受信境界、Web内部のCookie発行・更新・削除処理と本人情報中継をローカル追加しました。現在の実装・未完了は[開発計画](../product/development-plan.md)、Cookie発行と中継プロトコルは[Web README](../../apps/web/README.md)、受信・同意保存のtransaction・未適用の境界は[API README](../../apps/api/README.md)を正本とします。画面・SSRログアウトへの統合と実環境でのAccess認証は未実装で、アプリ全体の認証ゲートを完成扱いにしません。ローカル試験と実クラウドの受入証拠は[クラウド準備](../product/cloud-setup.md)、撮影処理と実機の制約は[撮影検証](../product/stage-one-capture.md)へ分離し、ここへ進捗の完全な複製を置きません。
 
 2026-09-29、個別Workerへ配備権限を限定するGitHub Actions workflow・回帰試験・文書をローカル実装し、その後、旧Workers Buildsを切断してActionsへ移行しました。2026-10-02までに初回手動配備と通常main更新による自動配備を確認しています。採用理由は[ADR-0003](../decisions/ADR-0003-worker-scoped-deployment.md)、配備の安全条件は[CI規約](../ci.md#開発用api配備)、外部の適用済み状態・証拠・残る検証は[クラウド準備](../product/cloud-setup.md#項目別の進捗2026-10-02更新)へ分離します。開発用Cloudflare Accessを利用者向けGoogle認証の実装と混同しません。
 
@@ -43,6 +43,8 @@ TypeScriptは型生成ツールのpeer範囲を優先して5.9.3を固定して�
 ```
 
 FEの配信はVercel、API/メディアは同一originの経路からWorkersへルーティングします。ルーティング方式の具体設定とCookie/Rangeの伝搬をB1-8で検証し、外向きキャッシュを無効化します。rewriteを認証機構と見なしません。FE側のOAuth callback/セッション処理はNode runtimeを基本とし、メディアの主処理をNext.jsのServer Actionへ載せません。
+
+本人情報3操作だけは、静的Node Route Handlerで入力・送信先・転送header・応答を制限する中継を採用します。汎用rewriteより検査とサーバー1 hopの負担が増しますが、SSR/Access Cookieや上流の秘密headerを透過せず、既存クライアントの契約検査を再利用できます。業務認可とDBアクセスはWorkerに残し、このJSON専用経路をメディア/Rangeへ拡張しません。既定無効・Accessとの未接続条件は[Web README](../../apps/web/README.md#本人情報の同一origin中継既定無効)へ集約します。
 
 認証Cookieを利用するメディアは、公開のNext.js画像最適化経路へ流さず、認証ゲートを直接参照する`Image unoptimized`等で扱います。共有画像変換cacheがログイン境界を迂回しないことを否定系で検証します。
 
