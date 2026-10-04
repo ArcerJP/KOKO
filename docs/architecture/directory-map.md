@@ -41,7 +41,7 @@
 | .github/workflows/                 | PR検査と開発用API配備の定義            | CI/CD設定             | GitHub Actions実行定義の正本                 | PR・merge queue・承認済み配備時                                            | 検査と配備の権限を分離し、変更時に回帰試験             | 追跡対象、秘密なし                                                 | 永続、更新・廃止時に整理 |
 | .github/scripts/                   | 配備直前の実行条件ガード               | CI/CD実装             | workflowが呼ぶ安全条件の正本                 | 配備・回帰試験時                                                           | workflowと一緒にレビュー・検証                         | ソースのみ追跡、秘密なし                                           | 対象と同時に更新・廃止   |
 | .github/tests/                     | 配備の安全条件の回帰試験               | CI/CDテスト           | ローカル・PRでの配備境界検証の正本           | npm test・API Tests・配備前検証時                                          | 実資格情報・実配備を使わない                           | 合成fixtureとソースのみ追跡                                        | 対象と同時に保守         |
-| apps/web/                          | Next.js撮影検証・トークン・Web試験     | プロダクト            | トークン・FE実装の正本                       | FE変更時                                                                   | K-07と契約を維持                                       | ソースを追跡、build/秘密は対象外                                   | プロダクトライフサイクル |
+| apps/web/                          | Next.js UI・認証・中継・Web試験        | プロダクト            | トークン・FE実装の正本                       | FE変更時                                                                   | K-07と契約を維持                                       | ソースを追跡、build/秘密は対象外                                   | プロダクトライフサイクル |
 | apps/api/                          | BEのSQL・Workers基盤とAPIテスト        | プロダクト            | DB migration・BE実装の正本                   | DB/API変更時                                                               | 適用済みSQLは新migrationで変更                         | ソースを追跡、秘密/データは対象外                                  | プロダクトライフサイクル |
 | packages/contract/                 | FE/BE共有API・状態・キー・エラー・試験 | 契約                  | コード化した共通契約の正本                   | FE/BEの境界変更時                                                          | OpenAPIから型を生成し双方レビュー                      | 正本と生成型/表を追跡、distは対象外                                | バージョンを管理して更新 |
 | docs/product/                      | 現在の要件・段階別計画・契約承認       | 規範的文書            | 要件/計画/第0日状況の正本                    | プロダクト作業時                                                           | 未実装・未承認と事実を区別                             | 公開可能な要件だけ追跡                                             | 継続更新                 |
@@ -55,7 +55,7 @@
 
 `apps/web/public/`はブラウザへ公開する静的ファイルです。現在は依存ライブラリの原文ライセンス通知とソース入手先だけを含みます。秘密・実メディア・測定記録を置きません。依存更新時に通知を確認し、上流のライセンス原文を日本語へ置換しません。
 
-第1要件では`apps/web/`の責務をトークンに加え、Next.js UI・端末内メディア処理・GET境界・MSW試験へ拡張しました。実装の正本は`src/`、自動検証は`test/`と`e2e/`です。`test/fixtures/`は小さい合成素材と生成手順だけを追跡し、実機素材・測定JSON・`.next/`・`next-env.d.ts`・`test-results/`・`playwright-report/`・ローカルブラウザ本体`.playwright/`は追跡しません。
+第1要件では`apps/web/`の責務をトークンに加え、Next.js UI・端末内メディア処理・認証Cookie発行・本人情報3操作の同一origin中継・HTTP試験へ拡張しました。業務認可とDBアクセスはWorkerに残します。実装の正本は`src/`、自動検証は`test/`と`e2e/`です。`test/fixtures/`は小さい合成素材と生成手順だけを追跡し、実機素材・測定JSON・`.next/`・`next-env.d.ts`・`test-results/`・`playwright-report/`・ローカルブラウザ本体`.playwright/`は追跡しません。
 
 `docs/product/stage-one-capture.md`は起動・端末検証、`docs/product/cloud-setup.md`はクラウド準備と適用済み状態の正本です。いずれも対象作業時に読み、実装／公式仕様の変更時に更新し、公開可能な内容だけを継続管理します。秘密・個別請求情報・測定原資料は含めません。一般の検証フローは既存Skillsで扱い、トップレベルのサービス領域は追加しません。
 

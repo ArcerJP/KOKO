@@ -23,7 +23,7 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 ## 表示名・規約同意のHTTPクライアント
 
-[client.ts](src/api/client.ts)は生成型の`getMe`、`updateMe`、`acceptTerms`を提供します。2026-10-04に更新2操作を追加しました。現段階では画面・実Cookieサーバーに接続しておらず、合成HTTP試験の完了です。Workerの[Cookie受信・CSRF/Origin検証](../api/README.md#cookie認証とcsrf既定無効のローカル実装)と下記の発行処理は既定無効のローカル実装であり、画面・同一origin転送の統合は別途必要です。クライアント側検査を認証・認可として扱いません。
+[client.ts](src/api/client.ts)は生成型の`getMe`、`updateMe`、`acceptTerms`を提供します。2026-10-04に更新2操作を追加しました。現段階では画面・実Cookieサーバーに接続しておらず、合成HTTP試験の完了です。Workerの[Cookie受信・CSRF/Origin検証](../api/README.md#cookie認証とcsrf既定無効のローカル実装)、下記の発行処理・本人情報中継は既定無効のローカル実装であり、画面・実環境への統合は別途必要です。クライアント側検査を認証・認可として扱いません。
 
 - `updateMe({ display_name }, csrfToken, signal?)`は表示名だけ、`acceptTerms({ terms_version, accepted: true }, csrfToken, signal?)`は利用者が確認・同意した版だけを送信。空白のみ・長すぎる表示名・制御文字・偽同意・余分な項目と、Workerの1KiB上限を超えるUTF-8 JSONを送信前に拒否します。表示名や規約版を勝手に整形しません。
 - CSRF値は`GET /me`の応答から呼出し側が各更新へ明示的に渡します。32〜256文字のheader安全な可視ASCIIだけを受け付け、欠落/不正なら送信せず`FORBIDDEN`。クライアントは生成・永続保存・自動補完しません。呼出し側もURL、ログ、localStorage、IndexedDB、共有cacheへ保存せず、ログアウト時にはメモリ上の状態を破棄してください。
@@ -59,13 +59,36 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 ### 有効化前に残る作業
 
-画面からの発行/期限前更新、更新とログアウトの競合、SSR signOutとAPI Cookie消去・メモリ上CSRF破棄の統合、同一origin転送とAccess保護の両立、実Googleセッションとブラウザでのrefresh・失効を検証してから有効化します。現在のログアウトボタンにこのCookieの削除処理はないため、設定だけ先に有効化してはいけません。
+画面からの発行/期限前更新、更新とログアウトの競合、SSR signOutとAPI Cookie消去・メモリ上CSRF破棄の統合、下記の同一origin中継とAccess保護の実環境での両立、実Googleセッションとブラウザでのrefresh・失効を検証してから有効化します。現在のログアウトボタンにこのCookieの削除処理はないため、設定だけ先に有効化してはいけません。
 
 将来停止する場合は、設定を外す前のCookie消去経路と、停止後の既発行Cookie/JWTの扱いを決めます。flagをOFFにするだけでは残存Cookieを消去せず、DELETEも無効になります。Cookieの300秒制限をJWTの即時失効や漏洩対策の代わりにしません。設定・認証・公開範囲・実配備は[保護操作の個別確認](../../AGENTS.md#保護操作の確認)へ分離します。
 
 [発行処理試験](test/api-session.test.ts)はNextResponseの実Cookieシリアライズと合成Auth応答を使用し、未設定、送信元・別資格情報の拒否、本人/署名結果/期限の異常、更新・消去・秘密非出力を検証します。[アダプター試験](test/auth-server.test.ts)はCookie writerの失敗伝播、[Playwright試験](e2e/login.spec.ts)は設定なしの実Next.js HTTP経路の503・Cookie非変更を検査します。成功時のブラウザCookie保存、暗号署名そのもの、SDKの実refresh、実クラウド接続を証明するものではありません。
 
 根拠（2026-10-04確認）：[Next.jsのCookie書込み境界](https://nextjs.org/docs/app/api-reference/functions/cookies)、[Supabase getSessionの注意事項](https://supabase.com/docs/reference/javascript/auth-getsession)、[getUserの本人照合](https://supabase.com/docs/reference/javascript/auth-getuser)、[getClaimsの署名検証](https://supabase.com/docs/reference/javascript/auth-getclaims)、[OWASPの独自headerによるCSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi)。
+
+## 本人情報の同一origin中継（既定無効）
+
+[account-proxy.ts](src/api/account-proxy.ts)をNext.jsのNode Route Handlerから使用します。`GET/PATCH /api/me`と`POST /api/consents`の3操作だけを、既存開発Workerの対応する`/me`・`/consents`へ転送します。汎用proxy、任意送信先、メディア/Range中継ではありません。2026-10-04のローカル追加であり、画面・実設定へは未接続です。
+
+### 有効化条件と転送範囲
+
+- サーバー専用`KOKO_API_PROXY_ENABLED`と`KOKO_API_COOKIE_ENABLED`がともに小文字の`true`、`KOKO_WEB_ORIGIN`が正規HTTPS origin、`KOKO_API_UPSTREAM_ORIGIN`が`https://koko-api-dev.arcer-jp.workers.dev`へ完全一致する場合だけ通信します。`NEXT_PUBLIC_`へ置きません。未設定・不完全・不正設定は契約の500 `INTERNAL_ERROR`となり、外部通信・Cookie変更はありません。別のWorkerやproductionを追加する場合は許可先・試験をコードレビューします。
+- 要求URLのorigin/pathを固定し、query等は拒否。書込みは完全一致の`Origin`必須、GETも指定があれば照合します。`Sec-Fetch-Site`は指定時に`same-origin`のみ（GETは`none`も可）。欠落しても書込みOriginとCSRFは省略しません。CORS非許可、未対応methodは405、Host/Forwardedから補完しません。
+- イベントUUID、単一の`__Host-koko_session`（発行側と同じ3,500文字上限）を要求。Cookie全体16KiB超過・重複・chunk・Authorization併送は拒否します。Supabase SSR/Cloudflare Access/その他のCookie、アクセス用秘密header、任意headerを透過せず、転送はAPI用Cookie・固定Origin・同一origin metadata・イベントID・JSON用headerと書込みCSRFに限定します。
+- 書込みJSONは実ストリームで1KiB・UTF-8・1秒以内を検査し、content encodingは受け付けません。既存clientの実行時検査で表示名/同意/CSRFを検査・投影します。JWTの署名・Google条件・イベント所属・CSRFのHMAC・DB認可はWorkerが再検査し、Webの形式検査で代替しません。
+
+### 応答・失敗時の扱い
+
+上流取得と本文読取りを合わせて10秒、JSON本文16KiBを上限とします。要求中止も伝播し、リダイレクトを追跡せず、AccessログインHTMLや不正応答は固定エラーで閉じます。`Content-Length`だけを信用せず、分割chunkを合算します。自動再送・cacheはなく、更新後の通信切断を「未保存」と断定しません。
+
+成功は既存clientで検査・投影した本人情報/ackだけで、Cookie経路の本人情報にはCSRF値が必須です。エラーは契約code/status/request UUIDを照合します。上流のSet-Cookie/Location/CORS/cache header・例外詳細を返さず、全応答を`private, no-store`とします。API Cookieの更新・消去は発行処理の責務であり、中継の401で暗黙に更新しません。429の任意`retry_after_seconds`など、既存clientが保持しない補助情報は透過しません。
+
+**Access保護されたWorkerへのサーバー間認証は未実装です。** WebサーバーはブラウザのWorker用Accessセッションを自動継承しません。今回service tokenの発行・設定・転送、保護解除を行っておらず、実Workerが302を返す場合は失敗します。認証方式の追加・本人による設定・通し試験を別工程にし、設定だけ先に有効化しません。
+
+[中継試験](test/account-proxy.test.ts)は合成Cookie/上流応答で3操作・秘密header非転送・不正入力/応答・時間/容量上限・取消し・更新非再送を検証します。[実Next E2E](e2e/login.spec.ts)は既定無効の500とOPTIONS拒否です。有効時のブラウザCookie保存、実Access/Supabase/DB接続やアプリ全体の認証ゲートの完成を証明しません。
+
+根拠（2026-10-04確認）：[Next.js BFFの境界](https://nextjs.org/docs/app/guides/backend-for-frontend)、[OWASP SSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)、[Cloudflare Accessのサーバー間資格情報](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)。
 
 ## Googleログインの検証導線
 

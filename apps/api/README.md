@@ -41,7 +41,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義していますが、現�
 
 発行側の正本は[WebのAPI用Cookie処理](../web/README.md#api用cookieの発行処理既定無効)です。既定無効の専用routeをローカル追加しましたが、画面・callback・logoutへの統合は未実装です。受信Cookie headerだけではSecure・HttpOnly等の属性を検証できません。既存のSupabase SSRログインからコピーしただけで完成とは扱いません。
 
-同一origin転送、CookieとOriginの伝搬、Accessとの両立、鍵の登録、実Google認証・refresh・logout・失効を確認してから有効化します。Secret登録・認証設定変更・実配備は[保護操作の個別確認](../../AGENTS.md#保護操作の確認)へ分離します。API境界の模擬試験は実ブラウザCookieや実クラウド受入を証明しません。
+[本人情報3操作の同一origin中継](../web/README.md#本人情報の同一origin中継既定無効)をWeb側へ既定無効で追加しました。CookieとOriginの実伝搬、Accessとの両立、鍵の登録、実Google認証・refresh・logout・失効を確認してから有効化します。中継はJWT/CSRFの形式検査だけで、Workerの本人・所属・HMAC検証を代替しません。Secret登録・認証設定変更・実配備は[保護操作の個別確認](../../AGENTS.md#保護操作の確認)へ分離します。API境界の模擬試験は実ブラウザCookieや実クラウド受入を証明しません。
 
 [試験](test/cookie-auth.spec.ts)はworkerdの実Web Cryptoと合成Auth/DB応答を使用し、独立したNode HMAC既知ベクトル、改竄・別session/event/origin/key、設定不足、重複Cookie、送信元偽装、認証・所属拒否、Bearer互換性を検証します。CSRFは悪意ある別サイトからの送信を制限するもので、XSSや漏洩したJWT・鍵への対策を代替しません。
 
