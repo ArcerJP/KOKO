@@ -23,7 +23,7 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 ## 表示名・規約同意のHTTPクライアント
 
-[client.ts](src/api/client.ts)は生成型の`getMe`、`updateMe`、`acceptTerms`を提供します。2026-10-04に更新2操作を追加しました。現段階では画面・実Cookieサーバーに接続しておらず、合成HTTP試験の完了です。Workerの[Cookie受信・CSRF/Origin検証](../api/README.md#cookie認証とcsrf既定無効のローカル実装)、下記の発行処理・本人情報中継は既定無効のローカル実装であり、画面・実環境への統合は別途必要です。クライアント側検査を認証・認可として扱いません。
+[client.ts](src/api/client.ts)は生成型の`getMe`、`updateMe`、`acceptTerms`を提供します。2026-10-04に更新2操作を追加しました。本人情報取得・表示名変更は下記の画面へ条件付きで連携し、規約同意画面と実環境接続は後続です。Workerの[Cookie受信・CSRF/Origin検証](../api/README.md#cookie認証とcsrf既定無効のローカル実装)、発行処理・本人情報中継と画面連携は既定無効のローカル実装です。クライアント側検査を認証・認可として扱いません。
 
 - `updateMe({ display_name }, csrfToken, signal?)`は表示名だけ、`acceptTerms({ terms_version, accepted: true }, csrfToken, signal?)`は利用者が確認・同意した版だけを送信。空白のみ・長すぎる表示名・制御文字・偽同意・余分な項目と、Workerの1KiB上限を超えるUTF-8 JSONを送信前に拒否します。表示名や規約版を勝手に整形しません。
 - CSRF値は`GET /me`の応答から呼出し側が各更新へ明示的に渡します。32〜256文字のheader安全な可視ASCIIだけを受け付け、欠落/不正なら送信せず`FORBIDDEN`。クライアントは生成・永続保存・自動補完しません。呼出し側もURL、ログ、localStorage、IndexedDB、共有cacheへ保存せず、ログアウト時にはメモリ上の状態を破棄してください。
@@ -37,7 +37,7 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 ## API用Cookieの発行処理（既定無効）
 
-2026-10-04にWeb内部の`/auth/api-session`を追加しました。[Route Handler](src/app/auth/api-session/route.ts)から[発行処理](src/auth/api-session.ts)を呼びます。イベントAPIとは別のWeb専用経路であり、OpenAPIの本人情報契約を変更しません。**callback・中継・ログアウトとの条件付き連携はローカル実装済みです。画面からの発行/期限前更新、設定値の登録・実環境での有効化は未実施です。**
+2026-10-04にWeb内部の`/auth/api-session`を追加しました。[Route Handler](src/app/auth/api-session/route.ts)から[発行処理](src/auth/api-session.ts)を呼びます。イベントAPIとは別のWeb専用経路であり、OpenAPIの本人情報契約を変更しません。**callback・中継・ログアウト・表示名画面の操作時発行/更新は条件付きでローカル実装済みです。設定値の登録・実環境での有効化は未実施です。**
 
 ### 設定と送信元の条件
 
@@ -59,13 +59,35 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 ### 有効化前に残る作業
 
-画面からの発行/期限前更新、本人情報・規約同意画面とメモリ上CSRFの破棄、下記の同一origin中継とAccess保護の実環境での両立、実Googleセッションとブラウザでのrefresh・終了競合・失効を検証してから有効化します。ログアウトの条件付き実装だけで受入完了とはせず、設定だけ先に有効化してはいけません。
+本人情報・表示名の画面は操作時に発行/更新し、CSRFを操作中だけ保持する方式です。規約同意画面、下記の同一origin中継とAccess保護の実環境での両立、実Googleセッションとブラウザでのrefresh・終了競合・失効を検証してから有効化します。背景タイマーでの期限前更新は導入していません。条件付き実装だけで受入完了とはせず、設定だけ先に有効化してはいけません。
 
 将来停止する場合は、設定を外す前のCookie消去経路と、停止後の既発行Cookie/JWTの扱いを決めます。flagをOFFにするだけでは残存Cookieを消去せず、DELETEも無効になります。Cookieの300秒制限をJWTの即時失効や漏洩対策の代わりにしません。設定・認証・公開範囲・実配備は[保護操作の個別確認](../../AGENTS.md#保護操作の確認)へ分離します。
 
 [発行処理試験](test/api-session.test.ts)はNextResponseの実Cookieシリアライズと合成Auth応答を使用し、未設定、送信元・別資格情報の拒否、本人/署名結果/期限の異常、更新・消去・秘密非出力を検証します。[アダプター試験](test/auth-server.test.ts)はCookie writerの失敗伝播、[Playwright試験](e2e/login.spec.ts)は設定なしの実Next.js HTTP経路の503・Cookie非変更を検査します。成功時のブラウザCookie保存、暗号署名そのもの、SDKの実refresh、実クラウド接続を証明するものではありません。
 
 根拠（2026-10-04確認）：[Next.jsのCookie書込み境界](https://nextjs.org/docs/app/api-reference/functions/cookies)、[Supabase getSessionの注意事項](https://supabase.com/docs/reference/javascript/auth-getsession)、[getUserの本人照合](https://supabase.com/docs/reference/javascript/auth-getuser)、[getClaimsの署名検証](https://supabase.com/docs/reference/javascript/auth-getclaims)、[OWASPの独自headerによるCSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi)。
+
+## 本人情報・表示名画面（既定無効）
+
+2026-10-04、既存の認証済み`/account`へ[AccountPanel](src/app/account/account-panel.tsx)と[表示名フォーム](src/app/account/profile-form.tsx)を追加しました。[controller](src/api/account-profile.ts)はUIから独立し、生成型を使う既存clientを利用します。既存のGoogle検証を省略したテスト用公開routeやブラウザ本番の偽セッションは追加しません。
+
+### 有効化条件と操作
+
+- サーバー専用`KOKO_ACCOUNT_UI_ENABLED`・`KOKO_API_COOKIE_ENABLED`・`KOKO_API_PROXY_ENABLED`がすべて小文字の`true`、`KOKO_EVENT_ID`がUUIDの場合だけ表示。未設定・不正なら従来のログイン確認/ログアウトだけです。検査は[account-config.ts](src/api/account-config.ts)で行い、サーバーからは公開可能なevent IDだけをClientへ渡します。API route側の正規Web origin・固定上流origin条件も別途必須です。
+- 初期表示やEffectから本人情報APIを自動送信しません。「本人情報を読み込む」でAPI Cookie発行/更新→`GET /api/me`、保存時にも発行/更新→fresh GET→PATCH→確認GETの順です。背景タイマーを置かないため待機中の不要なAPI要求を抑えますが、操作ごとの通信は増えます。発行POSTはログアウトと共用の[session-post.ts](src/auth/session-post.ts)で10秒・128byte、同一origin・redirect拒否・no-storeを維持します。
+- 入力はclientと共通の検査で空白のみ・50文字超過・制御文字を拒否。未読込み・未変更・BAN・処理中・終了済みでは保存できません。入力の勝手なtrim/整形や、規約同意の代行はしません。
+- 保存直前の本人ID・event ID・表示名を先行表示と比較し、変化があればPATCHせず再読込みへ。最新GETのCSRFだけを当該PATCHへ渡し、UI state・DOM・URL・ログ・storageへ保存しません。ACKだけでは成功表示せず、確認GETで同一本人・指定した表示名・非BANを確認します。
+- 1画面1操作に限定し、二重送信・自動再送なし。Cookie準備から確認GETまで30秒で打切り、取消しを伝播。保存途中の通信/認証/再GET失敗は結果不明として古い表示と入力を消し、手動再読込みを案内します。入力途中の名前を保持したまま自動再保存しません。
+
+### 状態の破棄と保証の境界
+
+Auth通知の`INITIAL_SESSION`以外で状態を破棄し、`SIGNED_OUT`は画面を終了状態にします。通知callback内でAuth APIへ再入せず、session/JWTを受取・保持しません。ログアウトボタンは最初にcontrollerを終了し、API/Auth終了が失敗してもプロフィール編集を再開しません。ページ離脱の`pagehide`でも終了し、BFCacheから戻った場合はページの開き直しを案内します。購読解除とunmountで進行中要求を中止し、世代が変わった後の古い応答は表示・次のPATCH/GETへ使用しません。
+
+本人情報と入力は画面のメモリだけ、CSRFは操作の局所変数だけです。保存前の照合はDBの原子的な楽観ロックではなく、GETとPATCHの間に他操作が保存した場合の競合まで防ぎません。既送信要求の取り消し、Auth通知の遅延・未配信、他端末終了の即時検出も保証しません。最終認可はWorkerに残します。世代Cookieの境界は[ADR-0004](../../docs/decisions/ADR-0004-web-session-generation.md)どおりです。
+
+[controller/HTTP試験](test/account-profile.test.ts)は合成応答で通常往復・fresh CSRF・本人取り違え・部分失敗・二重押下・取消し/遅延・停止を検査。[入口試験](test/account-page.test.ts)と[フォーム試験](test/profile-form.test.ts)はSSR表示と非公開値の非出力、[Chromium表示試験](e2e/profile-view.spec.ts)は純粋フォームのHTML/CSSで390/1280pxのラベル・focus・横はみ出しを検査します。後者はReactをhydrateしたクリック往復試験ではありません。有効時の実OAuth→Cookie保存→Access→DB→表示名更新と、端末/複数タブの通し受入は未実施です。正式規約の表示/同意・メディア機能も別工程です。
+
+根拠（2026-10-04確認）：[Reactの不変snapshotと購読解除](https://react.dev/reference/react/useSyncExternalStore)、[Supabase Auth通知](https://supabase.com/docs/reference/javascript/auth-onauthstatechange)、[Next.js Server/Client境界](https://nextjs.org/docs/app/getting-started/server-and-client-components)。
 
 ## API用Cookieを含むログアウト（既定無効）
 
@@ -84,7 +106,7 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 - 発行要求の世代をAPI Cookieへ束縛し、中継は現在の世代との完全一致を要求します。発行routeは世代を更新しないため、終了や再ログイン後に届いた古い発行応答は中継できません。古いSSR更新Cookieが戻った場合も、発行時に検証したAuthの本人/セッションが新世代と異なれば拒否します。
 - 中継は一致確認後に包みを外し、Workerには従来どおりraw JWTのAPI Cookieだけを渡します。世代Cookie・包み・SSR Cookieを転送しません。旧raw JWTだけのWeb Cookieへの互換fallbackはありません。有効化時は関連処理を揃え、改めてログインが必要です。
 
-これは通常ブラウザの応答順序対策であり、JWTの即時失効、盗まれたCookieの再送、XSS、既にWorkerへ渡した処理の取消しを保証しません。別端末のCookieは削除できず、同時に進行中のOAuth callbackは新たなログインを成立させ得ます。Supabaseのglobal signOutも既発行JWTを即時失効させません。実ブラウザの複数タブ・refresh競合の受入は後続です。今後追加する本人情報/CSRFの画面内状態も終了時に破棄し、古い取得結果を再表示しない設計が必要です。
+これは通常ブラウザの応答順序対策であり、JWTの即時失効、盗まれたCookieの再送、XSS、既にWorkerへ渡した処理の取消しを保証しません。別端末のCookieは削除できず、同時に進行中のOAuth callbackは新たなログインを成立させ得ます。Supabaseのglobal signOutも既発行JWTを即時失効させません。実ブラウザの複数タブ・refresh競合の受入は後続です。本人情報/表示名画面は終了時に状態を破棄し、古い取得結果を再表示しません。今後追加する規約同意などの画面にも同じ境界が必要です。
 
 [競合試験](test/api-sign-out.test.ts)は合成Authと実NextResponseのCookieを用い、終了/再ログイン→旧発行応答適用→中継拒否、別本人/同一本人の旧Authセッションから新世代への発行拒否を検査します。[順序・失敗試験](test/sign-out.test.ts)はAPI失敗時もAuth終了を試すこと、部分失敗、時間/容量上限を検査します。実Next E2Eは無効時の503・Cookie非変更とmethod拒否だけであり、有効な実ブラウザ/SDK/クラウドの完了を証明しません。
 
@@ -92,7 +114,7 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 
 ## 本人情報の同一origin中継（既定無効）
 
-[account-proxy.ts](src/api/account-proxy.ts)をNext.jsのNode Route Handlerから使用します。`GET/PATCH /api/me`と`POST /api/consents`の3操作だけを、既存開発Workerの対応する`/me`・`/consents`へ転送します。汎用proxy、任意送信先、メディア/Range中継ではありません。2026-10-04のローカル追加であり、画面・実設定へは未接続です。
+[account-proxy.ts](src/api/account-proxy.ts)をNext.jsのNode Route Handlerから使用します。`GET/PATCH /api/me`と`POST /api/consents`の3操作だけを、既存開発Workerの対応する`/me`・`/consents`へ転送します。汎用proxy、任意送信先、メディア/Range中継ではありません。2026-10-04のローカル追加であり、本人情報・表示名画面は条件付き接続済み、規約同意画面と実設定は未接続です。
 
 ### 有効化条件と転送範囲
 
@@ -119,6 +141,6 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 
 接続時は[例](.env.example)に従い、SupabaseのProject URLと`sb_publishable_`で始まる公開用キーを設定します。Google Client Secret、Supabase secret/service_roleキー、セッションをここやGitへ保存しません。Supabaseには固定Web URLの`/auth/callback`だけをRedirect URLとして登録済みです。ローカルURLは未登録のため、ローカル実ログイン試験にはその完全URLの追加許可が別途必要です。現在のVercel保護とSupabaseのSite URLは維持しています。
 
-SupabaseのEmail providerは無効化済みです。規約への同意・表示名の画面、Cookie/CSRFを使うAPI実接続、実機のセッション維持・失効試験は後続です。ログイン導線やHTTPクライアントの追加をF1-4全体の完了とは扱いません。
+SupabaseのEmail providerは無効化済みです。表示名画面は既定無効で実装済みですが、規約への同意画面、Cookie/CSRFを使うAPI実接続、実機のセッション維持・失効試験は後続です。ログイン導線やHTTPクライアント・表示名画面の追加をF1-4全体の完了とは扱いません。
 
 メディアは[認証ゲート](../../docs/decisions/ADR-0002-authenticated-delivery.md)経由。Cookieを通さない公開画像最適化cacheや、署名付きStream URLの直接配布で代替しません。詳細な順序は[FEタスク](../../docs/product/development-plan.md#feタスク)を参照してください。
