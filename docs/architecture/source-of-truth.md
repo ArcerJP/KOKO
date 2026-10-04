@@ -22,7 +22,7 @@ KOKOでは、すべての記録を同じ正本性で扱いません。適切な�
 
 ## 競合時のルール
 
-Web→開発Workerのサービス認証は[ADR-0005](../decisions/ADR-0005-web-access-service-auth.md)が採用理由、[Web README](../../apps/web/README.md#accessサービス認証ローカル実装実設定未適用)が設定/本人ゲート、[クラウド準備](../product/cloud-setup.md)が実適用の証拠です。ローカル実装からtoken発行・権限付与・接続成功を推定しません。
+Web→開発Workerのサービス認証は[ADR-0005](../decisions/ADR-0005-web-access-service-auth.md)が採用理由、[Web README](../../apps/web/README.md#accessサービス認証)が設定/本人ゲート、[クラウド準備](../product/cloud-setup.md)が実適用の証拠です。ローカル実装からtoken発行・権限付与・接続成功を推定しません。
 
 2026-10-03採択の自律進行・条件付き継続承認・保護操作の区分は[AGENTS.md](../../AGENTS.md#作業進行と承認境界)が正本です。USER.mdは本人の希望と採択経緯、TOOLS.mdはツール別条件、各Skillは実行手順を扱います。以前の一般的な「必ず質問」「技術変更は承認待ち」よりこの区分を優先し、過去の承認履歴は当時の証拠として保持します。
 

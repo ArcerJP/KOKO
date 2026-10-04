@@ -1,6 +1,6 @@
 # ADR-0005: 固定開発APIへのサーバー専用Accessサービス認証
 
-- 状態：Accepted（ローカル技術設計のみ。実資格情報・Access設定・有効化は未適用）
+- 状態：Accepted（採用設計。実適用・未完了の状態は[クラウド準備](../product/cloud-setup.md#webからのaccessサービス認証2026-10-04)を参照）
 - 日付：2026-10-04
 - 判断：採択済み自律進行方針の範囲で選定。人間による権限変更の承認ではない。
 
@@ -12,7 +12,7 @@
 
 既存の固定開発Workerだけへ、Webサーバー設定からAccess service tokenの2headerを付与します。ブラウザからは取得せず、Node専用の中継モジュールに`server-only`を付けます。設定不足は通信前に拒否し、資格情報なしへのfallback、任意転送先、redirect追跡、メディア中継は追加しません。
 
-実環境では対象applicationの個別tokenに限定したService Auth policyが必要ですが、本ADRは作成・許可済みの証拠ではありません。全URL保護と既存本人policyを維持し、公開化やBypass、組織全体設定変更を前提にしません。具体的な設定・制約・本人ゲートの正本は[Web README](../../apps/web/README.md#accessサービス認証ローカル実装実設定未適用)、適用済み状態は[クラウド準備](../product/cloud-setup.md)です。
+実環境では対象applicationの個別tokenに限定したService Auth policyが必要ですが、本ADR自体を作成・許可済みの証拠とはしません。全URL保護と既存本人policyを維持し、公開化やBypass、組織全体設定変更を前提にしません。具体的な設定・制約・本人ゲートの正本は[Web README](../../apps/web/README.md#accessサービス認証)、適用済み状態は[クラウド準備](../product/cloud-setup.md)です。
 
 ## 比較
 
