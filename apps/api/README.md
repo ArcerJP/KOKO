@@ -1,6 +1,6 @@
 # KOKO バックエンド
 
-TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置く領域です。[初期migration](supabase/migrations/20260921000000_initial_contract.sql)に加え、Workerの安全な最小基盤を実装しています。初期SQLはKOKO開発DBへ適用済みです。`/me`はローカルWorkerと実Google JWT・開発DBによる取得・表示名変更・拒否経路まで検証済みです。2026-10-03にWorkerのSupabase設定を登録し、10月4日に`/me`を含むmainを既存開発Workerへ配備しました。配備後の保護・health・401を確認し、本人の実Googleログイン試験で外部WorkerとSupabaseの読取り／未所属403経路の受入も成功しました。クラウド側の所属あり取得・更新は未検証です。[最新の配備結果](../../docs/product/cloud-setup.md#r2修正後の単回配備2026-10-04)を参照してください。アップロード受付は下記の既定無効なローカル実装までで、保存完了・閲覧配信APIは未実装です。
+TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置く領域です。[初期migration](supabase/migrations/20260921000000_initial_contract.sql)に加え、Workerの安全な最小基盤を実装しています。初期SQLはKOKO開発DBへ適用済みです。`/me`はローカルWorkerと実Google JWT・開発DBによる取得・表示名変更・拒否経路まで検証済みです。2026-10-03にWorkerのSupabase設定を登録し、10月4日に`/me`を含むmainを既存開発Workerへ配備しました。配備後の保護・health・401を確認し、本人の実Googleログイン試験で外部WorkerとSupabaseの読取り／未所属403経路の受入も成功しました。クラウド側の所属あり取得・更新は未検証です。[最新の配備結果](../../docs/product/cloud-setup.md#r2修正後の単回配備2026-10-04)を参照してください。アップロード受付・完了・保存済み原本の回復は下記の既定無効なローカル実装までです。実保存の受入は未完了、閲覧配信APIは未実装です。
 
 ## Worker基盤
 
@@ -74,7 +74,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 
 [SQL試験](../../packages/contract/test/upload-admission.test.mjs)は全migrationを順に適用し、権限・不正入力・別イベント/本人・同意/BAN/停止・お題・再送・quota・資産保存失敗時の原子的取消しを検証します。PGliteは単一接続なので、実PostgreSQLでの多接続競合・負荷試験は未完了です。
 
-認証済みWorkerからのsession接続・再発行は下記を参照してください。次は実在/サイズ確認と処理予約・回収へ進めます。秘密登録・migrationの実適用・実配備・受付有効化は本人の個別確認が必要です。
+認証済みWorkerからのsession接続・再発行、実在/サイズ確認・処理予約、保存済み原本の回復は下記を参照してください。秘密登録・migrationの実適用・実配備・受付有効化は本人の個別確認が必要です。
 
 根拠（2026-10-04確認）：[PostgreSQLの行ロック](https://www.postgresql.org/docs/current/explicit-locking.html)、[Supabase関数の実行権限](https://supabase.com/docs/guides/database/functions)、[R2の上限と脚注](https://developers.cloudflare.com/r2/platform/limits/)。
 
@@ -91,7 +91,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 
 実接続時にはAPIサーバー専用の`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`と原本bucket限定資格情報が必要です。今回は値の取得/登録やWrangler設定変更をしていません。CORSは対象Web origin・PUT・singleの必須header・ETag取得を含め別途本人確認して設定し、任意originへ開放しません。署名URLにもアクセス能力があるため、チャット・ログ・DB・画像へ保存しません（upload sessionの期限/provider IDとは区別）。
 
-[試験](test/r2-upload.spec.ts)はWorkersで実署名し、ライブラリを使わないSigV4検算、署名改竄、サイズ/part/期限境界、local R2の開始・再開・中止を検証します。ローカルR2 bindingはS3署名検証を行わないため、実S3 PUT・条件付き上書き拒否・CORS・ETag・実端末・大容量転送は未検証です。multipart完了の不変性、処理予約と孤児回収も後続です。
+[試験](test/r2-upload.spec.ts)はWorkersで実署名し、ライブラリを使わないSigV4検算、署名改竄、サイズ/part/期限境界、local R2の開始・再開・中止を検証します。ローカルR2 bindingはS3署名検証を行わないため、実S3 PUT・条件付き上書き拒否・CORS・ETag・実端末・大容量転送は未検証です。multipart完了と処理予約は下記のローカル実装、未完了uploadの孤児回収は後続です。
 
 根拠（2026-10-05確認）：[R2署名URL](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)、[S3互換性のPutObject条件付き操作](https://developers.cloudflare.com/r2/api/s3/api/)、[R2実上限の脚注](https://developers.cloudflare.com/r2/platform/limits/)、[Workers multipart API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)、[公式aws4fetch例](https://developers.cloudflare.com/r2/examples/aws/aws4fetch/)。
 
@@ -103,8 +103,8 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 - [追加migration](supabase/migrations/20261005010000_upload_sessions.sql)の内部`manage_upload_session`は`open/refresh/parts/attach`を扱います。`reserve_upload`のlock順序の後でsessionをlockし、`UNIQUE(event_id, post_id)`で1投稿1sessionを保証します。既存に重複行があればmigrationは失敗させ、データを自動削除しません。単発送信は同じtransactionでreadyになります。
 - multipartは新規winnerだけが`provisioning`となり、Worker生成attempt UUIDでR2作成権を束縛します。R2開始後に`attach`がguardを再照合してprovider IDを保存し、readyへ変更します。同じattempt/providerのattachは冪等で、別値への変更は拒否します。内部provider ID・原本キー・申告snapshotをAPI本文へ丸ごと返さず、既存`UploadTicket`だけを組み立てます（part署名URL内のopaque provider IDはプロトコル上必要です）。
 - 同じリクエストの再送とrefreshは同じ投稿/session/providerを使い、新しいmultipartを作りません。期限はDB時刻から15分以内かつイベント/お題終了以下、秒単位切下げです。partsでは期限を延長せず、期限切れは`UPLOAD_EXPIRED`。refreshは期限切れでも未完了・本人・guardを再確認して更新します。完了session、削除/BANラッチ済み投稿へは再発行しません。
-- DB予約の応答喪失・R2作成結果不明・作成後crashではprovisioningが残ることがあります。同じ/別attemptの再送でも自動的に作成し直さず`UPLOAD_INCOMPLETE`で保留します。attach応答だけ失われた場合は後のopenでreadyを取得できます。結果不明のproviderを盲目的にabortしません。lease takeoverは未知の旧作成との重複を招くため採用していません。**保留/孤児の自動回収、provider側失効・中止後の回復は未実装**であり、無期限の自動回復を保証しません。
-- DB/R2応答の不正・redirect・不明エラーを閉じ、秘密や生応答を返しません。成功・失敗とも`private, no-store`。DBの期限検査と署名を経ても、すでに発行したURLの即時失効は保証しません。単発の実サイズ・multipartの実在/最終サイズは後続のcomplete/HEADが判定します。
+- DB予約の応答喪失・R2作成結果不明・作成後crashではprovisioningが残ることがあります。同じ/別attemptの再送でも自動的に作成し直さず`UPLOAD_INCOMPLETE`で保留します。attach応答だけ失われた場合は後のopenでreadyを取得できます。結果不明のproviderを盲目的にabortしません。lease takeoverは未知の旧作成との重複を招くため採用していません。**provisioning保留/未完了multipartの孤児回収、provider側失効・中止後の回復は未実装**であり、下記の保存済み原本の回復とは区別します。
+- DB/R2応答の不正・redirect・不明エラーを閉じ、秘密や生応答を返しません。成功・失敗とも`private, no-store`。DBの期限検査と署名を経ても、すでに発行したURLの即時失効は保証しません。単発の実サイズ・multipartの実在/最終サイズは下記のcomplete/HEADが判定します。
 
 [session SQL試験](../../packages/contract/test/upload-sessions.test.mjs)は全migrationをメモリDBへ適用して権限・所有者・単一winner・期限・guard更新・保存失敗の取消しを検証します。[HTTP試験](test/uploads.spec.ts)はWorkers上の実署名と模擬Auth/RPC/provider応答で受付・再発行・part・CSRF・応答不明を検証します。実PostgreSQLの多接続競合、実PostgRESTからR2までの通し試験、実配備は未実施です。
 
@@ -121,11 +121,33 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 
 署名期限はPUTの有効期限です。completeは新しいURLを発行せず、期限を延長しません。署名期限後でもイベント/お題の受付中なら原本確認を受け付けます。保存済みでも受付終了やBAN等によりcommitできない原本、固定後の誤ETag、provisioning結果不明は自動で作り直さず、後続の回収/運用手順へ残します。原本は既存singleの条件付きPUTと1投稿1multipartで上書きを防ぎ、将来の処理consumerも記録したobject version/ETagを確認する必要があります。
 
-**追加migrationは実DB未適用、completeは未配備。R2イベント購読、取りこぼし/孤児の自動回収、outbox dispatcher・変換/公開consumer、FE送信キューと通し受入は未実装です。** B1-6全体や原本保存の実受入が完了したとは扱いません。
+**追加migrationは実DB未適用、completeは未配備。R2通知/定期照合の回復コードは下記のローカル実装までで、実購読・Cronは未設定です。未完了uploadの孤児回収、outbox dispatcher・変換/公開consumer、FE送信キューと通し受入は未実装です。** B1-6全体や原本保存の実受入が完了したとは扱いません。
 
 [SQL試験](../../packages/contract/test/upload-completion.test.mjs)は全migration・service専用権限・再送・guard変化・実測不一致・outbox失敗時取消しを検証します。[HTTP試験](test/upload-completion.spec.ts)は上流mock、[R2試験](test/r2-completion.spec.ts)は公式ETagベクトルとローカルR2を使用します。固定Miniflareはpart ETagにランダム値を使うため、multipart試験だけ合成内容のMD5からlocal part識別子へ変換するfixtureを挟み、実ローカル組立てと最終HEADを検証します。本番コードのチェックは緩めません。実S3転送、多接続DB競合、Google/Accessを通した実受入は未検証です。
 
 根拠（2026-10-05確認）：[R2 completeとHEAD](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)、[multipart ETag](https://developers.cloudflare.com/r2/objects/upload-objects/#etags)、[R2強整合性](https://developers.cloudflare.com/r2/reference/consistency/)、[WorkersのMD5互換処理](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/)。
+
+## 保存済み原本の回復（B1-6、既定無効）
+
+[回復Worker](src/upload-recovery.ts)はR2通知のQueue入口と、通知・complete申告の取りこぼしを補うscheduled入口を追加します。[追加migration](supabase/migrations/20261005030000_upload_recovery.sql)のservice専用RPCを経由し、上記completeと同じguard・原子確定・outbox重複排除へ合流します。公開HTTP routeや利用者JWTの代理生成は追加しません。
+
+- **通知は照会のきっかけのみ**：設定したQueue名、R2 account、開発原本bucket、`PutObject`/`CompleteMultipartUpload`、UUIDのcanonical keyを照合します。通知本文の本人ID・size・ETag等は使いません。DBの既存予約から所有者・申告サイズ・固定partsを導出し、HEADの実測値を再照合します。本文中のaccountは署名ではなく、認証の境界はCloudflareのQueue配信とproducer権限です。任意利用者から当該Queueへ投入できる構成を許可しません。
+- **R2はHEAD限定**：既知の単発送信、またはparts固定済みのmultipartについて、組立て済み原本だけを回復します。未存在時もcomplete/create/abort/deleteを呼びません。provisioning不明・未固定parts・誤ETagを推測で修復しません。変換・公開の成功や安全判定ではありません。
+- **毎回の再認可**：内部`recover_upload`はevent/post/asset/sessionを照合し、DB導出のowner/partsで既存`complete_upload`へ委譲します。prepare/commit間のBAN・規約変更・受付停止等も再検査します。API先行・通知先行・応答喪失後の再送は同じ受領票へ合流し、処理jobを追加登録しません。保留・削除投稿の復活や受付終了の迂回をしません。
+- **件数限定の定期照合**：`claim_upload_recovery(10)`は5分以上前の未完了ready sessionを最大10件取得します。singleまたはparts固定済みmultipartで、uploading・BANラッチなし・原本削除予約なしが対象です。`READ COMMITTED`、session行の`SKIP LOCKED`、同transactionでの`recovery_after`の5分繰下げにより同時claimと連続再取得を抑制します。失敗・応答喪失も5分後に再候補となり、古い未保存原本だけが先頭を占有しない順序にします。これ自体は完了・排他lease・厳密な一度だけ処理の保証ではありません。
+- **再試行と観測**：各通知を個別ack/retryします。不正/無関係な通知・不存在予約はignored、同意/BAN/停止等はdeferredとしてackし、状態を進めません。R2未保存・照合不一致・上流障害・不正応答は60秒遅延retry。定期照合でも1件の失敗で残件を止めず、次回候補に残します。ログはaccepted/ignored/deferred/retryの件数のみで、payload・ID・原本キー・秘密・生例外を出しません。RPCは固定Supabase URL、redirect禁止、5秒timeoutです。
+
+### 実接続前の条件
+
+WranglerのQueue consumer・Cron・flagは**未追加**です。コードmergeだけでは回復処理は起動しません。既存の`KOKO_UPLOADS_ENABLED`と新しい`KOKO_UPLOAD_RECOVERY_ENABLED`の両方が文字列`true`の場合だけ有効です。未設定のscheduledは無操作、Queueは成功returnによる暗黙ackを避けて固定エラーで失敗させます。無効化時はconsumer停止/切離しを調整し、retry上限による配送喪失を放置しません。
+
+本人確認後の実接続では、既存Supabase設定・R2 bindingに加え、`KOKO_UPLOAD_RECOVERY_QUEUE`と実consumerのQueue名一致、既存`R2_ACCOUNT_ID`との一致、原本bucketの限定通知規則を確認します。batch最大10件、有限retryとDLQ、consumer concurrency上限、Cron `*/5 * * * *`を明示し、秘密やproducer権限・公開範囲を拡大しません。これらの外部設定、追加SQLの実適用・実配備・受付有効化は別の保護操作です。
+
+DLQ監視/回収、スキャンの滞留・負荷検証、未完了uploadの失効/安全な中止、受付終了・BAN等で確定できない原本の運用回収は後続です。定期照合は全bucket列挙を行わずDB予約のみを対象とするため、予約のない孤児原本は拾いません。R2イベント実配送・多接続DB競合・DB→R2の実通し試験は未実施です。
+
+[SQL試験](../../packages/contract/test/upload-completion.test.mjs)はAPI/回復の順序・同じoutboxへの合流・guard変化・権限・claim上限/繰下げを検証します。[Workers試験](test/upload-recovery.spec.ts)は通知hint・RPC/R2異常・HEAD限定・個別再試行・定期候補検証・既定無効入口を検証します。共通の[応答parser](src/completion-result.ts)と既存HTTP試験で、公開受領票へ内部情報を混入させません。
+
+根拠（2026-10-05確認）：[R2通知schema](https://developers.cloudflare.com/r2/buckets/event-notifications/)、[Queuesのack/retry・DLQへの遷移](https://developers.cloudflare.com/queues/configuration/batching-retries/)。
 
 ## ローカル検証
 

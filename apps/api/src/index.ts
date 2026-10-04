@@ -4,6 +4,11 @@ import {
   handleUploadCompletion,
   type CompletionEnv,
 } from "./upload-completion";
+import {
+  handleUploadRecoveryQueue,
+  handleUploadRecoveryScheduled,
+  type RecoveryEnv,
+} from "./upload-recovery";
 
 const JSON_HEADERS = {
   "cache-control": "no-store",
@@ -19,6 +24,19 @@ function json(body: object, status: number, headers?: HeadersInit): Response {
 }
 
 export default {
+  async queue(batch, env) {
+    console.info(
+      "upload_recovery_queue",
+      await handleUploadRecoveryQueue(batch, env as RecoveryEnv),
+    );
+  },
+  async scheduled(controller, env) {
+    const counts = await handleUploadRecoveryScheduled(
+      controller,
+      env as RecoveryEnv,
+    );
+    if (counts) console.info("upload_recovery_scheduled", counts);
+  },
   async fetch(request, env): Promise<Response> {
     const { pathname } = new URL(request.url);
 

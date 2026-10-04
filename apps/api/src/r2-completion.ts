@@ -63,6 +63,7 @@ export async function verifyCompletedOriginal(
   size: number,
   providerId: string | null,
   parts: readonly CompletionPart[],
+  mode: "complete" | "head-only" = "complete",
 ) {
   const key = originalKey(identity.eventId, identity.postId, identity.assetId);
   const plan = planR2Upload(size);
@@ -79,7 +80,7 @@ export async function verifyCompletedOriginal(
   try {
     let found = await bucket.head(key);
     let completed: R2Object | undefined;
-    if (!found && plan.mode === "multipart") {
+    if (!found && plan.mode === "multipart" && mode === "complete") {
       try {
         const upload = bucket.resumeMultipartUpload(key, providerId!);
         if (upload.key !== key || upload.uploadId !== providerId)
