@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { UploadProvider } from "../components/upload-provider";
+import { uploadConfiguration } from "../api/upload-config";
 import "../styles/tokens.css";
 import "./globals.css";
 
@@ -12,9 +14,18 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const upload = uploadConfiguration(process.env);
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body>
+        {upload ? (
+          <UploadProvider key={JSON.stringify(upload)} config={upload}>
+            {children}
+          </UploadProvider>
+        ) : (
+          children
+        )}
+      </body>
     </html>
   );
 }

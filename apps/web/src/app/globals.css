@@ -299,6 +299,12 @@ footer {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+.upload-preview {
+  max-width: 34rem;
+}
+.upload-preview .preview {
+  aspect-ratio: 9 / 16;
+}
 @media (max-width: 720px) {
   .preview-layout {
     grid-template-columns: minmax(0, 1fr);

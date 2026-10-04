@@ -50,6 +50,8 @@ FEの配信はVercel、API/メディアは同一originの経路からWorkersへ�
 
 ## 重要な整合性
 
+Webの送信キューは[ADR-0006](../decisions/ADR-0006-durable-browser-upload-queue.md)に基づき、IndexedDB adapterとUI非依存engine、root layout provider、明示送信画面に分離します。画面ライフサイクルと送信を分け、同一本人/eventと固定IDで再開します。保存・retry・秘密非永続・実機制約は[Web README](../../apps/web/README.md#端末内送信キューと投稿画面f1-5f2-1既定無効)が正本です。
+
 - JWT検証だけでなく、対象イベント・本人/権限・投稿/公開停止を確認。service_roleのDB利用にはAPI認可が必要です。
 - DB変更、counter、監査、外部処理の予約はtransaction。Queues/webhookは少なくとも1回の配送を前提に、post/version/jobキーで冪等化します。
 - Stream webhookは上流の署名を検証し、timestampと重複を確認。古い処理版からのcallbackでdeletedやBAN済み投稿を公開しません。上流payloadの正本はベンダー文書であり、外部から送られたuser_idやevent_idだけを信用しません。

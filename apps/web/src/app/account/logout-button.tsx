@@ -21,6 +21,15 @@ export function LogoutButton({
     setPending(true);
     setFailed(false);
     try {
+      // Stop this tab before any async sign-out. Other tabs also stop immediately.
+      window.dispatchEvent(new Event("koko-upload-stop"));
+      try {
+        const channel = new BroadcastChannel("koko-upload-stop");
+        channel.postMessage("stop");
+        channel.close();
+      } catch {
+        /* Supabase SIGNED_OUT remains the fallback notification. */
+      }
       onStart?.();
       await completeSignOut(apiEnabled, () =>
         createBrowserAuthClient().auth.signOut(),
