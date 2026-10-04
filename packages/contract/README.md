@@ -60,6 +60,8 @@ published / published_flagged → hidden → 以前の公開状態
 
 moderatorは監視・非表示・通常復帰・削除、adminは加えてBAN/解除・設定・お題編集・exportを担当します。一般利用者の本人削除・通報・申立ては別の所有者認可です。表示上のボタン非表示だけで権限を守らないでください。
 
+B1-5の[投稿受付DB予約](../../apps/api/README.md#投稿受付のdb予約b1-5ローカル実装)を追加migrationと[SQL試験](test/upload-admission.test.mjs)でローカル実装しました。初回申告の内部snapshotは実測値と分離し、既存の公開`UploadRequest`/`UploadTicket`契約は変更していません。原本キーを含む内部RPC応答を公開APIへそのまま返してはいけません。HTTP受付・署名発行・実保存・実DB適用の完了とは区別します。
+
 ## メディア識別と原本の意味
 
 動画の公開上限は`maxPublishedVideoSeconds`、短縮目標は`videoTrimTargetsSeconds`を正本とします。後者は実機比較用の候補で、公開可否は実測値で判断します。未計測・4秒超を許可する緩和ではありません。[費用比較](../../docs/product/cost-policy.md)の課金単位も確認してください。
