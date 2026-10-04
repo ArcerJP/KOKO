@@ -31,6 +31,10 @@ service tokenは外周の通過能力を持ちますが、アプリの利用者�
 
 既定OFFを維持し、正式本文採択、実token作成、Secret登録、Access policy、DB適用、実配備/有効化、実Googleセッションでの通し受入は別ゲートです。既存実装へのrevertは通常PRで可能ですが、実適用後の失効/停止には利用者影響と残存Cookie/JWTを含む確認が必要です。
 
-## 公式根拠
+## 2026-10-05の適用範囲拡張
+
+F1-5の受付・署名更新・part署名・完了通知の4 JSON操作に、同じ固定開発API・秘密非透過の境界を共用します。本人情報3操作は互換性を維持。upload専用flagを既定OFFで追加し、各操作の本文/応答上限と入力/出力検査を固定します。Blobは中継せずブラウザから限定R2署名へ直接PUTするため、Next.js側にメディア容量の負担を追加しません。逐次part署名は通信回数が増える一方、端末メモリと署名期限の消費を抑えます。詳細と未完了の正本は[Web README](../../apps/web/README.md#アップロード制御とr2直接転送f1-5既定無効)です。実権限・CORS・秘密登録・配備の変更ではありません。
+
+## 公式根拠（初回決定）
 
 2026-10-04確認：[Cloudflare service tokens](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)、[Service Auth等のpolicy](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/)、[Next.js server-only境界](https://nextjs.org/docs/app/getting-started/server-and-client-components)、[Next.js環境変数](https://nextjs.org/docs/app/guides/environment-variables)。
