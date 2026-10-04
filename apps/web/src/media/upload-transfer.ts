@@ -1,4 +1,5 @@
 import { ApiFailure } from "../api/client";
+import type { UploadCheckpoint } from "./upload-queue-record";
 import {
   completion,
   signedPut,
@@ -18,7 +19,8 @@ type Options = {
   fetcher?: typeof fetch;
   // Caller refreshes API Cookie + CSRF as needed; neither is sent to R2.
   signParts: (numbers: number[], signal?: AbortSignal) => Promise<PartTickets>;
-  onPart?: (part: Part) => void | Promise<void>;
+  checkpoint?: UploadCheckpoint | null;
+  onPart?: (part: Part, identity: string) => void | Promise<void>;
 };
 
 /** Transfer only. The caller separately submits the returned manifest to complete.
@@ -111,10 +113,19 @@ export async function transferOriginal(
   const size = session.part_size_bytes!;
   const count = Math.ceil(blob.size / size);
   if (count < 1 || count > 10000) throw new ApiFailure("INVALID_INPUT");
-  const parts: Part[] = [];
-  let identity: string | undefined;
+  const checkpoint = options.checkpoint;
+  const parts: Part[] = checkpoint
+    ? completion({ upload_id: session.upload_id, parts: checkpoint.parts })
+        .parts!
+    : [];
+  if (
+    parts.length > count ||
+    (checkpoint && !/^[a-f0-9]{64}$/.test(checkpoint.identity))
+  )
+    throw new ApiFailure("INVALID_INPUT");
+  let identity = checkpoint?.identity;
   // Sign just before each part, avoiding expiry of a batch during slow mobile PUTs.
-  for (let number = 1; number <= count; number++) {
+  for (let number = parts.length + 1; number <= count; number++) {
     signal?.throwIfAborted();
     const signed = tickets(
       await options.signParts([number], signal),
@@ -130,7 +141,16 @@ export async function transferOriginal(
       number,
       session.post_id,
     );
-    const key = `${url.pathname}?${url.searchParams.get("uploadId")}`;
+    // Store only a digest binding a checkpoint to the provider session/key.
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(
+        `${url.pathname}?${url.searchParams.get("uploadId")}`,
+      ),
+    );
+    const key = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
     if (identity !== undefined && identity !== key)
       throw new ApiFailure("INTERNAL_ERROR");
     identity = key;
@@ -142,7 +162,7 @@ export async function transferOriginal(
     );
     const part = { part_number: number, etag: etag! };
     parts.push(part);
-    await options.onPart?.({ ...part });
+    await options.onPart?.({ ...part }, identity);
     signal?.throwIfAborted();
   }
   return completion({ upload_id: session.upload_id, parts });

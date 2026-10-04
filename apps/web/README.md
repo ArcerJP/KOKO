@@ -177,7 +177,7 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 
 ## アップロード制御とR2直接転送（F1-5、既定無効）
 
-2026-10-05、[upload-client.ts](src/api/upload-client.ts)、[upload-proxy.ts](src/api/upload-proxy.ts)、[upload-transfer.ts](src/media/upload-transfer.ts)をローカル追加しました。**撮影検証画面からは呼び出しません。送信UI、IndexedDBキュー、最大3回の再試行・再開（F2-1）、実クラウド受入は未実装/未完了です。** BEの[受付](../api/README.md)と生成OpenAPI型を利用し、ブラウザでの形式検査を認証や保存済みの証拠にしません。
+2026-10-05、[upload-client.ts](src/api/upload-client.ts)、[upload-proxy.ts](src/api/upload-proxy.ts)、[upload-transfer.ts](src/media/upload-transfer.ts)をローカル追加しました。**撮影検証画面からは呼び出しません。送信UIと永続キューは下記の独立した既定無効の画面へ接続し、実クラウド受入は未完了です。** BEの[受付](../api/README.md)と生成OpenAPI型を利用し、ブラウザでの形式検査を認証や保存済みの証拠にしません。
 
 ### 固定JSON経路
 
@@ -212,6 +212,8 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 
 ## Googleログインの検証導線
 
+投稿画面は次節を参照してください。`/`の端末内検証と、明示送信を行う`/upload`は別です。
+
 `/login`からSupabase AuthのGoogle OAuthを開始し、`/auth/callback`でcodeをCookieセッションへ交換します。`/account`は署名検証済みのGoogle単独セッションだけを表示し、ログアウトできます。認証ページは動的応答・非キャッシュです。既存の`/`は外部送信しない撮影検証画面のままであり、利用者向けアプリ全体の認証ゲートではありません。
 
 接続時は[例](.env.example)に従い、SupabaseのProject URLと`sb_publishable_`で始まる公開用キーを設定します。Google Client Secret、Supabase secret/service_roleキー、セッションをここやGitへ保存しません。Supabaseには固定Web URLの`/auth/callback`だけをRedirect URLとして登録済みです。ローカルURLは未登録のため、ローカル実ログイン試験にはその完全URLの追加許可が別途必要です。現在のVercel保護とSupabaseのSite URLは維持しています。
@@ -219,3 +221,32 @@ API終了要求は同一origin・独自header・本文なし、redirect拒否・
 SupabaseのEmail providerは無効化済みです。表示名/規約同意画面は既定無効で実装済みですが、正式本文の採択、Cookie/CSRFを使うAPI実接続、実機のセッション維持・失効試験は後続です。ログイン導線やHTTPクライアント・画面の追加をF1-4全体の完了とは扱いません。
 
 メディアは[認証ゲート](../../docs/decisions/ADR-0002-authenticated-delivery.md)経由。Cookieを通さない公開画像最適化cacheや、署名付きStream URLの直接配布で代替しません。詳細な順序は[FEタスク](../../docs/product/development-plan.md#feタスク)を参照してください。
+
+## 端末内送信キューと投稿画面（F1-5/F2-1、既定無効）
+
+2026-10-05、`/upload`に明示送信画面を追加しました。撮影前/カメラ直下/処理後の注意、9:16の余白付きプレビュー、任意の選び直し、動画の3.8/3.5/3.0秒トリムを扱います。動画は端末実測とブラウザ読取が4秒以下の場合にトリム結果を採用、トリムfallback時は全長原本をR2へ送る旨を表示します。Streamへブラウザから二重送信せず、公開判定はサーバー側です。テーマ選択はF3の後続です。
+
+### 保存・本人・再開の境界
+
+- 新しいサーバー専用`KOKO_UPLOAD_UI_ENABLED=true`に加え、account/API Cookie/proxy/upload proxyの全flag、event UUID、非秘密R2 account ID、同じeventの採択済み規約本文が必要。現在の本文一覧は空、設定例は全OFFです。`/upload`の有効時は検証済みGoogle本人のみ、画面の明示読込でもfresh `/me`の本人/event/同意/BAN/版/CSRFを検査します。propsに渡すのはevent/account ID・版だけで、秘密は渡しません。
+- [保存層](src/media/upload-queue-storage.ts)は`koko-upload-queue` v1の`entries`（metadata）と`blobs`（原本）を一つのIndexedDB transactionで追加し、`complete`後だけ受付表示。`strict` durabilityを要求しますが、物理的な永続性・保持を保証するものではありません。3秒を超えた場合は保存中と表示し、15秒timeout/容量不足/拒否では成功と表示せず送信しません。同じ選択素材の再操作は固定IDを維持します。
+- 本人/eventをindexで分離し、保存読出しも全項目の形式を検査。ファイル名、JWT、Cookie、CSRF、署名URL、例外詳細は保存しません。Blobは暗号化していないため、共用端末・同originスクリプト/XSSから秘密を守る保管庫ではありません。保存前に画面で説明します。
+- [queue engine](src/media/upload-queue.ts)をroot layoutの[provider](src/components/upload-provider.tsx)に保持。画面コンポーネントのunmountだけでは送信を止めません。初期表示・reloadで勝手に再送せず、同じ本人の明示再開を要求します。別本人には旧キューを表示せず、別eventへ移しません。
+- Web Locksの同origin排他を初回本人確認・送信・手動再開・端末内削除に適用し、Cookie更新と別tabの制御要求を重ねません。未対応は安全停止、別tab実行中は待機案内。ログアウト開始は同tab eventとBroadcastChannelで通知し、SDKのAuth変更・pagehideでもabort/状態・プレビューを破棄します。既送信要求や発行済み署名を取消せる保証ではありません。停止後は改めて本人確認します。
+
+### 再試行と完了
+
+各JSON操作でCookie準備とfresh本人/CSRF検査を行い、合わせて15秒上限。R2 PUTの上限は転送層の120秒です。認可エラーは全体停止、その他の再試行不可codeも自動再送しません。再試行可能な失敗は初回＋最大3回（通常1/2/4秒、rate limitは補助秒数非透過のため60/120/240秒）。回数と次回時刻を保存し、失敗回数は自動でリセットしません。「この送信を再開」は同じIDに対する新しい最大3回の周期です。
+
+- singleの未知結果は同じuploadのcompleteを照合。`UPLOAD_INCOMPLETE`のときだけ同じsessionをrefreshし、`If-None-Match: *`付きPUTへ進みます。別ID・上書きへ切り替えません。
+- multipartは検査済みETag/part番号とkey/provider IDのSHA-256をcheckpointとして保存。再開は後続partから、署名は使用直前に更新。既存partを保持したまま別key/providerへ切り替える応答は拒否します。
+- 完了manifestを送信前に保存し、以後は同じcompleteだけを再送。202のpost/eventを照合した後に`done`記録とBlob削除を同じtransactionで行います。画面は「サーバー受付済み（公開待ち）」であり、AI/変換/公開完了ではありません。
+- 未送信分/受付記録の「端末の保存分を削除」は確認ダイアログ付き。これは端末内だけの削除であり、サーバー投稿の削除・R2 multipart破棄ではありません。ログアウト後も未送信原本は残ります。ログイン不能・BAN等で画面から削除できない場合は、ブラウザの当該サイトデータ削除が必要ですが、他のサイト保存情報も消えることに注意します。
+
+### 検証と残る受入
+
+単体試験は保存失敗、遅い保存、本人変更、上限retry、single曖昧結果、multipart checkpoint、complete replayを合成データで検証。Playwrightはtest runner内だけでbundleした合成画面で、実IndexedDBの保存/reload/本人分離/複数tab排他/quota例外rollback/画面切替と390/1280pxを検証します。製品の認証を迂回するrouteや試験用flagは作りません。動画Worker本体の実処理は従来capture E2E、新投稿画面のブラウザ試験は写真を対象とします。
+
+実Google/Access/同意、実R2/CORS、iPhone/Androidの保存速度（3秒目標）・実動画送信/復帰・容量/eviction・OS終了中挙動は未受入です。ブラウザ終了中の常時送信は保証せず、元ファイルを保持してください。新flagを実環境へ登録・有効化する操作も、実配備・追加DB適用とともに本人ゲートです。
+
+採用理由・比較・公式根拠は[ADR-0006](../../docs/decisions/ADR-0006-durable-browser-upload-queue.md)を参照してください。

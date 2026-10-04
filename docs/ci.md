@@ -50,6 +50,8 @@ Web向け3jobは`.github/workflows/web-check.yml`に定義します。秘密や�
 
 Web Testsにはアップロード制御・同一origin JSON中継・R2直接転送の合成試験を含みます。Web Browser Testsではproduction Route Handlerのupload既定無効を確認します。single/multipartの模擬通信成功と、実R2のCORS・署名・保存・Googleセッション受入は区別します。詳細は[Web README](../apps/web/README.md#アップロード制御とr2直接転送f1-5既定無効)を参照してください。
 
+F2-1のキュー試験では本人分離・永続化失敗・retry上限・曖昧なPUT/complete結果を検査します。Web Browser Testsは既存Chromiumで実IndexedDB・複数tab lock・reload・quota例外rollback・送信UI遷移を合成写真で検証。esbuildはWebの直接dev依存に固定し、テスト内bundleをPlaywright routeで供給します。製品へ認証回避routeやfixtureを配信せず、実秘密/実写真/外部R2を使いません。新送信UIの実動画・実Authの受入は別です。
+
 API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type Check`、`API Tests`、`API Build`は秘密情報やCloudflareログインなしで実行します。テストのR2はローカル保存であり、開発用実バケットとの通信成功を示しません。`API Build`もdry-runであり、Cloudflareへのdeploy成功とは区別します。
 
 APIが共有契約の生成済み`dist/`を参照するため、rootの`typecheck:api`・`test:api`・`build:api`は、それぞれ`build:contract`の成功後にworkspaceの処理を実行します。別jobや以前のローカルbuildの生成物には依存しません。APIだけを検証する場合もroot commandを使用し、workspaceの下位commandを直接実行する場合は共有契約buildを先に行います。2026-10-03のPR #15で判明した準備漏れへの対応です。再現検査ではlockfileどおり依存を導入し、各commandの前に共有契約の生成物がないことを確認します。親ディレクトリに別の`node_modules`があるコピーだけでは依存解決の独立性を保証できないため、GitHub CIの新規checkoutでも結果を照合します。

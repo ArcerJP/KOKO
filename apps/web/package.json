@@ -26,6 +26,7 @@
     "@playwright/test": "1.63.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.1",
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.8",
     "msw": "2.15.0",
