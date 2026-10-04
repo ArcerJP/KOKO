@@ -21,7 +21,7 @@
 - 本人用APIは`private, no-store`。共通feedもブラウザ・Vercel側は`private, no-store`、Worker内部だけ短時間共有cache。キャッシュより前に認証と公開可否を検査します。
 - 画像・動画は同一originの`/media/{event_id}/{post_id}/{resource}`。HTMLの画像・videoからはHttpOnly Cookie、APIクライアントからはBearerを使用できます。URLにセッションやStream署名を入れません。詳細は[認証配信ADR](../../docs/decisions/ADR-0002-authenticated-delivery.md)。
 - Cookie認証の書込みは、許可Originとセッションに束縛した`X-CSRF-Token`を検証。トークンは`GET /me`の`csrf_token`から取得し、ログ/共有cacheへ入れません。CORSを認証と見なしません。CSRF不正はFORBIDDEN。Supabase OAuth callbackのstate/PKCEも検証します。
-- 一覧は`created_at DESC, id DESC`。不透明cursorへイベント・フィルター・位置を束縛し、改ざん・別条件への流用を拒否。未公開/削除/別イベントの投稿は一律NOT_FOUNDとし存在を漏らしません。
+- 一覧は`created_at DESC, id DESC`。不透明cursorへイベント・フィルター・位置を束縛し、改ざん・別条件への流用を拒否。公開フィード/詳細では未公開/削除/別イベントの投稿を一律NOT_FOUNDとし存在を漏らしません。本人状態・本人一覧は別の所有者認可で非公開状態も扱い、メディアは返しません。
 - `client_request_id`を本人・イベント単位で一意に保持。同じ内容の再送は同じ投稿を返し、内容違いは409。complete、通知、webhook、like、削除は重複安全にします。
 - 入力サイズは文字列やページ件数に技術上の上限を設けますが、メディアの独自容量制限は設けません。実サービス上限はPROVIDER_LIMIT。single/multipartを切り替え、署名は対象キー・メソッド・期限へ限定します。
 - OpenAPIの`x-stage`は機能の予定実装段階です。第4・第5の契約を先に用意してもその機能を提供したとは扱いません。
@@ -61,6 +61,8 @@ published / published_flagged → hidden → 以前の公開状態
 moderatorは監視・非表示・通常復帰・削除、adminは加えてBAN/解除・設定・お題編集・exportを担当します。一般利用者の本人削除・通報・申立ては別の所有者認可です。表示上のボタン非表示だけで権限を守らないでください。
 
 B1-5の[投稿受付DB予約](../../apps/api/README.md#投稿受付のdb予約b1-5ローカル実装)を追加migrationと[SQL試験](test/upload-admission.test.mjs)でローカル実装しました。初回申告の内部snapshotは実測値と分離し、既存の公開`UploadRequest`/`UploadTicket`契約は変更していません。原本キーを含む内部RPC応答を公開APIへそのまま返してはいけません。[既定無効のHTTP受付・session/再発行](../../apps/api/README.md#アップロード受付と送信sessionb1-5既定無効)とR2署名をAPI内で接続し、[session SQL試験](test/upload-sessions.test.mjs)を追加しました。B1-6の[complete・原子的outbox](../../apps/api/README.md#アップロード完了と原本検証b1-6既定無効)と[通知/定期HEAD照合の回復](../../apps/api/README.md#保存済み原本の回復b1-6既定無効)も[SQL試験](test/upload-completion.test.mjs)とともにローカル実装済みです。実保存・実DB適用・通知/Cron設定・未完了uploadの孤児回収・処理consumerの完了とは区別します。
+
+B2-6の[本人状態・本人一覧](../../apps/api/README.md#本人の投稿状態と一覧b2-6の一部既定無効)は既存`PostStatus`の範囲でローカル実装しました。[SQL試験](test/own-posts.test.mjs)はservice専用read-only RPC・本人/event境界・全状態・microsecondのキーセットを検証します。任意の`block_category`は内部自由文を漏らさないため省略し、語彙確定・本人画面・公開フィード・実適用は未完了です。
 
 ## メディア識別と原本の意味
 

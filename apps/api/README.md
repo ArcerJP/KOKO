@@ -1,6 +1,6 @@
 # KOKO バックエンド
 
-TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置く領域です。[初期migration](supabase/migrations/20260921000000_initial_contract.sql)に加え、Workerの安全な最小基盤を実装しています。初期SQLはKOKO開発DBへ適用済みです。`/me`はローカルWorkerと実Google JWT・開発DBによる取得・表示名変更・拒否経路まで検証済みです。2026-10-03にWorkerのSupabase設定を登録し、10月4日に`/me`を含むmainを既存開発Workerへ配備しました。配備後の保護・health・401を確認し、本人の実Googleログイン試験で外部WorkerとSupabaseの読取り／未所属403経路の受入も成功しました。クラウド側の所属あり取得・更新は未検証です。[最新の配備結果](../../docs/product/cloud-setup.md#r2修正後の単回配備2026-10-04)を参照してください。アップロード受付・完了・保存済み原本の回復は下記の既定無効なローカル実装までです。実保存の受入は未完了、閲覧配信APIは未実装です。
+TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置く領域です。[初期migration](supabase/migrations/20260921000000_initial_contract.sql)に加え、Workerの安全な最小基盤を実装しています。初期SQLはKOKO開発DBへ適用済みです。`/me`はローカルWorkerと実Google JWT・開発DBによる取得・表示名変更・拒否経路まで検証済みです。2026-10-03にWorkerのSupabase設定を登録し、10月4日に`/me`を含むmainを既存開発Workerへ配備しました。配備後の保護・health・401を確認し、本人の実Googleログイン試験で外部WorkerとSupabaseの読取り／未所属403経路の受入も成功しました。クラウド側の所属あり取得・更新は未検証です。[最新の配備結果](../../docs/product/cloud-setup.md#r2修正後の単回配備2026-10-04)を参照してください。アップロード受付・完了・保存済み原本の回復と、本人の投稿状態・一覧は下記の既定無効なローカル実装までです。実保存の受入は未完了、公開フィード・メディア配信APIは未実装です。
 
 ## Worker基盤
 
@@ -148,6 +148,23 @@ DLQ監視/回収、スキャンの滞留・負荷検証、未完了uploadの失�
 [SQL試験](../../packages/contract/test/upload-completion.test.mjs)はAPI/回復の順序・同じoutboxへの合流・guard変化・権限・claim上限/繰下げを検証します。[Workers試験](test/upload-recovery.spec.ts)は通知hint・RPC/R2異常・HEAD限定・個別再試行・定期候補検証・既定無効入口を検証します。共通の[応答parser](src/completion-result.ts)と既存HTTP試験で、公開受領票へ内部情報を混入させません。
 
 根拠（2026-10-05確認）：[R2通知schema](https://developers.cloudflare.com/r2/buckets/event-notifications/)、[Queuesのack/retry・DLQへの遷移](https://developers.cloudflare.com/queues/configuration/batching-retries/)。
+
+## 本人の投稿状態と一覧（B2-6の一部、既定無効）
+
+[本人投稿ハンドラー](src/own-posts.ts)は既存の生成型を使い、`GET /posts/{post_id}/status`と`GET /me/posts`を実装します。アップロード完了時の固定受領票を再利用せず、毎回Google単独認証と`X-Event-ID`の所属を確認して現在の投稿状態を取得します。Bearerまたは上記の明示設定されたCookieに対応し、GETにCSRFは要求しません。Cookieの送信元制限は維持します。
+
+- **本人限定**：[追加migration](supabase/migrations/20261005040000_read_own_posts.sql)の`read_own_posts`はservice_roleのみ実行可能なSTABLE・SECURITY INVOKER・空search_pathの読取り関数です。所属と投稿は同一statement snapshotで確認し、event/userを必ず両方絞ります。管理者にも他人の投稿は返しません。他人・別event・不存在のIDは同じ404、未所属は403です。既存の本人索引を使い、RLS・テーブル権限・データは変更しません。
+- **投稿可否と分離**：BAN中・規約未同意/更新後・公開/受付停止・非公開イベントでも、所属本人は処理中・保留・BLOCK・削除済み等の状態を確認できます。これは公開フィードや原本を閲覧する権限ではなく、BANの解除や投稿の復活を行いません。
+- **最小限の応答**：ID・event・状態・version・作成時刻と、必要時の固定エラーコードだけを返します。BLOCKは`CONTENT_BLOCKED`、保留/送信失敗は許可済み固定コードまたは汎用理由へ変換します。自由記述の`block_category`・処理エラー・OCR・原本キー・URL・所有者情報を透過しません。分類語彙の確定までは契約上任意の`block_category`を省略します。
+- **キーセット**：一覧は`created_at DESC, id DESC`、limitは既定30・1〜100、最大limit+1件の読取り。Postgresのmicrosecond精度を丸めず、同時刻をUUIDで分けます。`next_cursor`は続きがなければnull。新着は再取得した先頭ページから表示し、カーソル行の削除でoffsetのようなずれを起こしません。複数ページを一つの固定snapshotとして保持する方式ではなく、各取得時点の状態を返します。
+- **署名cursor**：[専用codec](src/own-post-cursor.ts)でHMAC-SHA256、用途・順序・event・本人・limit・位置・15分の期限を結び付けます。改ざん・期限切れ・別本人/event/limit/鍵・未知形式は`INVALID_CURSOR`でDB前に拒否し、最初から取り直します。署名は暗号化ではなく、cursorには本人/event IDと位置が含まれます。認証の代用やログへの記録、共有をしません。
+- **通信と失敗**：全応答は`private, no-store`、共有cacheなし。AuthとRPCを合わせて10秒、各応答256 KiBのJSON上限、redirect禁止、クライアント中断時に取消し。型・順序・重複・scopeの異常は安全側に失敗し、上流本文・秘密headers・生例外を返しません。CORSは追加しません。
+
+将来の有効化には`KOKO_OWN_POSTS_ENABLED`が文字列`true`であることが必要です。未設定/その他はAuth・DB前に404。一覧には独立した乱数32byteを64桁hexで表す専用`KOKO_POST_CURSOR_SECRET`も必要で、欠落/不正なら500です（単一状態取得には不要）。Supabase/Access/CSRFの秘密を再利用せず、サーバーだけに保存します。今回は実鍵の生成・登録、Wrangler設定・公開範囲の変更、DB適用・配備を行っていません。
+
+[SQL試験](../../packages/contract/test/own-posts.test.mjs)と[Workers試験](test/own-posts.spec.ts)で全状態・本人/他人/別event/管理者・read-only transaction・microsecond/同時刻/途中削除・署名の独立既知ベクトル・改ざん/期限・不正応答・中断を検証します。公開フィード/詳細/10秒内部cache、Web中継・本人状態画面・申立て導線、AI/Streamの実処理、実Supabase RPCの受入は後続です。B2-6全体やF2-4の完成とは扱いません。
+
+根拠（2026-10-05確認）：[PostgreSQLの行比較](https://www.postgresql.org/docs/current/functions-comparisons.html)、[STABLEとsnapshot](https://www.postgresql.org/docs/current/xfunc-volatility.html)、[Workers Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/)。
 
 ## ローカル検証
 

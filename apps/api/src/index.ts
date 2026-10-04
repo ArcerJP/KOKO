@@ -1,5 +1,6 @@
 import { handleAccount, handleConsent, type AccountEnv } from "./account";
 import { handleUploads, type UploadEnv } from "./uploads";
+import { handleOwnPosts, type OwnPostsEnv } from "./own-posts";
 import {
   handleUploadCompletion,
   type CompletionEnv,
@@ -41,6 +42,8 @@ export default {
     const { pathname } = new URL(request.url);
 
     if (pathname === "/me") return handleAccount(request, env as AccountEnv);
+    if (pathname === "/me/posts" || /^\/posts\/[^/]+\/status$/.test(pathname))
+      return handleOwnPosts(request, env as OwnPostsEnv);
     if (pathname === "/consents")
       return handleConsent(request, env as AccountEnv);
     if (/^\/posts\/[^/]+\/complete$/.test(pathname))
