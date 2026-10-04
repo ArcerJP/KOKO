@@ -63,7 +63,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義していますが、現�
 
 ## 投稿受付のDB予約（B1-5、ローカル実装）
 
-[追加migration](supabase/migrations/20261004010000_reserve_upload.sql)の`reserve_upload(event_id, user_id, request)`は、既存`UploadRequest`の申告内容を受け、投稿と原本資産の保存先を1 transactionで予約します。**HTTPの`POST /uploads`・URL署名・R2への保存・upload session発行はまだ未実装です。** 内部RPCの結果は`UploadTicket`ではなく、原本キーを含むため利用者向け応答へそのまま返しません。実Supabaseへのmigration適用も行っていません。
+[追加migration](supabase/migrations/20261004010000_reserve_upload.sql)の`reserve_upload(event_id, user_id, request)`は、既存`UploadRequest`の申告内容を受け、投稿と原本資産の保存先を1 transactionで予約します。**HTTPの`POST /uploads`・R2への保存・upload session発行はまだ未実装です。** 内部RPCの結果は`UploadTicket`ではなく、原本キーを含むため利用者向け応答へそのまま返しません。実Supabaseへのmigration適用も行っていません。
 
 - WorkerがGoogle本人とCookie利用時のOrigin/CSRFを検証した後の内部呼出し専用です。`SECURITY INVOKER`・空`search_path`・`service_role`だけに実行権限を限定し、クライアント入力の本人IDを信用しません。今回このRPCを呼ぶHTTP経路は追加していません。
 - イベント所属、BAN、`live`かつ開始以上・終了未満、受付有効、公開停止なし、現行規約への同意、お題の同一イベント・公開中・期間内を再照合します。再送でもこれらを省略しません。
@@ -74,9 +74,26 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義していますが、現�
 
 [SQL試験](../../packages/contract/test/upload-admission.test.mjs)は全migrationを順に適用し、権限・不正入力・別イベント/本人・同意/BAN/停止・お題・再送・quota・資産保存失敗時の原子的取消しを検証します。PGliteは単一接続なので、実PostgreSQLでの多接続競合・負荷試験は未完了です。
 
-次は、認証済みWorkerからのRPC呼出し、R2用の限定資格情報を使うsingle/multipart署名・再発行、実在/サイズ確認と処理予約へ接続します。秘密登録・migrationの実適用・実配備・受付有効化は本人の個別確認が必要です。
+次は、認証済みWorkerからのRPC呼出しとupload sessionを、下記のR2署名アダプターへ接続し、再発行・実在/サイズ確認と処理予約へ進めます。秘密登録・migrationの実適用・実配備・受付有効化は本人の個別確認が必要です。
 
 根拠（2026-10-04確認）：[PostgreSQLの行ロック](https://www.postgresql.org/docs/current/explicit-locking.html)、[Supabase関数の実行権限](https://supabase.com/docs/guides/database/functions)、[R2の上限と脚注](https://developers.cloudflare.com/r2/platform/limits/)。
+
+## R2アップロード署名（B1-5、HTTP未接続）
+
+[R2アダプター](src/r2-upload.ts)は原本のsingle PUT署名、multipart分割計画・開始・part PUT署名・中止を実装します。**`POST /uploads`、refresh、parts、completeのHTTP経路とDB session接続はまだありません。** 単体の署名成功やローカルR2試験を、本人認可・実クラウドへの保存成功とは扱いません。
+
+- 既存開発用`koko-dev-originals`専用です。呼出し元から任意のbucket・host・URL・key・methodを受けず、検証済みevent/post/assetのUUIDから共有契約の原本キーを生成します。派生物や閲覧用GET、DELETE、multipart完了を署名しません。
+- 署名はAPI専用の`aws4fetch`固定依存を利用し、暗号処理の独自実装を避けます。`sign()`だけを使い、署名時の外部通信やライブラリの自動再試行を行いません。公開契約packageへ依存を持ち込みません。
+- 単発は`content-type`と`if-none-match: *`を署名し、必須headerとして返します。既存原本の上書きは許可しません。再送で条件不成立になっても保存成功を推定せず、後続のcomplete/HEAD照合で判定します。Content-TypeはHTTPで表現できるASCII・前後空白なしに検証しますが、画像形式等のallowlistではありません。
+- 64 MiB以下はsingle、それより大きければmultipartです。これは容量制限ではなく再送単位の選択です。partは基本8 MiB、大きなファイルではMiB単位で増やし、R2実上限まで最大10,000partに収めます。part署名は1要求1〜100件、重複なし・宣言サイズから計算した最終part以内に限定します。providerのupload IDはopaqueな単一query値としてエスケープします。
+- 有効期限は呼出し元が認可済みsessionの期限から指定し、署名開始から最大900秒です。秒未満は切り下げ、期限を延長しません。期限切れ再発行でも本人・同意・BAN・停止・所有権・投稿状態の再照合が必要で、このアダプターは代替しません。既発行URLは期限内に再利用でき、後からBANしても即時失効できません。
+- multipart開始結果はDB未保存のサーバー内部情報です。DBとR2は同一transactionではないため、HTTPへ接続する前に同一投稿の作成競合、勝者sessionの保存、結果不明時の回収を実装します。provider作成失敗を自動再試行せず、既知の未採用sessionだけを中止します。provider例外・秘密・URLをエラーやログへ含めません。
+
+実接続時にはAPIサーバー専用の`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`と原本bucket限定資格情報が必要です。今回は値の取得/登録やWrangler設定変更をしていません。CORSは対象Web origin・PUT・singleの必須header・ETag取得を含め別途本人確認して設定し、任意originへ開放しません。署名URLにもアクセス能力があるため、チャット・ログ・DB・画像へ保存しません（upload sessionの期限/provider IDとは区別）。
+
+[試験](test/r2-upload.spec.ts)はWorkersで実署名し、ライブラリを使わないSigV4検算、署名改竄、サイズ/part/期限境界、local R2の開始・再開・中止を検証します。ローカルR2 bindingはS3署名検証を行わないため、実S3 PUT・条件付き上書き拒否・CORS・ETag・実端末・大容量転送は未検証です。再発行HTTP、multipart完了の不変性、処理予約と孤児回収も後続です。
+
+根拠（2026-10-05確認）：[R2署名URL](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)、[S3互換性のPutObject条件付き操作](https://developers.cloudflare.com/r2/api/s3/api/)、[R2実上限の脚注](https://developers.cloudflare.com/r2/platform/limits/)、[Workers multipart API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)、[公式aws4fetch例](https://developers.cloudflare.com/r2/examples/aws/aws4fetch/)。
 
 ## ローカル検証
 
