@@ -60,7 +60,7 @@ published / published_flagged → hidden → 以前の公開状態
 
 moderatorは監視・非表示・通常復帰・削除、adminは加えてBAN/解除・設定・お題編集・exportを担当します。一般利用者の本人削除・通報・申立ては別の所有者認可です。表示上のボタン非表示だけで権限を守らないでください。
 
-B1-5の[投稿受付DB予約](../../apps/api/README.md#投稿受付のdb予約b1-5ローカル実装)を追加migrationと[SQL試験](test/upload-admission.test.mjs)でローカル実装しました。初回申告の内部snapshotは実測値と分離し、既存の公開`UploadRequest`/`UploadTicket`契約は変更していません。原本キーを含む内部RPC応答を公開APIへそのまま返してはいけません。[既定無効のHTTP受付・session/再発行](../../apps/api/README.md#アップロード受付と送信sessionb1-5既定無効)とR2署名をAPI内で接続し、[session SQL試験](test/upload-sessions.test.mjs)を追加しました。B1-6の[complete・原本検証・原子的outbox](../../apps/api/README.md#アップロード完了と原本検証b1-6既定無効)も[SQL試験](test/upload-completion.test.mjs)とともにローカル実装済みです。実保存・実DB適用・R2イベント・保留/孤児回収・処理consumerの完了とは区別します。
+B1-5の[投稿受付DB予約](../../apps/api/README.md#投稿受付のdb予約b1-5ローカル実装)を追加migrationと[SQL試験](test/upload-admission.test.mjs)でローカル実装しました。初回申告の内部snapshotは実測値と分離し、既存の公開`UploadRequest`/`UploadTicket`契約は変更していません。原本キーを含む内部RPC応答を公開APIへそのまま返してはいけません。[既定無効のHTTP受付・session/再発行](../../apps/api/README.md#アップロード受付と送信sessionb1-5既定無効)とR2署名をAPI内で接続し、[session SQL試験](test/upload-sessions.test.mjs)を追加しました。B1-6の[complete・原子的outbox](../../apps/api/README.md#アップロード完了と原本検証b1-6既定無効)と[通知/定期HEAD照合の回復](../../apps/api/README.md#保存済み原本の回復b1-6既定無効)も[SQL試験](test/upload-completion.test.mjs)とともにローカル実装済みです。実保存・実DB適用・通知/Cron設定・未完了uploadの孤児回収・処理consumerの完了とは区別します。
 
 ## メディア識別と原本の意味
 

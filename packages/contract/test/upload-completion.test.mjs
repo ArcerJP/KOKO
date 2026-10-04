@@ -135,6 +135,221 @@ const commit = (s, list = [], extra = {}) =>
     observation: observation(s),
     ...extra,
   });
+async function recover(
+  s,
+  action = "prepare",
+  input = {},
+  role = "service_role",
+) {
+  assert.ok(["service_role", "anon", "authenticated"].includes(role));
+  await db.exec(`SET ROLE ${role}`);
+  try {
+    return (
+      await db.query("SELECT public.recover_upload($1,$2,$3,$4,$5) result", [
+        event,
+        s.post_id,
+        s.asset_id,
+        action,
+        JSON.stringify(input),
+      ])
+    ).rows[0].result;
+  } finally {
+    await db.exec("RESET ROLE");
+  }
+}
+async function claim(limit = 10) {
+  await db.exec("SET ROLE service_role");
+  try {
+    return (
+      await db.query("SELECT public.claim_upload_recovery($1) result", [limit])
+    ).rows[0].result;
+  } finally {
+    await db.exec("RESET ROLE");
+  }
+}
+test("recovery derives owner, verifies original identity and rejects producer-supplied fields", async () => {
+  const s = await session();
+  assert.equal(
+    (await recover({ ...s, asset_id: randomUUID() })).code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (await recover(s, "prepare", { user_id: user })).code,
+    "INVALID_INPUT",
+  );
+  assert.equal(
+    (await recover(s, "prepare", { parts: [] })).code,
+    "INVALID_INPUT",
+  );
+  for (const role of ["anon", "authenticated"])
+    await assert.rejects(recover(s, "prepare", {}, role), /permission denied/);
+  assert.equal((await recover(s)).code, "prepared");
+  await unchanged();
+});
+for (const first of ["api", "recovery"])
+  test(`${first} first converges on one receipt/version/outbox`, async () => {
+    const s = await session();
+    const bg = () =>
+      recover(s, "commit", { observation: observation(s), post_version: 1 });
+    const prepared = first === "api" ? await rpc(s) : await recover(s);
+    assert.equal(prepared.code, "prepared");
+    const receipt = first === "api" ? await commit(s) : await bg();
+    assert.equal(receipt.code, "completed");
+    assert.deepEqual(await recover(s), receipt);
+    assert.deepEqual(await rpc(s), receipt);
+    assert.deepEqual(await bg(), receipt);
+    assert.deepEqual(await commit(s), receipt);
+    assert.equal(
+      (await db.query("SELECT count(*)::int n FROM public.outbox_jobs")).rows[0]
+        .n,
+      1,
+    );
+    assert.equal(
+      (await db.query("SELECT version FROM public.posts")).rows[0].version,
+      2,
+    );
+  });
+test("recovery multipart needs frozen parts; never invents an incomplete manifest", async () => {
+  const s = await session({ file_size_bytes: 65 * 1024 * 1024 });
+  assert.equal((await recover(s)).code, "UPLOAD_INCOMPLETE");
+  assert.equal((await rpc(s, "prepare", { parts })).code, "prepared");
+  assert.deepEqual((await recover(s)).parts, parts);
+  const result = await recover(s, "commit", {
+    observation: observation(s),
+    post_version: 1,
+  });
+  assert.equal(result.code, "completed");
+});
+for (const [label, sql, code] of [
+  [
+    "BAN",
+    "UPDATE public.event_members SET is_banned=true,banned_at=now()",
+    "ACCOUNT_BANNED",
+  ],
+  [
+    "consent",
+    "UPDATE public.events SET terms_version='v2'",
+    "CONSENT_REQUIRED",
+  ],
+  [
+    "stop",
+    "UPDATE public.event_settings SET publication_stopped=true",
+    "PUBLICATION_STOPPED",
+  ],
+  [
+    "closed",
+    "UPDATE public.events SET ends_at=now()-interval '1 second'",
+    "EVENT_CLOSED",
+  ],
+  ["latch", "UPDATE public.posts SET ban_latched=true", "STATE_CONFLICT"],
+])
+  test(`recovery rechecks ${label} after HEAD preparation`, async () => {
+    const s = await session();
+    assert.equal((await recover(s)).code, "prepared");
+    await db.exec(sql);
+    assert.equal(
+      (
+        await recover(s, "commit", {
+          observation: observation(s),
+          post_version: 1,
+        })
+      ).code,
+      code,
+    );
+    await unchanged();
+  });
+test("recovery rejects stale version/wrong size without state changes", async () => {
+  const s = await session();
+  await recover(s);
+  assert.equal(
+    (
+      await recover(s, "commit", {
+        observation: observation(s),
+        post_version: 2,
+      })
+    ).code,
+    "STATE_CONFLICT",
+  );
+  assert.equal(
+    (
+      await recover(s, "commit", {
+        observation: { ...observation(s), size: 124 },
+        post_version: 1,
+      })
+    ).code,
+    "UPLOAD_INCOMPLETE",
+  );
+  await unchanged();
+});
+test("scheduled claim requires service role and bounds, READ COMMITTED", async () => {
+  for (const role of ["anon", "authenticated"]) {
+    await db.exec(`SET ROLE ${role}`);
+    await assert.rejects(
+      db.query("SELECT public.claim_upload_recovery(10)"),
+      /permission denied/,
+    );
+    await db.exec("RESET ROLE");
+  }
+  for (const count of [0, 11, null])
+    assert.equal((await claim(count)).code, "INVALID_INPUT");
+  await db.exec("BEGIN ISOLATION LEVEL REPEATABLE READ");
+  await assert.rejects(
+    db.query("SELECT public.claim_upload_recovery(1)"),
+    /READ COMMITTED/,
+  );
+  await db.exec("ROLLBACK");
+});
+test("scheduled scan skips fresh/provisioning/deleted/completed and rotates durable cooldown", async () => {
+  const s = await session();
+  assert.deepEqual((await claim()).items, []);
+  await db.exec(
+    "UPDATE public.upload_sessions SET created_at=now()-interval '6 minutes'",
+  );
+  const wanted = [
+    { event_id: event, post_id: s.post_id, asset_id: s.asset_id },
+  ];
+  assert.deepEqual((await claim()).items, wanted);
+  assert.deepEqual((await claim()).items, []);
+  await db.exec(
+    "UPDATE public.upload_sessions SET recovery_after=now()-interval '1 second'",
+  );
+  assert.deepEqual((await claim()).items, wanted);
+  await recover(s);
+  await recover(s, "commit", { observation: observation(s), post_version: 1 });
+  await db.exec(
+    "UPDATE public.upload_sessions SET recovery_after=now()-interval '1 second'",
+  );
+  assert.deepEqual((await claim()).items, []);
+});
+test("scheduled claim maximum 10, old absent objects cannot starve remaining candidates", async () => {
+  for (let i = 0; i < 13; i++) {
+    await session({ client_request_id: randomUUID() });
+    // Move fixture posts out of quota window; no production settings altered.
+    await db.exec(
+      "UPDATE public.posts SET created_at=now()-interval '1 hour'; UPDATE public.upload_sessions SET created_at=now()-interval '1 hour'",
+    );
+  }
+  const first = (await claim()).items;
+  const second = (await claim()).items;
+  assert.equal(first.length, 10);
+  assert.equal(second.length, 3);
+  assert.equal(new Set([...first, ...second].map((x) => x.asset_id)).size, 13);
+  assert.deepEqual((await claim()).items, []);
+});
+test("scan excludes multipart without frozen manifest, BAN latch and deletion requested", async () => {
+  const s = await session({ file_size_bytes: 65 * 1024 * 1024 });
+  await db.exec(
+    "UPDATE public.upload_sessions SET created_at=now()-interval '1 hour'",
+  );
+  assert.deepEqual((await claim()).items, []);
+  await rpc(s, "prepare", { parts });
+  await db.exec("UPDATE public.posts SET ban_latched=true");
+  assert.deepEqual((await claim()).items, []);
+  await db.exec(
+    "UPDATE public.posts SET ban_latched=false; UPDATE public.media_assets SET deletion_requested_at=now()",
+  );
+  assert.deepEqual((await claim()).items, []);
+});
 async function unchanged() {
   assert.deepEqual(
     (await db.query("SELECT status,original_bytes,version FROM public.posts"))
@@ -369,6 +584,10 @@ test("outbox failure rolls back all completion updates, not the previous prepare
     CREATE TRIGGER fixture_no_job BEFORE INSERT ON public.outbox_jobs FOR EACH ROW EXECUTE FUNCTION public.fixture_no_job();`);
   try {
     await assert.rejects(commit(s), /Processing job was not inserted/);
+    await assert.rejects(
+      recover(s, "commit", { observation: observation(s), post_version: 1 }),
+      /Processing job was not inserted/,
+    );
     await unchanged();
     assert.deepEqual(
       (
@@ -393,6 +612,7 @@ test("completed receipt survives closing and processing advance; deletion/BAN do
     "UPDATE public.event_settings SET uploads_enabled=false,publication_stopped=true; UPDATE public.posts SET status='processing',version=3",
   );
   assert.deepEqual(await rpc(s), done);
+  assert.deepEqual(await recover(s), done);
   assert.equal(
     (await db.query("SELECT version FROM public.posts")).rows[0].version,
     3,
@@ -401,6 +621,7 @@ test("completed receipt survives closing and processing advance; deletion/BAN do
     "UPDATE public.posts SET status='deleted',deleted_at=now(),version=4",
   );
   assert.equal((await rpc(s)).code, "STATE_CONFLICT");
+  assert.equal((await recover(s)).code, "STATE_CONFLICT");
   assert.equal(
     (await db.query("SELECT count(*)::int n FROM public.outbox_jobs")).rows[0]
       .n,
@@ -414,6 +635,7 @@ test("completed retry still requires current consent and never revives BAN", asy
   await commit(s);
   await db.exec("UPDATE public.events SET terms_version='v2'");
   assert.equal((await rpc(s)).code, "CONSENT_REQUIRED");
+  assert.equal((await recover(s)).code, "CONSENT_REQUIRED");
   await db.query(
     "INSERT INTO public.consents(event_id,user_id,terms_version) VALUES($1,$2,'v2')",
     [event, user],
@@ -423,6 +645,7 @@ test("completed retry still requires current consent and never revives BAN", asy
     [user],
   );
   assert.equal((await rpc(s)).code, "ACCOUNT_BANNED");
+  assert.equal((await recover(s)).code, "ACCOUNT_BANNED");
   assert.equal(
     (await db.query("SELECT count(*)::int n FROM public.outbox_jobs")).rows[0]
       .n,
@@ -435,5 +658,10 @@ test("provisioning cannot be completed before a provider is attached", async () 
     "UPDATE public.upload_sessions SET provider_upload_id=null,provisioning_state='provisioning'",
   );
   assert.equal((await rpc(s, "prepare", { parts })).code, "UPLOAD_INCOMPLETE");
+  assert.equal((await recover(s)).code, "UPLOAD_INCOMPLETE");
+  await db.exec(
+    "UPDATE public.upload_sessions SET created_at=now()-interval '1 hour'",
+  );
+  assert.deepEqual((await claim()).items, []);
   await unchanged();
 });

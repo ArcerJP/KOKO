@@ -1,4 +1,4 @@
-import { originalKey, type ApiErrorCode } from "@koko/contract";
+import { type ApiErrorCode } from "@koko/contract";
 import {
   authenticateApiRequest,
   failure,
@@ -16,26 +16,16 @@ import {
   type CompletionBucket,
   type CompletionPart,
 } from "./r2-completion";
-import { planR2Upload } from "./r2-upload";
+import {
+  completionErrors,
+  completionReceipt,
+  preparedCompletion,
+} from "./completion-result";
 
 export type CompletionEnv = AccountEnv & {
   KOKO_UPLOADS_ENABLED?: string;
   ORIGINALS_BUCKET: CompletionBucket;
 };
-const allowedErrors: readonly ApiErrorCode[] = [
-  "FORBIDDEN",
-  "NOT_FOUND",
-  "INVALID_INPUT",
-  "CONSENT_REQUIRED",
-  "ACCOUNT_BANNED",
-  "EVENT_CLOSED",
-  "PUBLICATION_STOPPED",
-  "THEME_UNAVAILABLE",
-  "STATE_CONFLICT",
-  "IDEMPOTENCY_CONFLICT",
-  "UPLOAD_INCOMPLETE",
-  "INTERNAL_ERROR",
-];
 const maxBodyBytes = 1024 * 1024; // 10,000 part ETags, not a media size cap.
 
 export async function handleUploadCompletion(
@@ -114,81 +104,38 @@ export async function handleUploadCompletion(
       );
       if (!response.ok) throw new CompletionError("INTERNAL_ERROR");
       const value: unknown = await response.json();
-      if (object(value) && allowedErrors.includes(value.code as ApiErrorCode))
+      if (
+        object(value) &&
+        completionErrors.includes(value.code as ApiErrorCode)
+      )
         throw new CompletionError(value.code as ApiErrorCode);
       return value;
     }
-    function acknowledgement(value: unknown): Response | null {
-      if (!object(value) || value.code !== "completed") return null;
-      const post = value.post;
-      if (
-        !object(post) ||
-        post.id !== postId ||
-        post.event_id !== eventId ||
-        post.status !== "uploaded" ||
-        typeof post.version !== "number" ||
-        !Number.isSafeInteger(post.version) ||
-        post.version < 2 ||
-        typeof post.created_at !== "string" ||
-        !Number.isFinite(Date.parse(post.created_at))
-      )
-        throw new CompletionError("INTERNAL_ERROR");
-      // Only the original immutable acceptance receipt; not current processing status.
-      return reply(
-        {
-          id: postId,
-          event_id: eventId,
-          status: "uploaded",
-          version: post.version,
-          created_at: post.created_at,
-        },
-        202,
-      );
-    }
+    const acknowledgement = (value: unknown): Response | null => {
+      const receipt = completionReceipt(value, eventId, postId);
+      return receipt ? reply(receipt, 202) : null;
+    };
     const prepared = await rpc("prepare", { parts });
     const existing = acknowledgement(prepared);
     if (existing) return existing;
-    if (
-      !object(prepared) ||
-      prepared.code !== "prepared" ||
-      prepared.post_id !== postId ||
-      prepared.upload_id !== uploadId ||
-      typeof prepared.asset_id !== "string" ||
-      !uuid.test(prepared.asset_id) ||
-      prepared.object_key !== originalKey(eventId, postId, prepared.asset_id) ||
-      typeof prepared.file_size_bytes !== "number" ||
-      typeof prepared.post_version !== "number" ||
-      !Number.isSafeInteger(prepared.post_version) ||
-      prepared.post_version < 1 ||
-      JSON.stringify(
-        Array.isArray(prepared.parts) && prepared.parts.length === 0
-          ? []
-          : normalizeCompletionParts(prepared.parts),
-      ) !== JSON.stringify(parts)
-    )
-      throw new CompletionError("INTERNAL_ERROR");
-    const plan = planR2Upload(prepared.file_size_bytes);
-    if (
-      plan.mode !== prepared.mode ||
-      (plan.mode === "single"
-        ? parts.length !== 0 || prepared.provider_upload_id !== null
-        : parts.length !== plan.partCount ||
-          typeof prepared.provider_upload_id !== "string" ||
-          !/^[\x21-\x7e]{1,2048}$/.test(prepared.provider_upload_id))
-    )
-      throw new CompletionError("INTERNAL_ERROR");
+    const validated = preparedCompletion(prepared, {
+      eventId,
+      postId,
+      uploadId,
+      parts,
+    });
     const observation = await verifyCompletedOriginal(
       env.ORIGINALS_BUCKET,
-      { eventId, postId, assetId: prepared.asset_id },
-      prepared.file_size_bytes,
-      prepared.provider_upload_id as string | null,
+      validated.identity,
+      validated.size,
+      validated.providerId,
       parts,
     );
     return (
       acknowledgement(
         await rpc("commit", {
           parts,
-          post_version: prepared.post_version,
+          post_version: validated.version,
           observation,
         }),
       ) ?? failure("INTERNAL_ERROR")

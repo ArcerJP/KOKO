@@ -65,7 +65,7 @@ export async function limitedBody(
     return null;
   }
 }
-function config(env: AccountEnv) {
+export function readApiSettings(env: AccountEnv) {
   try {
     const url = new URL(env.SUPABASE_URL ?? "");
     if (
@@ -102,7 +102,7 @@ export async function authenticateApiRequest(
   const credentials = readAccountAuthentication(request, env);
   if (!credentials.ok) return credentials;
   const auth = credentials.authentication;
-  const settings = config(env);
+  const settings = readApiSettings(env);
   if (!settings) return { ok: false, code: "INTERNAL_ERROR" } as const;
   if (
     auth.mode === "cookie" &&
