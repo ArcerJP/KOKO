@@ -1,4 +1,5 @@
 import { handleAccount, handleConsent, type AccountEnv } from "./account";
+import { handleUploads, type UploadEnv } from "./uploads";
 
 const JSON_HEADERS = {
   "cache-control": "no-store",
@@ -20,6 +21,11 @@ export default {
     if (pathname === "/me") return handleAccount(request, env as AccountEnv);
     if (pathname === "/consents")
       return handleConsent(request, env as AccountEnv);
+    if (
+      pathname === "/uploads" ||
+      /^\/uploads\/[^/]+\/(refresh|parts)$/.test(pathname)
+    )
+      return handleUploads(request, env as UploadEnv);
 
     if (pathname === "/health") {
       if (request.method !== "GET") {

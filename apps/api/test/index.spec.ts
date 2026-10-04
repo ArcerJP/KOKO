@@ -48,7 +48,7 @@ describe("KOKO API Worker", () => {
   });
 
   it.each(["/uploads", "/uploads/example/refresh", "/uploads/example/parts"])(
-    "%sはprovider署名を追加しただけでは公開しない",
+    "%sは受付flagが未設定なら公開しない",
     async (path) => {
       const response = await dispatch(path, { method: "POST" });
       expect(response.status).toBe(404);
