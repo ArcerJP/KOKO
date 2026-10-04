@@ -14,6 +14,9 @@ for (const width of [390, 1280]) {
       displayName: "試験用表示名".repeat(8),
       draft: "変更する名前",
       blocked: false,
+      terms: null,
+      consentRequired: null,
+      consentChecked: false,
       message: null,
       error: false,
     };

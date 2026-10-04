@@ -28,6 +28,8 @@ CI/CDの実行定義は`.github/workflows/`、配備直前のガードは`.githu
 
 プロダクトでは、要求は[要件](../product/requirements.md)、実装順序は[開発計画](../product/development-plan.md)、採用構成は[プロダクト構成](product-architecture.md)、承認状況は[第0日](../product/day-zero.md)を参照します。API/状態/キー/エラーの正本は[共有契約](../../packages/contract/README.md)、DBはapps/apiのmigration、トークンはapps/webのCSSです。生成型・エラー表は派生物であり、手で編集しません。
 
+画面に配布する採択済みの利用規約/プライバシー本文は[approved-terms.ts](../../apps/web/src/api/approved-terms.ts)で一元管理し、現在は未採択のため空です。登録条件・版管理・未一致時の拒否は[Web README](../../apps/web/README.md#現行規約の明示同意画面本文未採択既定無効)を参照してください。本文の存在や試験用文章から、人間の採択・DB現行版の変更・実同意受付完了を推定しません。
+
 nativeへの設計境界は[native対応準備](native-readiness.md)、予算判断と動画短縮の方針は[費用方針](../product/cost-policy.md)へ分離します。費用を比較する反復手順は[cost-review Skill](../../.agents/skills/cost-review/SKILL.md)、現在のサービス料金の根拠は各社公式資料です。Skillや過去の試算を最新料金の正本にしません。
 
 原資料の記述と、後日のユーザー決定を区別します。現在の仕様にはAccepted ADRを適用し、元資料の内容を問う場合は変更していないknowledge/rawを参照します。契約の存在から機能実装・クラウド適用・人間の合意を推定しません。

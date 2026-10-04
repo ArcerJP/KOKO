@@ -4,13 +4,23 @@ import {
   type Me,
   type createApiClient,
 } from "./client";
+import {
+  copyTermsDocument,
+  matchesTerms,
+  type TermsDocument,
+} from "./terms-document";
 
-type Client = Pick<ReturnType<typeof createApiClient>, "getMe" | "updateMe">;
+type Client = Pick<ReturnType<typeof createApiClient>, "getMe" | "updateMe"> &
+  Partial<Pick<ReturnType<typeof createApiClient>, "acceptTerms">>;
 export type ProfileState = Readonly<{
-  phase: "idle" | "loading" | "ready" | "saving" | "error" | "closed";
+  phase:
+    "idle" | "loading" | "ready" | "saving" | "consenting" | "error" | "closed";
   displayName: string | null;
   draft: string;
   blocked: boolean;
+  terms: TermsDocument | null;
+  consentRequired: boolean | null;
+  consentChecked: boolean;
   message: string | null;
   error: boolean;
 }>;
@@ -19,6 +29,9 @@ const initial: ProfileState = Object.freeze({
   displayName: null,
   draft: "",
   blocked: false,
+  terms: null,
+  consentRequired: null,
+  consentChecked: false,
   message: null,
   error: false,
 });
@@ -26,12 +39,16 @@ const readFailure =
   "本人情報を読み込めませんでした。ログイン状態や接続を確認し、再読込みしてください。";
 const saveFailure =
   "保存結果を確認できませんでした。再送せず、本人情報を読み直して現在の表示名を確認してください。";
+const consentFailure =
+  "同意の保存結果を確認できませんでした。再送せず、本人情報を読み直して現行版と同意状態を確認してください。";
 
 /** 1画面1controller。CSRFは各操作の局所変数だけ、snapshot/永続領域へ置かない。 */
 export function createAccountProfile(
   client: Client,
   prepare: (signal: AbortSignal) => Promise<boolean>,
+  termsDocument: TermsDocument | null = null,
 ) {
+  const document = copyTermsDocument(termsDocument);
   let state = initial;
   let baseline: Pick<Me, "user_id" | "event_id" | "display_name"> | null = null;
   let revision = 0;
@@ -61,14 +78,29 @@ export function createAccountProfile(
       displayName: me.display_name,
       draft: me.display_name,
       blocked: me.is_banned,
+      terms: matchesTerms(document, me) ? document : null,
+      consentRequired: me.consent_required,
+      consentChecked: false,
       message,
       error: false,
     });
   };
-  async function run(kind: "load" | "save") {
+  async function run(kind: "load" | "save" | "consent") {
     if (active || state.phase === "closed") return;
     const expected = baseline;
     const draft = state.draft;
+    const reviewed = state.terms;
+    const acceptTerms = client.acceptTerms;
+    if (
+      kind === "consent" &&
+      (state.phase !== "ready" ||
+        !expected ||
+        !reviewed ||
+        !acceptTerms ||
+        state.consentRequired !== true ||
+        state.consentChecked !== true)
+    )
+      return;
     if (kind === "save") {
       if (
         state.phase !== "ready" ||
@@ -91,7 +123,11 @@ export function createAccountProfile(
     const controller = new AbortController();
     active = controller;
     baseline = null;
-    publish({ ...initial, phase: kind === "load" ? "loading" : "saving" });
+    publish({
+      ...initial,
+      phase:
+        kind === "load" ? "loading" : kind === "save" ? "saving" : "consenting",
+    });
     const check = () => {
       controller.signal.throwIfAborted();
       if (current !== revision) throw new Error("STALE_PROFILE");
@@ -115,6 +151,38 @@ export function createAccountProfile(
           if (!fresh.csrf_token) throw new ApiFailure("FORBIDDEN");
           if (kind === "load") {
             ready(fresh, null);
+            return;
+          }
+          if (kind === "consent") {
+            if (
+              !expected ||
+              !samePerson(expected, fresh) ||
+              !matchesTerms(reviewed, fresh) ||
+              !acceptTerms
+            )
+              throw new ApiFailure("FORBIDDEN");
+            if (!fresh.consent_required) {
+              ready(fresh, "現行規約への同意済み状態を確認しました。");
+              return;
+            }
+            await acceptTerms(
+              { terms_version: reviewed.version, accepted: true },
+              fresh.csrf_token,
+              controller.signal,
+            );
+            check();
+            const confirmed = await client.getMe(controller.signal);
+            check();
+            if (
+              !samePerson(expected, confirmed) ||
+              !matchesTerms(reviewed, confirmed) ||
+              confirmed.consent_required
+            )
+              throw new ApiFailure("FORBIDDEN");
+            ready(
+              confirmed,
+              "現行規約への同意を保存し、現在の状態を確認しました。",
+            );
             return;
           }
           if (
@@ -147,7 +215,12 @@ export function createAccountProfile(
           ...initial,
           phase: "error",
           error: true,
-          message: kind === "save" ? saveFailure : readFailure,
+          message:
+            kind === "save"
+              ? saveFailure
+              : kind === "consent"
+                ? consentFailure
+                : readFailure,
         });
     } finally {
       clearTimeout(timer);
@@ -167,6 +240,20 @@ export function createAccountProfile(
     },
     load: () => run("load"),
     save: () => run("save"),
+    accept: () => run("consent"),
+    checkConsent(checked: boolean) {
+      if (
+        state.phase === "ready" &&
+        state.terms &&
+        state.consentRequired === true
+      )
+        publish({
+          ...state,
+          consentChecked: checked === true,
+          message: null,
+          error: false,
+        });
+    },
     edit(draft: string) {
       if (state.phase === "ready" && !state.blocked)
         publish({ ...state, draft, message: null, error: false });

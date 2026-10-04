@@ -15,7 +15,10 @@ export function ProfileForm({
   onEdit: (value: string) => void;
   onSave: () => void;
 }) {
-  const busy = state.phase === "loading" || state.phase === "saving";
+  const busy =
+    state.phase === "loading" ||
+    state.phase === "saving" ||
+    state.phase === "consenting";
   const editable = state.phase === "ready" && !state.blocked;
   const valid = isValidDisplayName(state.draft);
   return (
@@ -38,9 +41,11 @@ export function ProfileForm({
       </button>
       <p role="status" aria-live="polite">
         {busy
-          ? state.phase === "saving"
-            ? "保存結果を確認中…"
-            : "本人情報を読込み中…"
+          ? state.phase === "consenting"
+            ? "同意結果を確認中…"
+            : state.phase === "saving"
+              ? "保存結果を確認中…"
+              : "本人情報を読込み中…"
           : !state.error
             ? state.message
             : null}
