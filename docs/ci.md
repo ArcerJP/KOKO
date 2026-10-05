@@ -45,6 +45,8 @@ Pull Requestの作成・更新時に再現可能な自動検証を行い、既�
 
 Markdownlintは`.gitignore`を尊重して追跡対象相当のMarkdownを検査します。日本語文書と表の可読性をPrettierへ委ねるため、行長の`MD013`を無効化します。また、タスクテンプレートのfront matterにある`title`は文書見出しではなくmetadataとして扱うため、`MD025`ではfront matterを見出しとして数えません。それ以外は既定ruleを使用します。
 
+画像処理の[DB確定](../apps/api/README.md#画像処理のdb確定b2-1の一部未接続)は既存`Contract Tests`の`image-processing.test.mjs`で検査します。全migration・service限定権限・lease/所有者/版・停止/BAN・原本identity・4receipt全検査・例外時の全rollback・冪等再送を対象とし、公開状態やQueue配送完了へ進めないことも確認します。PGlite単一接続の成功を実PostgreSQLの多接続競合や実R2/HTTP/consumerの受入としません。新job、秘密、実DB接続は不要です。
+
 ## Web検査とLintの保守
 
 Web向け3jobは`.github/workflows/web-check.yml`に定義します。秘密やクラウド課金なしで実行でき、実機のカメラ・実OAuth・R2通信をモック成功で代替しません。詳細は[撮影検証](product/stage-one-capture.md)を参照してください。既存の契約job名は維持し、`Contract Tests`は`test:contract`、`Contract Build`は`build:contract`へ明示的に限定します。

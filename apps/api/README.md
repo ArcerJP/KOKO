@@ -167,6 +167,26 @@ DLQ監視/回収、スキャンの滞留・負荷検証、未完了uploadの失�
 
 [SQL試験](../../packages/contract/test/media-dispatch.test.mjs)と[Worker試験](test/media-dispatch.spec.ts)で権限・期限/世代・原子性・有限再送・不正/重複/遅延・最小投影を検査します。PGlite単一接続と模擬Queueの成功を、多接続PostgreSQL競合・実Queue配送・変換完了の証拠にはしません。根拠（2026-10-05確認）：[Queues producer API](https://developers.cloudflare.com/queues/configuration/javascript-apis/)、[配送保証](https://developers.cloudflare.com/queues/reference/delivery-guarantees/)、[PostgreSQL行lock](https://www.postgresql.org/docs/current/sql-select.html#SQL-FOR-UPDATE-SHARE)。
 
+## 画像処理のDB確定（B2-1の一部、未接続）
+
+`20261006000000_image_processing.sql`は、[内部画像pipeline](../image/README.md#内部画像処理pipelineb2-1の一部既定off)へ渡す処理計画と、4閲覧派生物の保存結果を管理します。実DBへは未適用で、HTTP/Queue consumerとの接続はありません。公開API契約・既存RLSを変更せず、`service_role`だけが`manage_image_processing(event, post, job, action, input)`を呼べます。`SECURITY INVOKER`・空のsearch_pathで、ブラウザへ公開しません。
+
+| action   | input                                | 成功時の範囲                                                                                                                                                      |
+| -------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `claim`  | `{}`                                 | 最新DBを検査し、120秒・最大3回の画像処理leaseを発行。初回だけuploaded→processing、post.version更新、4派生assetの固定キー予約。`CLAIMED`とpipeline形式のplanを返す |
+| `check`  | `{plan}`                             | 完全一致する現在のplanとDB状態・期限を再検査。`CURRENT`だけが継続可。行をlockするがデータを書き換えない                                                           |
+| `finish` | `{plan, originalSha256, deliveries}` | pipelineの4保存receiptをすべて検査後、寸法・byte数・hashと画像段階完了を同一transactionで記録。`RECORDED`を返す                                                   |
+
+`READ COMMITTED`でevent→settings→member→consent→post→assets→jobの順にlockし、所有者・現行同意・BAN/latch・削除・受付/公開停止・投稿版・原本asset/ETag/version/bytesを照合します。画像用leaseはQueue配送leaseと別物です。既受付の写真は投稿受付終了後も処理できますが、eventがliveでない場合やprivate_at以降は拒否し、lease期限もprivate_atを超えません。所有者変更へ古いleaseを引き継ぎません。
+
+有効lease中のclaimは`BUSY`、期限後の再取得は同じ4asset・同じ処理版と新しいleaseId、3回消費後は`EXHAUSTED`。古いlease、改変plan、状態不一致は`STALE`です。原本64MiB・派生物各16MiBは現在のbuffer処理用の資源上限であり、投稿仕様のサイズ上限ではありません。原本上限超過は`RESOURCE_LIMIT`、不正な入力/receiptは`INVALID_INPUT`として保留し、自動削除しません。回復・通知への接続は後続です。
+
+finishのreceiptは内部pipelineが得た`eventId / assetId / variant / format / outcome / sha256 / size / width / height`のみを受理します。異なる4asset・形式/寸法・整数・hash等を全件検査してから更新し、DB例外では全更新をrollback。完了済みの同じreceiptは、配列順や`stored`/`already_stored`の違いを除いて冪等です。異なる証拠・保存済みmetadataとの矛盾は`CONFLICT`。現在の認可・状態の再照合は省略しません。完了済みclaimの`IMAGE_SAVED`は画像段階の記録済みを示すだけです。
+
+**画像段階の完了は公開許可ではありません。** `outbox_jobs.completed_at`・配送状態・AI判定・投稿公開・カウンターは変更しません。DBは実R2のbytesを読まず、信頼済み内部処理の証拠を受けます。原本hashだけを追記し原本データは変更せず、AI用JPEGは保存しません。R2の4PUTとDB transactionは一体ではなく、部分保存や失効後のPUT完了が残り得ます。条件付き・非上書き保存と最終DB照合を維持し、失敗を公開へ進めません。
+
+`packages/contract/test/image-processing.test.mjs`は全migrationをPGliteへ適用して権限、期限/再取得、所有者変更、停止/BAN、receipt不正、版の上限、末尾更新失敗の全rollbackを検証します。単一接続のSQL試験であり、実PostgreSQLの多接続競合、pipelineとの実通信、実R2/Cloud Run/Queue・AI/公開の受入は未完了です。
+
 ## 本人の投稿状態と一覧（B2-6の一部、既定無効）
 
 [本人投稿ハンドラー](src/own-posts.ts)は既存の生成型を使い、`GET /posts/{post_id}/status`と`GET /me/posts`を実装します。アップロード完了時の固定受領票を再利用せず、毎回Google単独認証と`X-Event-ID`の所属を確認して現在の投稿状態を取得します。Bearerまたは上記の明示設定されたCookieに対応し、GETにCSRFは要求しません。Cookieの送信元制限は維持します。
