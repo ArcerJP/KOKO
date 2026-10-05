@@ -25,6 +25,7 @@ function fixture(result: unknown = claimed, ack: unknown = settled) {
     .mockResolvedValue(queueReceipt);
   const env: MediaDispatchEnv = {
     KOKO_MEDIA_DISPATCH_ENABLED: "true",
+    KOKO_EVENT_ID: job.event_id,
     MEDIA_PROCESSING_QUEUE: { sendBatch },
     SUPABASE_URL: "https://fixture.supabase.co",
     SUPABASE_PUBLISHABLE_KEY: "sb_publishable_fixture",
@@ -89,12 +90,54 @@ it.each([
   "SUPABASE_URL",
   "SUPABASE_SECRET_KEY",
   "MEDIA_PROCESSING_QUEUE",
+  "KOKO_EVENT_ID",
 ] as const)("fails closed for missing %s before claim", async (key) => {
   const f = fixture();
   delete f.env[key];
   expect(await run(f)).toMatchObject({ failed: true, claimed: 0 });
   expect(f.fetcher).not.toHaveBeenCalled();
+  expect(f.sendBatch).not.toHaveBeenCalled();
 });
+it.each([
+  "",
+  "bad",
+  "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+  ` ${job.event_id}`,
+])("rejects noncanonical configured event %s before claim", async (eventId) => {
+  const f = fixture();
+  f.env.KOKO_EVENT_ID = eventId;
+  expect(await run(f)).toMatchObject({ failed: true, claimed: 0 });
+  expect(f.fetcher).not.toHaveBeenCalled();
+  expect(f.sendBatch).not.toHaveBeenCalled();
+});
+it.each([undefined, null, "bad", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"])(
+  "rejects the whole mixed batch for returned event %s without sending or settling",
+  async (eventId) => {
+    const f = fixture({
+      ...claimed,
+      jobs: [
+        job,
+        {
+          ...job,
+          job_id: "55555555-5555-4555-8555-555555555555",
+          event_id: eventId,
+        },
+      ],
+    });
+    expect(await run(f)).toEqual({
+      claimed: 0,
+      sent: 0,
+      retry: 0,
+      invalid: 0,
+      settled: 0,
+      stale: 0,
+      exhausted: false,
+      failed: true,
+    });
+    expect(f.calls).toEqual([{ p_event_id: job.event_id, p_limit: 50 }]);
+    expect(f.sendBatch).not.toHaveBeenCalled();
+  },
+);
 it("sends stable allowlisted envelope, waits before ack, and returns only safe aggregates", async () => {
   const f = fixture({
     ...claimed,
@@ -122,8 +165,11 @@ it("sends stable allowlisted envelope, waits before ack, and returns only safe a
     failed: false,
   });
   expect(f.calls).toEqual([
-    { p_limit: 50 },
-    { p_claims: [{ job_id: job.job_id, attempt: 1, outcome: "sent" }] },
+    { p_event_id: job.event_id, p_limit: 50 },
+    {
+      p_event_id: job.event_id,
+      p_claims: [{ job_id: job.job_id, attempt: 1, outcome: "sent" }],
+    },
   ]);
   expect(f.sendBatch).toHaveBeenCalledWith([
     {
@@ -220,6 +266,7 @@ it("invalid payload is retried without blocking valid work or leaking contents",
   });
   expect(f.sendBatch.mock.calls[0]![0]).toHaveLength(1);
   expect(f.calls[1]).toEqual({
+    p_event_id: job.event_id,
     p_claims: [
       { job_id: job.job_id, attempt: 1, outcome: "sent" },
       { job_id: poison.job_id, attempt: 1, outcome: "retry" },
@@ -229,7 +276,6 @@ it("invalid payload is retried without blocking valid work or leaking contents",
 it.each([
   { asset_id: null },
   { post_id: null },
-  { event_id: "bad" },
   { post_version: 0 },
   { post_version: 1.5 },
   { post_version: 2147483648 },
@@ -279,6 +325,7 @@ it("send rejection is ambiguous, retries same IDs, never marks sent", async () =
     settled: 1,
   });
   expect(f.calls[1]).toEqual({
+    p_event_id: job.event_id,
     p_claims: [{ job_id: job.job_id, attempt: 1, outcome: "retry" }],
   });
 });
