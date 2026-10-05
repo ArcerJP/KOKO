@@ -1,6 +1,8 @@
 # KOKO バックエンド
 
-TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置く領域です。[初期migration](supabase/migrations/20260921000000_initial_contract.sql)に加え、Workerの安全な最小基盤を実装しています。初期SQLはKOKO開発DBへ適用済みです。`/me`はローカルWorkerと実Google JWT・開発DBによる取得・表示名変更・拒否経路まで検証済みです。2026-10-03にWorkerのSupabase設定を登録し、10月4日に`/me`を含むmainを既存開発Workerへ配備しました。配備後の保護・health・401を確認し、本人の実Googleログイン試験で外部WorkerとSupabaseの読取り／未所属403経路の受入も成功しました。クラウド側の所属あり取得・更新は未検証です。[最新の配備結果](../../docs/product/cloud-setup.md#r2修正後の単回配備2026-10-04)を参照してください。アップロード受付・完了・保存済み原本の回復と、本人の投稿状態・一覧は下記の既定無効なローカル実装までです。実保存の受入は未完了、公開フィード・メディア配信APIは未実装です。
+TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置く領域です。投稿受付/原本保存、画像/動画処理、認証付きフィード/配信、運営操作/個別原本取得、通知/監視を下記の既定無効なローカル実装として接続しています。実配備・受入済みなのは基盤部分に限られます。
+
+[初期migration](supabase/migrations/20260921000000_initial_contract.sql)はKOKO開発DBへ適用済みです。`/me`はローカルWorkerと実Google JWT・開発DBによる取得・表示名変更・拒否経路まで検証済み。2026-10-04の開発配備後、保護・health・401と、本人の実Googleログインによる外部Worker/Supabase読取り・未所属403を受け入れました。クラウド側の所属あり取得・更新と追加機能の実保存/配信は未受入です。[最新の配備結果](../../docs/product/cloud-setup.md#r2修正後の単回配備2026-10-04)を参照してください。
 
 ## Worker基盤
 
@@ -11,7 +13,7 @@ TypeScriptのCloudflare Workers APIと、その管理下にあるDB契約を置�
 - `/health`へのGET以外のmethod：JSONの405
 - R2 binding：`ORIGINALS_BUCKET`と`DERIVED_BUCKET`
 
-R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備済みハンドラーと既定無効の受付ではR2を操作しません。下記の受付を明示的に有効化した場合のみ、認可後にmultipartを開始します。原本や派生物を返すrouteはありません。`wrangler dev`とテストは既定でローカルR2を使用し、開発用実バケットへ接続しません。
+R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備済みハンドラーと既定無効の受付ではR2を操作しません。下記の受付を明示的に有効化した場合のみ、認可後にmultipartを開始します。原本/派生物を返す認証routeも下記のローカル実装に追加しましたが、未有効化・未配備です。`wrangler dev`とテストは既定でローカルR2を使用し、開発用実バケットへ接続しません。
 
 `/me`は`SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`がそろわなければ失敗させます。値をソースや`wrangler.jsonc`へ書かず、クラウドの登録・更新は[配備Skill](../../.agents/skills/api-deployment/SKILL.md)に従い本人が入力します。SecretはRLSを回避するため、ブラウザ・Webの`NEXT_PUBLIC_`変数に渡しません。利用者JWTはURLに載せません。配備済みWorkerは`Authorization: Bearer`のみで、未配備のCookie経路は下記の明示設定が必要です。実試験の一時イベント・本人所属は削除済みで、正式イベント・所属の登録や同意保存を済ませたという意味ではありません。
 
