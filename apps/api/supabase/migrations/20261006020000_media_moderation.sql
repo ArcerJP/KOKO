@@ -25,9 +25,80 @@ ALTER TABLE public.moderation_runs
   ADD COLUMN policy_version bigint,
   ADD COLUMN observation text CHECK (observation IN ('scores','no_text','error')),
   ADD COLUMN usage jsonb CHECK (usage IS NULL OR jsonb_typeof(usage)='object'),
+  ADD COLUMN cost_rate_card jsonb CHECK (cost_rate_card IS NULL OR jsonb_typeof(cost_rate_card)='object'),
   ADD CONSTRAINT moderation_job_event FOREIGN KEY(event_id,job_id) REFERENCES public.outbox_jobs(event_id,id),
   ADD CONSTRAINT moderation_job_attempt UNIQUE(event_id,job_id,frame_index,attempt,engine);
 CREATE UNIQUE INDEX moderation_legacy_attempt ON public.moderation_runs(event_id,post_id,attempt,engine) WHERE job_id IS NULL;
+
+-- Optional operational price evidence, not policy approval, billing reconciliation or a spending cap.
+CREATE FUNCTION koko_private.valid_moderation_cost_rates(v jsonb) RETURNS boolean
+LANGUAGE plpgsql IMMUTABLE SET search_path='' AS $$
+DECLARE first_day date; last_day date; unit_value jsonb;
+BEGIN
+ IF jsonb_typeof(v) IS DISTINCT FROM 'object' OR NOT(v ?& ARRAY['version','currency','basis','verifiedOn','validUntil','sources','microUsdPerUnit'])
+  OR v-ARRAY['version','currency','basis','verifiedOn','validUntil','sources','microUsdPerUnit']<>'{}'::jsonb
+  OR jsonb_typeof(v->'version') IS DISTINCT FROM 'number' OR v->>'currency' IS DISTINCT FROM 'USD'
+  OR v->>'basis' IS DISTINCT FROM 'request_list_price_excluding_free_tiers_discounts_tax'
+  OR jsonb_typeof(v->'verifiedOn') IS DISTINCT FROM 'string' OR jsonb_typeof(v->'validUntil') IS DISTINCT FROM 'string'
+  OR v->>'verifiedOn' !~ '^20[0-9]{2}-[0-9]{2}-[0-9]{2}$' OR v->>'validUntil' !~ '^20[0-9]{2}-[0-9]{2}-[0-9]{2}$'
+  OR v->'sources' IS DISTINCT FROM '{"openai":"https://developers.openai.com/api/docs/guides/moderation","vision":"https://cloud.google.com/vision/pricing"}'::jsonb
+  OR jsonb_typeof(v->'microUsdPerUnit') IS DISTINCT FROM 'object' THEN RETURN false; END IF;
+ IF (v->>'version')::numeric NOT BETWEEN 1 AND 2147483647 OR (v->>'version')::numeric<>trunc((v->>'version')::numeric)
+  OR NOT(v->'microUsdPerUnit' ?& ARRAY['openaiRequests','safeSearchImages','ocrImages'])
+  OR (v->'microUsdPerUnit')-ARRAY['openaiRequests','safeSearchImages','ocrImages']<>'{}'::jsonb THEN RETURN false; END IF;
+ first_day:=(v->>'verifiedOn')::date; last_day:=(v->>'validUntil')::date;
+ IF to_char(first_day,'YYYY-MM-DD')<>v->>'verifiedOn' OR to_char(last_day,'YYYY-MM-DD')<>v->>'validUntil'
+  OR last_day-first_day NOT BETWEEN 1 AND 366 THEN RETURN false; END IF;
+ FOR unit_value IN SELECT value FROM jsonb_each(v->'microUsdPerUnit') LOOP
+  IF unit_value='null'::jsonb THEN CONTINUE; END IF;
+  IF jsonb_typeof(unit_value) IS DISTINCT FROM 'number' THEN RETURN false; END IF;
+  IF unit_value::numeric NOT BETWEEN 0 AND 1000000000 OR unit_value::numeric<>trunc(unit_value::numeric) THEN RETURN false; END IF;
+ END LOOP;
+ RETURN true;
+EXCEPTION WHEN invalid_datetime_format OR datetime_field_overflow OR invalid_text_representation OR numeric_value_out_of_range THEN RETURN false;
+END;
+$$;
+CREATE FUNCTION koko_private.moderation_cost_usd(card jsonb, usage_value jsonb) RETURNS numeric
+LANGUAGE plpgsql IMMUTABLE SET search_path='' AS $$
+DECLARE unit_name text; rate numeric; micros numeric:=0;
+BEGIN
+ IF card IS NULL THEN RETURN NULL; END IF;
+ IF NOT koko_private.valid_moderation_cost_rates(card) THEN RAISE EXCEPTION 'Invalid moderation cost rates'; END IF;
+ IF jsonb_typeof(usage_value) IS DISTINCT FROM 'object' OR NOT(usage_value ?& ARRAY['openaiRequests','safeSearchImages','ocrImages'])
+  OR usage_value-ARRAY['openaiRequests','safeSearchImages','ocrImages']<>'{}'::jsonb THEN RAISE EXCEPTION 'Invalid moderation cost usage'; END IF;
+ FOREACH unit_name IN ARRAY ARRAY['openaiRequests','safeSearchImages','ocrImages'] LOOP
+  IF usage_value->unit_name NOT IN ('0'::jsonb,'1'::jsonb) THEN RAISE EXCEPTION 'Invalid moderation cost usage'; END IF;
+  IF usage_value->unit_name='0'::jsonb THEN CONTINUE; END IF;
+  rate:=(card->'microUsdPerUnit'->>unit_name)::numeric;
+  IF rate IS NULL THEN RETURN NULL; END IF;
+  micros:=micros+rate;
+ END LOOP;
+ RETURN micros/1000000;
+END;
+$$;
+ALTER TABLE public.event_settings
+ ADD COLUMN moderation_cost_rates jsonb CHECK(moderation_cost_rates IS NULL OR koko_private.valid_moderation_cost_rates(moderation_cost_rates)),
+ ADD COLUMN moderation_cost_rate_version integer NOT NULL DEFAULT 0 CHECK(moderation_cost_rate_version>=0);
+CREATE FUNCTION koko_private.version_moderation_cost_rates() RETURNS trigger
+LANGUAGE plpgsql SET search_path='' AS $$
+DECLARE previous_version integer:=0;
+BEGIN
+ IF TG_OP='UPDATE' THEN previous_version:=OLD.moderation_cost_rate_version; END IF;
+ NEW.moderation_cost_rate_version:=previous_version;
+ IF NEW.moderation_cost_rates IS NULL THEN RETURN NEW; END IF;
+ IF NOT koko_private.valid_moderation_cost_rates(NEW.moderation_cost_rates) THEN RAISE EXCEPTION 'Invalid moderation cost rates'; END IF;
+ IF TG_OP='UPDATE' AND NEW.moderation_cost_rates IS NOT DISTINCT FROM OLD.moderation_cost_rates THEN RETURN NEW; END IF;
+ IF (NEW.moderation_cost_rates->>'version')::integer<=previous_version THEN RAISE EXCEPTION 'Moderation cost rates require a new version'; END IF;
+ NEW.moderation_cost_rate_version:=(NEW.moderation_cost_rates->>'version')::integer;
+ RETURN NEW;
+END;
+$$;
+CREATE TRIGGER version_moderation_cost_rates BEFORE INSERT OR UPDATE OF moderation_cost_rates,moderation_cost_rate_version
+ ON public.event_settings FOR EACH ROW EXECUTE FUNCTION koko_private.version_moderation_cost_rates();
+REVOKE ALL ON FUNCTION koko_private.valid_moderation_cost_rates(jsonb),koko_private.moderation_cost_usd(jsonb,jsonb),koko_private.version_moderation_cost_rates() FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION koko_private.valid_moderation_cost_rates(jsonb),koko_private.moderation_cost_usd(jsonb,jsonb),koko_private.version_moderation_cost_rates() TO service_role;
+COMMENT ON COLUMN public.event_settings.moderation_cost_rates IS 'Optional service-only configured rates; never automatically populated. UTC claim date must be verifiedOn <= date < validUntil. Changes do not approve moderation thresholds.';
+COMMENT ON COLUMN public.moderation_runs.cost_rate_card IS 'Immutable per-run claim snapshot. estimated_cost_usd is attempted requests times configured list rates, not provider billed units; excludes free tiers, discounts, tax and other infrastructure. Unknown used rates remain NULL, not zero.';
 
 -- Provider-wide operational counters are NOT a fifteenth application/business table.
 -- They intentionally span event_id because the same provider credential/quota serves events.
@@ -101,7 +172,7 @@ DECLARE
  has_block boolean:=false; has_error boolean:=false; has_flag boolean:=false;
  last_attempt integer; expected_keys text[]; observed_code text;
  saved_post public.posts%ROWTYPE; image_evidence public.outbox_jobs%ROWTYPE;
- result_version bigint; score numeric; expires_ms bigint;
+ result_version bigint; score numeric; expires_ms bigint; cost_card jsonb; estimated_cost numeric;
 BEGIN
  IF current_setting('transaction_isolation')<>'read committed' THEN RAISE EXCEPTION USING ERRCODE='25001',MESSAGE='manage_media_moderation requires READ COMMITTED'; END IF;
  IF p_event_id IS NULL OR p_post_id IS NULL OR p_job_id IS NULL OR p_action IS NULL OR p_action NOT IN ('claim','check','reserve','finish','fail')
@@ -202,6 +273,12 @@ BEGIN
  END IF;
  IF NOT s.thresholds_approved OR s.settings_version>2147483647 OR NOT koko_private.valid_moderation_thresholds(s.moderation_thresholds) THEN RETURN jsonb_build_object('code','POLICY_UNAPPROVED'); END IF;
  policy:=jsonb_build_object('approved',true,'version',s.settings_version,'safeSearchScoreVersion','likelihood-ordinal-v1','openaiModel','omni-moderation-2024-09-26','thresholds',s.moderation_thresholds);
+ -- Price expiry/change affects future claims only, never the approved moderation policy or an active 120s lease.
+ IF p_action='claim' THEN
+  IF s.moderation_cost_rates IS NOT NULL AND (stamp AT TIME ZONE 'UTC')::date>=(s.moderation_cost_rates->>'verifiedOn')::date
+   AND (stamp AT TIME ZONE 'UTC')::date<(s.moderation_cost_rates->>'validUntil')::date THEN cost_card:=s.moderation_cost_rates; END IF;
+ ELSE cost_card:=j.moderation_plan->'policy'->'costRates'; END IF;
+ IF cost_card IS NOT NULL THEN policy:=policy||jsonb_build_object('costRates',cost_card); END IF;
  IF p_action='claim' THEN
   IF j.moderation_plan IS NOT NULL AND (j.moderation_plan->>'expiresAt')::numeric>extract(epoch FROM stamp)*1000 THEN RETURN jsonb_build_object('code','BUSY'); END IF;
   IF j.moderation_processing_attempt>=3 THEN
@@ -263,11 +340,11 @@ BEGIN
  FOR r IN SELECT value FROM jsonb_array_elements(runs) LOOP
   IF jsonb_typeof(r) IS DISTINCT FROM 'object' THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
   IF NOT(r ?& ARRAY['engine','frame','attempt','decision','modelVersion','scores','latencyMs','usage','estimatedCostUsd','observation'])
-    OR r-ARRAY['engine','frame','attempt','decision','modelVersion','scores','latencyMs','usage','estimatedCostUsd','observation','errorCode','retryAfterSeconds']<>'{}'::jsonb
+    OR r-ARRAY['engine','frame','attempt','decision','modelVersion','scores','latencyMs','usage','estimatedCostUsd','costRateCard','observation','errorCode','retryAfterSeconds']<>'{}'::jsonb
     OR r->>'engine' NOT IN ('openai','safesearch','ocr') OR jsonb_typeof(r->'engine') IS DISTINCT FROM 'string'
     OR jsonb_typeof(r->'frame') IS DISTINCT FROM 'number' OR jsonb_typeof(r->'attempt') IS DISTINCT FROM 'number'
     OR jsonb_typeof(r->'scores') IS DISTINCT FROM 'object' OR jsonb_typeof(r->'latencyMs') IS DISTINCT FROM 'number'
-    OR r->'estimatedCostUsd'<>'null'::jsonb OR jsonb_typeof(r->'usage') IS DISTINCT FROM 'object'
+    OR jsonb_typeof(r->'usage') IS DISTINCT FROM 'object'
     OR jsonb_typeof(r->'observation') IS DISTINCT FROM 'string' OR jsonb_typeof(r->'decision') IS DISTINCT FROM 'string'
     OR r->>'observation' NOT IN ('scores','no_text','error') OR r->>'decision' NOT IN ('PASS','FLAG','BLOCK','ERROR') THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
   engine_name:=r->>'engine';
@@ -285,6 +362,9 @@ BEGIN
     OR (engine_name<>'ocr' AND (usage_value->>'ocrImages')::integer<>0)
     OR (engine_name<>'safesearch' AND (usage_value->>'safeSearchImages')::integer<>0)
     OR (engine_name='safesearch' AND (usage_value->>'openaiRequests')::integer<>0) THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
+  IF r->'costRateCard' IS DISTINCT FROM cost_card THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
+  estimated_cost:=koko_private.moderation_cost_usd(cost_card,usage_value);
+  IF r->'estimatedCostUsd' IS DISTINCT FROM coalesce(to_jsonb(estimated_cost),'null'::jsonb) THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
   IF ((usage_value->>'openaiRequests')::integer=1 AND NOT EXISTS(SELECT 1 FROM koko_private.moderation_calls WHERE event_id=p_event_id AND job_id=p_job_id AND engine=engine_name AND frame_index=frame_number AND attempt=attempt_number AND provider='openai'))
     OR (((usage_value->>'safeSearchImages')::integer=1 OR (usage_value->>'ocrImages')::integer=1) AND NOT EXISTS(SELECT 1 FROM koko_private.moderation_calls WHERE event_id=p_event_id AND job_id=p_job_id AND engine=engine_name AND frame_index=frame_number AND attempt=attempt_number AND provider='vision')) THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
   scores:=r->'scores'; run_decision:='PASS';
@@ -350,8 +430,8 @@ BEGIN
    OR NOT((result->'engines') @> engines AND engines @> (result->'engines') AND jsonb_array_length(result->'engines')=3)
    OR NOT((result->'categories') @> categories AND categories @> (result->'categories') AND jsonb_array_length(result->'categories')=jsonb_array_length(categories)) THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
  FOR r IN SELECT value FROM jsonb_array_elements(runs) LOOP
-  INSERT INTO public.moderation_runs(event_id,post_id,job_id,frame_index,attempt,engine,post_version,policy_version,model_version,decision,scores,latency_ms,estimated_cost_usd,error_code,observation,usage)
-  VALUES(p_event_id,p_post_id,p_job_id,(r->>'frame')::integer,(r->>'attempt')::integer,r->>'engine',p.version,s.settings_version,r->>'modelVersion',r->>'decision',r->'scores',(r->>'latencyMs')::integer,NULL,r->>'errorCode',r->>'observation',r->'usage');
+  INSERT INTO public.moderation_runs(event_id,post_id,job_id,frame_index,attempt,engine,post_version,policy_version,model_version,decision,scores,latency_ms,estimated_cost_usd,cost_rate_card,error_code,observation,usage)
+  VALUES(p_event_id,p_post_id,p_job_id,(r->>'frame')::integer,(r->>'attempt')::integer,r->>'engine',p.version,s.settings_version,r->>'modelVersion',r->>'decision',r->'scores',(r->>'latencyMs')::integer,koko_private.moderation_cost_usd(cost_card,r->'usage'),cost_card,r->>'errorCode',r->>'observation',r->'usage');
  END LOOP;
  stamp:=clock_timestamp();
  IF (plan->>'expiresAt')::numeric<=extract(epoch FROM stamp)*1000 OR stamp>=e.private_at THEN RAISE EXCEPTION USING ERRCODE='P0001',MESSAGE='Moderation lease expired while committing'; END IF;

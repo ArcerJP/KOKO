@@ -12,7 +12,7 @@ import { moderationCategories } from "../dist/moderation.js";
 import { createModerationRunner } from "../dist/moderation-runner.js";
 import { job, input, hash, outputs } from "./processing-fixture.mjs";
 import { moderationPlan, held } from "./moderation-fixture.mjs";
-import { policy } from "./moderation-fixture.mjs";
+import { policy, costRates } from "./moderation-fixture.mjs";
 import { uuid, url, key, json } from "./processing-fixture.mjs";
 function harness(overrides = {}) {
   const calls = [];
@@ -287,7 +287,12 @@ test("abort and in-process concurrency never publish", async () => {
   release({ code: "DONE" });
 });
 
-for (const scenario of ["publish", "image_decode_failure", "ai_decode_failure"])
+for (const scenario of [
+  "publish",
+  "priced_publish",
+  "image_decode_failure",
+  "ai_decode_failure",
+])
   test(`real SQL + HTTP + image + decode + provider mocks: ${scenario}`, async () => {
     const db = new PGlite();
     const original = await sharp({
@@ -316,6 +321,20 @@ for (const scenario of ["publish", "image_decode_failure", "ai_decode_failure"])
         "INSERT INTO public.event_settings(event_id,publication_stopped,uploads_enabled,thresholds_approved,moderation_thresholds,moderation_concurrency) VALUES($1,false,true,true,$2,1)",
         [job.eventId, JSON.stringify(policy().thresholds)],
       );
+      if (scenario === "priced_publish") {
+        const card = costRates();
+        const dates = (
+          await db.query(
+            "SELECT to_char((now() AT TIME ZONE 'UTC')::date,'YYYY-MM-DD') verified, to_char((now() AT TIME ZONE 'UTC')::date+30,'YYYY-MM-DD') expiry",
+          )
+        ).rows[0];
+        card.verifiedOn = dates.verified;
+        card.validUntil = dates.expiry;
+        await db.query(
+          "UPDATE public.event_settings SET moderation_cost_rates=$1",
+          [JSON.stringify(card)],
+        );
+      }
       await db.query(
         "INSERT INTO public.event_members(event_id,user_id,display_name) VALUES($1,$2,'Synthetic')",
         [job.eventId, uuid(90)],
@@ -481,7 +500,7 @@ for (const scenario of ["publish", "image_decode_failure", "ai_decode_failure"])
           body: JSON.stringify(job),
         });
       const response = await service(request());
-      if (scenario !== "publish") {
+      if (!["publish", "priced_publish"].includes(scenario)) {
         assert.notEqual(response.status, 200);
         const post = (
           await db.query(
@@ -547,6 +566,27 @@ for (const scenario of ["publish", "image_decode_failure", "ai_decode_failure"])
       assert.equal(puts, 4);
       assert.equal(reads, 2);
       assert.equal(providerCalls, 3);
+      const costs = (
+        await db.query(
+          "SELECT engine,estimated_cost_usd,cost_rate_card FROM public.moderation_runs ORDER BY engine",
+        )
+      ).rows;
+      if (scenario === "priced_publish") {
+        assert.deepEqual(
+          costs.map((r) => [r.engine, Number(r.estimated_cost_usd)]),
+          [
+            ["ocr", 0.0015],
+            ["openai", 0],
+            ["safesearch", 0.0015],
+          ],
+        );
+        assert.ok(costs.every((r) => r.cost_rate_card.version === 1));
+      } else
+        assert.ok(
+          costs.every(
+            (r) => r.estimated_cost_usd === null && r.cost_rate_card === null,
+          ),
+        );
       assert.equal(
         (
           await db.query(

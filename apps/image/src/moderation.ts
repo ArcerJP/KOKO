@@ -6,6 +6,11 @@ import {
   type ModerationDecision,
 } from "@koko/contract";
 import type { Derivative } from "./types.js";
+import {
+  estimateModerationCostUsd,
+  snapshotModerationCostRates,
+  type ModerationCostRates,
+} from "./moderation-cost.js";
 
 type Engine = EngineResult["engine"];
 type Provider = "openai" | "vision";
@@ -59,6 +64,7 @@ export type ModerationPolicy = Readonly<{
   // Deliberately explicit. No implicit latest-model upgrade or threshold defaults.
   openaiModel: "omni-moderation-2024-09-26";
   thresholds: readonly ModerationThreshold[];
+  costRates?: ModerationCostRates;
 }>;
 export type ModerationMedia =
   | { kind: "photo"; image: Derivative }
@@ -97,7 +103,8 @@ export type ModerationRun = {
     safeSearchImages: number;
     ocrImages: number;
   };
-  estimatedCostUsd: null;
+  estimatedCostUsd: number | null;
+  costRateCard?: ModerationCostRates;
   observation: "scores" | "no_text" | "error";
   errorCode?: ErrorCode;
   retryAfterSeconds?: number;
@@ -156,6 +163,7 @@ export function snapshotModerationPolicy(
       "safeSearchScoreVersion",
       "openaiModel",
       "thresholds",
+      ...(Object.hasOwn(value, "costRates") ? ["costRates"] : []),
     ]) ||
     value.approved !== true ||
     !positive(value.version) ||
@@ -165,6 +173,15 @@ export function snapshotModerationPolicy(
   )
     invalid();
   const policy = value as ModerationPolicy;
+  if (Object.hasOwn(policy, "costRates")) {
+    try {
+      Object.assign(policy, {
+        costRates: snapshotModerationCostRates(policy.costRates),
+      });
+    } catch {
+      invalid();
+    }
+  }
   const seen = new Set<string>();
   for (const t of policy.thresholds) {
     if (
@@ -811,7 +828,8 @@ export function createMediaModerator(options: MediaModeratorOptions = {}): {
         scores,
         latencyMs: Math.max(0, Math.round(performance.now() - start)),
         usage: { ...usage },
-        estimatedCostUsd: null,
+        estimatedCostUsd: estimateModerationCostUsd(policy.costRates, usage),
+        ...(policy.costRates ? { costRateCard: policy.costRates } : {}),
         observation: error ? "error" : noText ? "no_text" : "scores",
         ...(error ? { errorCode: error.code } : {}),
         ...(error?.retryAfterSeconds === undefined

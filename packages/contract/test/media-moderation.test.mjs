@@ -4,6 +4,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { URL } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
+const { structuredClone } = globalThis;
 
 const db = new PGlite();
 const event = "11111111-1111-4111-8111-111111111111";
@@ -389,6 +390,247 @@ async function expire() {
     [job],
   );
 }
+
+async function rates() {
+  const dates = (
+    await db.query(
+      "SELECT to_char((now() AT TIME ZONE 'UTC')::date,'YYYY-MM-DD') verified, to_char((now() AT TIME ZONE 'UTC')::date+30,'YYYY-MM-DD') expiry",
+    )
+  ).rows[0];
+  return {
+    version: 1,
+    currency: "USD",
+    basis: "request_list_price_excluding_free_tiers_discounts_tax",
+    verifiedOn: dates.verified,
+    validUntil: dates.expiry,
+    sources: {
+      openai: "https://developers.openai.com/api/docs/guides/moderation",
+      vision: "https://cloud.google.com/vision/pricing",
+    },
+    microUsdPerUnit: {
+      openaiRequests: 0,
+      safeSearchImages: 1500,
+      ocrImages: 1500,
+    },
+  };
+}
+async function setRates(card) {
+  await db.query(
+    "UPDATE public.event_settings SET moderation_cost_rates=$1 WHERE event_id=$2",
+    [card === null ? null : JSON.stringify(card), event],
+  );
+}
+function pricedResult(card, evidence = result()) {
+  for (const r of evidence.runs) {
+    r.costRateCard = structuredClone(card);
+    const amounts = Object.entries(r.usage)
+      .filter(([, n]) => n)
+      .map(([unit]) => card.microUsdPerUnit[unit]);
+    r.estimatedCostUsd = amounts.includes(null)
+      ? null
+      : amounts.reduce((a, b) => a + b, 0) / 1e6;
+  }
+  return evidence;
+}
+test("configured cost snapshot is saved and independently recomputed, never enables/modifies AI policy", async () => {
+  const card = await rates();
+  await setRates(card);
+  const settings = (
+    await db.query(
+      "SELECT settings_version,thresholds_approved FROM public.event_settings",
+    )
+  ).rows[0];
+  assert.equal(settings.settings_version, 1);
+  assert.equal(settings.thresholds_approved, true);
+  const plan = (await claim()).plan;
+  assert.deepEqual(plan.policy.costRates, card);
+  const evidence = pricedResult(card);
+  assert.equal((await finish(plan, evidence)).code, "RECORDED");
+  const rows = (
+    await db.query(
+      "SELECT engine,estimated_cost_usd,cost_rate_card FROM public.moderation_runs ORDER BY engine",
+    )
+  ).rows;
+  assert.deepEqual(
+    rows.map((r) => [r.engine, Number(r.estimated_cost_usd)]),
+    [
+      ["ocr", 0.0015],
+      ["openai", 0],
+      ["safesearch", 0.0015],
+    ],
+  );
+  assert.ok(
+    rows.every(
+      (r) =>
+        JSON.stringify(r.cost_rate_card) ===
+        JSON.stringify(plan.policy.costRates),
+    ),
+  );
+  assert.equal(
+    (await rpc("finish", { plan, result: evidence })).code,
+    "RECORDED",
+  );
+  assert.equal(
+    (await db.query("SELECT count(*)::int n FROM public.moderation_runs"))
+      .rows[0].n,
+    3,
+  );
+});
+test("unknown used rate stays NULL while known OpenAI zero remains zero", async () => {
+  const card = await rates();
+  card.microUsdPerUnit.ocrImages = null;
+  await setRates(card);
+  const plan = (await claim()).plan;
+  assert.equal((await finish(plan, pricedResult(card))).code, "RECORDED");
+  const rows = (
+    await db.query(
+      "SELECT engine,estimated_cost_usd FROM public.moderation_runs ORDER BY engine",
+    )
+  ).rows;
+  assert.equal(rows[0].estimated_cost_usd, null);
+  assert.equal(Number(rows[1].estimated_cost_usd), 0);
+});
+test("retry usage estimates retain each request, including ambiguous attempts", async () => {
+  const card = await rates();
+  await setRates(card);
+  const plan = (await claim()).plan;
+  const failed = run("safesearch", { error: "TIMEOUT" });
+  failed.usage.safeSearchImages = 1;
+  const evidence = pricedResult(
+    card,
+    result([
+      run("openai"),
+      failed,
+      run("safesearch", { attempt: 2 }),
+      run("ocr"),
+    ]),
+  );
+  assert.equal((await finish(plan, evidence)).code, "RECORDED");
+  assert.equal(
+    Number(
+      (
+        await db.query(
+          "SELECT sum(estimated_cost_usd) total FROM public.moderation_runs",
+        )
+      ).rows[0].total,
+    ),
+    0.0045,
+  );
+});
+test("price updates or clearing cannot rewrite an active lease snapshot or reset monotonic versions", async () => {
+  const card = await rates();
+  await setRates(card);
+  const plan = (await claim()).plan;
+  const next = structuredClone(card);
+  next.version = 2;
+  next.microUsdPerUnit.ocrImages = 3000;
+  await setRates(next);
+  assert.equal((await rpc("check", { plan })).code, "CURRENT");
+  await setRates(null);
+  await db.exec(
+    "UPDATE public.event_settings SET moderation_cost_rate_version=0",
+  );
+  assert.equal(
+    (
+      await db.query(
+        "SELECT moderation_cost_rate_version v FROM public.event_settings",
+      )
+    ).rows[0].v,
+    2,
+  );
+  await assert.rejects(setRates(next), /new version/);
+  assert.equal((await finish(plan, pricedResult(card))).code, "RECORDED");
+});
+for (const boundary of ["expired", "future"])
+  test(`cost ${boundary} configuration never prevents moderation and stays unknown`, async () => {
+    const card = await rates();
+    const dates = (
+      await db.query(
+        "SELECT to_char((now() AT TIME ZONE 'UTC')::date-1,'YYYY-MM-DD') past, to_char((now() AT TIME ZONE 'UTC')::date+1,'YYYY-MM-DD') future",
+      )
+    ).rows[0];
+    if (boundary === "expired") {
+      card.validUntil = card.verifiedOn;
+      card.verifiedOn = dates.past;
+    } else card.verifiedOn = dates.future;
+    await setRates(card);
+    const plan = (await claim()).plan;
+    assert.equal(plan.policy.costRates, undefined);
+    assert.equal((await finish(plan)).code, "RECORDED");
+    assert.ok(
+      (
+        await db.query(
+          "SELECT estimated_cost_usd,cost_rate_card FROM public.moderation_runs",
+        )
+      ).rows.every(
+        (r) => r.estimated_cost_usd === null && r.cost_rate_card === null,
+      ),
+    );
+  });
+for (const [name, change] of [
+  ["wrong amount", (r) => (r.runs[1].estimatedCostUsd = 999)],
+  ["string amount", (r) => (r.runs[1].estimatedCostUsd = "0.0015")],
+  ["null instead of known", (r) => (r.runs[1].estimatedCostUsd = null)],
+  ["missing card", (r) => delete r.runs[1].costRateCard],
+  ["null card", (r) => (r.runs[1].costRateCard = null)],
+  ["wrong version", (r) => (r.runs[1].costRateCard.version = 2)],
+  [
+    "wrong unit",
+    (r) => {
+      r.runs[1].costRateCard.microUsdPerUnit.safeSearchImages = 3000;
+      r.runs[1].estimatedCostUsd = 0.003;
+    },
+  ],
+])
+  test(`DB rejects ${name} without partial publication/log writes`, async () => {
+    const card = await rates();
+    await setRates(card);
+    const plan = (await claim()).plan;
+    const evidence = pricedResult(card);
+    change(evidence);
+    assert.equal((await finish(plan, evidence)).code, "INVALID_INPUT");
+    assert.equal((await row("posts")).status, "processing");
+    assert.equal(
+      (await db.query("SELECT count(*)::int n FROM public.moderation_runs"))
+        .rows[0].n,
+      0,
+    );
+  });
+for (const [name, change] of [
+  ["missing", (c) => delete c.sources],
+  ["bad source", (c) => (c.sources.vision += "?credential=bad")],
+  ["other currency", (c) => (c.currency = "JPY")],
+  ["pretend invoice", (c) => (c.basis = "billed")],
+  ["negative unit", (c) => (c.microUsdPerUnit.ocrImages = -1)],
+  ["fraction unit", (c) => (c.microUsdPerUnit.ocrImages = 0.1)],
+  ["oversize unit", (c) => (c.microUsdPerUnit.ocrImages = 1000000001)],
+  ["string unit", (c) => (c.microUsdPerUnit.ocrImages = "1500")],
+  ["missing unit", (c) => delete c.microUsdPerUnit.openaiRequests],
+  ["extra", (c) => (c.secret = "bad")],
+  ["bad date", (c) => (c.verifiedOn = "2026-02-30")],
+  [
+    "long expiry",
+    (c) => {
+      c.verifiedOn = "2026-10-06";
+      c.validUntil = "2028-10-06";
+    },
+  ],
+  ["fraction version", (c) => (c.version = 1.5)],
+  ["overflow version", (c) => (c.version = 2147483648)],
+])
+  test(`invalid rate card ${name} refuses configuration`, async () => {
+    const card = await rates();
+    change(card);
+    await assert.rejects(setRates(card), /Invalid moderation cost rates/);
+  });
+test("prices require service role and do not grant authenticated direct settings writes", async () => {
+  const card = await rates();
+  for (const role of ["anon", "authenticated"]) {
+    await db.exec(`SET ROLE ${role}`);
+    await assert.rejects(setRates(card), /permission denied/);
+    await db.exec("RESET ROLE");
+  }
+});
 test("service-only operational tables retain fourteen public RLS tables", async () => {
   for (const role of ["anon", "authenticated"]) {
     await assert.rejects(rpc("claim", {}, { role }), (e) => e.code === "42501");

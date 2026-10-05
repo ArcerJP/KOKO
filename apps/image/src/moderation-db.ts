@@ -8,6 +8,10 @@ import {
 } from "./moderation.js";
 import { snapshotImageProcessingPlan } from "./pipeline.js";
 import type { OriginalReference } from "./r2.js";
+import {
+  estimateModerationCostUsd,
+  snapshotModerationCostRates,
+} from "./moderation-cost.js";
 
 export type ModerationPlan = Readonly<{
   jobId: string;
@@ -396,6 +400,7 @@ function evidence(input: MediaModerationResult): MediaModerationResult {
         "latencyMs",
         "usage",
         "estimatedCostUsd",
+        ...(Object.hasOwn(r, "costRateCard") ? ["costRateCard"] : []),
         "observation",
         ...(Object.hasOwn(r, "errorCode") ? ["errorCode"] : []),
         ...(Object.hasOwn(r, "retryAfterSeconds") ? ["retryAfterSeconds"] : []),
@@ -410,7 +415,6 @@ function evidence(input: MediaModerationResult): MediaModerationResult {
       !Number.isInteger(r.latencyMs) ||
       (r.latencyMs as number) < 0 ||
       (r.latencyMs as number) > 2147483647 ||
-      r.estimatedCostUsd !== null ||
       !["scores", "no_text", "error"].includes(r.observation as string) ||
       !record(r.scores) ||
       !record(r.usage) ||
@@ -441,6 +445,19 @@ function evidence(input: MediaModerationResult): MediaModerationResult {
       )
     )
       invalid();
+  }
+  for (const run of (x as MediaModerationResult).runs) {
+    try {
+      if (Object.hasOwn(run, "costRateCard"))
+        run.costRateCard = snapshotModerationCostRates(run.costRateCard);
+      if (
+        run.estimatedCostUsd !==
+        estimateModerationCostUsd(run.costRateCard, run.usage)
+      )
+        invalid();
+    } catch {
+      invalid();
+    }
   }
   return x as MediaModerationResult;
 }
@@ -672,6 +689,13 @@ export function createModerationDatabase(
       const p = snapshotModerationPlan(value);
       const proof = evidence(result);
       if (proof.policyVersion !== p.policy.version) invalid();
+      for (const run of proof.runs) {
+        if (
+          JSON.stringify(run.costRateCard) !==
+          JSON.stringify(p.policy.costRates)
+        )
+          invalid();
+      }
       const r = await rpc(refFor(p), "finish", { plan: p, result: proof });
       if (
         !exact(r, ["code"]) ||

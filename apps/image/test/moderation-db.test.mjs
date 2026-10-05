@@ -6,7 +6,7 @@ import {
   snapshotModerationPlan,
 } from "../dist/moderation-db.js";
 import { job, url, key, json } from "./processing-fixture.mjs";
-import { moderationPlan, held } from "./moderation-fixture.mjs";
+import { moderationPlan, held, costRates } from "./moderation-fixture.mjs";
 const harness = (response, options = {}) => {
   const calls = [];
   const database = createModerationDatabase({
@@ -62,6 +62,80 @@ test("moderation DB default OFF and fixed provider config", () => {
         }),
       /INVALID_DB_CONFIG/,
     );
+});
+const costEvidence = (card) => ({
+  ...held(),
+  runs: [
+    {
+      engine: "safesearch",
+      frame: 0,
+      attempt: 1,
+      decision: "ERROR",
+      modelVersion: "vision-v1/builtin-stable/unreported/likelihood-ordinal-v1",
+      scores: {},
+      latencyMs: 1,
+      usage: { openaiRequests: 0, safeSearchImages: 1, ocrImages: 0 },
+      estimatedCostUsd: 0.0015,
+      costRateCard: card,
+      observation: "error",
+      errorCode: "TIMEOUT",
+    },
+  ],
+});
+test("DB client forwards canonical priced proof and never treats a failed call as an invoice", async () => {
+  const p = moderationPlan();
+  p.policy.costRates = costRates();
+  const evidence = costEvidence(
+    Object.fromEntries(Object.entries(costRates()).reverse()),
+  );
+  const h = harness({ code: "RECORDED" });
+  assert.deepEqual(await h.database.finish(p, evidence), { code: "RECORDED" });
+  assert.deepEqual(
+    h.calls[0].parsed.p_input.result.runs[0].costRateCard,
+    p.policy.costRates,
+  );
+  assert.equal(
+    h.calls[0].parsed.p_input.result.runs[0].estimatedCostUsd,
+    0.0015,
+  );
+});
+for (const [name, change] of [
+  ["amount", (p, r) => (r.runs[0].estimatedCostUsd = 0)],
+  ["amount string", (p, r) => (r.runs[0].estimatedCostUsd = "0.0015")],
+  ["null fiction", (p, r) => (r.runs[0].estimatedCostUsd = null)],
+  ["missing card", (p, r) => delete r.runs[0].costRateCard],
+  ["unexpected card", (p) => delete p.policy.costRates],
+  ["version", (p, r) => (r.runs[0].costRateCard.version = 2)],
+  [
+    "rate",
+    (p, r) => {
+      r.runs[0].costRateCard.microUsdPerUnit.safeSearchImages = 3000;
+      r.runs[0].estimatedCostUsd = 0.003;
+    },
+  ],
+  [
+    "source",
+    (p, r) => (r.runs[0].costRateCard.sources.vision = "https://evil.test"),
+  ],
+])
+  test(`DB client rejects cost ${name} without RPC`, async () => {
+    const p = moderationPlan();
+    p.policy.costRates = costRates();
+    const r = costEvidence(costRates());
+    change(p, r);
+    const h = harness({ code: "RECORDED" });
+    await assert.rejects(h.database.finish(p, r), /INVALID_INPUT/);
+    assert.equal(h.calls.length, 0);
+  });
+test("DB client retains card evidence when a used rate is unknown", async () => {
+  const p = moderationPlan();
+  p.policy.costRates = costRates();
+  p.policy.costRates.microUsdPerUnit.safeSearchImages = null;
+  const r = costEvidence(p.policy.costRates);
+  r.runs[0].estimatedCostUsd = null;
+  assert.deepEqual(await harness({ code: "RECORDED" }).database.finish(p, r), {
+    code: "RECORDED",
+  });
 });
 test("claim snapshots exact event/job policy/media; no client controlled URL", async () => {
   const p = moderationPlan();

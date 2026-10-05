@@ -16,6 +16,23 @@ export const policy = () => ({
       })),
   ),
 });
+// Synthetic configured list rates, never seeded into runtime configuration.
+export const costRates = () => ({
+  version: 1,
+  currency: "USD",
+  basis: "request_list_price_excluding_free_tiers_discounts_tax",
+  verifiedOn: "2026-10-06",
+  validUntil: "2026-11-06",
+  sources: {
+    openai: "https://developers.openai.com/api/docs/guides/moderation",
+    vision: "https://cloud.google.com/vision/pricing",
+  },
+  microUsdPerUnit: {
+    openaiRequests: 0,
+    safeSearchImages: 1500,
+    ocrImages: 1500,
+  },
+});
 export function moderationPlan(kind = "photo") {
   const p = imagePlan();
   const frameCount = kind === "photo" ? 1 : 3;

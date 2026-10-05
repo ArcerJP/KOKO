@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import sharp from "sharp";
+import { costRates } from "./moderation-fixture.mjs";
 const {
   Buffer,
   Response,
@@ -201,6 +202,57 @@ test("disabled by default without reading config or credentials", () => {
     }),
     null,
   );
+});
+test("optional rate snapshot estimates each real attempt without changing verdict/model/policy", async () => {
+  const p = policy();
+  p.costRates = costRates();
+  const base = configuration(),
+    { moderator } = configuration({ policy: p, fetcher: base.fetcher });
+  p.costRates.microUsdPerUnit.safeSearchImages = 0;
+  const result = await moderator.moderate(photo());
+  assert.equal(result.decision, "PASS");
+  assert.deepEqual(
+    result.runs.map((r) => [r.engine, r.estimatedCostUsd]),
+    [
+      ["openai", 0],
+      ["safesearch", 0.0015],
+      ["ocr", 0.0015],
+    ],
+  );
+  assert.ok(result.runs.every((r) => r.costRateCard.version === 1));
+  assert.equal(base.calls.length, 4);
+});
+test("configured estimates count failed requests and each retry, but not quota-refused calls", async () => {
+  const p = policy();
+  p.costRates = costRates();
+  const base = configuration();
+  let failed = false;
+  const { moderator } = configuration({
+    policy: p,
+    fetcher: async (url, init) => {
+      if (!failed && url.includes("vision")) {
+        failed = true;
+        throw Error("synthetic lost response");
+      }
+      return base.fetcher(url, init);
+    },
+  });
+  const result = await moderator.moderate(photo());
+  assert.equal(result.decision, "PASS");
+  const safe = result.runs.filter((r) => r.engine === "safesearch");
+  assert.deepEqual(
+    safe.map((r) => [r.attempt, r.estimatedCostUsd]),
+    [
+      [1, 0.0015],
+      [2, 0.0015],
+    ],
+  );
+  const blocked = await configuration({
+    policy: p,
+    reserveQuota: async () => ({ allowed: false }),
+  }).moderator.moderate(photo());
+  assert.equal(blocked.decision, "HELD");
+  assert.ok(blocked.runs.every((r) => r.estimatedCostUsd === 0));
 });
 
 test("complete approved policy is copied and frozen", () => {
