@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import worker from "../src/index";
 
@@ -73,5 +73,47 @@ describe("KOKO API Worker", () => {
 
     await expect(env.ORIGINALS_BUCKET.get(key)).resolves.not.toBeNull();
     await expect(env.DERIVED_BUCKET.get(key)).resolves.toBeNull();
+  });
+
+  it.each([
+    "/feed",
+    "/themes",
+    "/admin/feed",
+    "/admin/settings",
+    "/internal/stream-webhook",
+    "/posts/11111111-1111-4111-8111-111111111111",
+    "/admin/posts/11111111-1111-4111-8111-111111111111/original?expected_version=1",
+    "/media/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222/webp-600",
+  ])("第3の %s は既定で無効", async (path) => {
+    expect((await dispatch(path)).status).toBe(404);
+  });
+
+  it("未設定の定期処理は外部通信も成功ログも発生させない", async () => {
+    const fetcher = vi.spyOn(globalThis, "fetch");
+    const logger = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      for (const cron of ["* * * * *", "*/5 * * * *"])
+        await worker.scheduled({ cron, scheduledTime: 0, noRetry() {} }, env);
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(logger).not.toHaveBeenCalled();
+    } finally {
+      fetcher.mockRestore();
+      logger.mockRestore();
+    }
+  });
+
+  it("未設定のQueueを暗黙ACKせず拒否する", async () => {
+    await expect(
+      worker.queue(
+        {
+          queue: "unknown",
+          messages: [],
+          metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
+          ackAll() {},
+          retryAll() {},
+        },
+        env,
+      ),
+    ).rejects.toThrow("UPLOAD_RECOVERY_QUEUE_NOT_READY");
   });
 });
