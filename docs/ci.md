@@ -71,6 +71,8 @@ APIが共有契約の生成済み`dist/`を参照するため、rootの`typechec
 
 ## 画像変換コアの検査
 
+判定接続には固定DB client/AI/Stream frame取得のmockと、PGlite全migration→HTTP→実decode→模擬AI→DB判定確定/再送の縦通しを含めます。Docker verification stageだけにroot dev依存のPGliteとmigrationをコピーし、production runtimeには追加しません。実サービス受入、校正、競合/負荷の証明とは区別します。
+
 認証HTTPも既存Image Tests/Container Buildへ含めます。合成RSA署名・Google JWKS fixtureを用いてaud/主体/期限・不正鍵・timeoutを検査し、Node loopbackで本文上限・header重複・最小応答と既存runner接続を確認。外部Google認証、実IAM、実DB/実R2、配備は行いません。Dockerの明示`service` targetとCLIは同じbuild成果物を使います。
 
 内部pipelineの試験も既存`Image Tests`と`Image Container Build`で実行します。`test/pipeline.test.mjs`は実decoderと模擬R2を通す再送、全確認点の中断、部分失敗・改変を検証。追加の`test/db.test.mjs`・`test/runner.test.mjs`は固定RPC・秘密非露出・応答/期限制限・claim→7地点check→finish・記録済み再配送を確認し、実decoder＋署名付き模擬R2＋模擬DB通信の通し試験も行います。Dockerの明示test一覧にも追加し、新job/秘密情報/実クラウド書込みはありません。実SQLは別PGlite試験で、実DB/PostgREST/IAM・実機受入を検証済みとはしません。

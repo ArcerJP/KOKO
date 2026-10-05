@@ -93,9 +93,20 @@ Dockerの`--target service`がHTTP専用入口です。importでlistenせず、�
 - 正常なOCR文字なしを`no_text`と記録し、失敗/nullと区別する。判定は既存契約のBLOCK > HELD > FLAG > PASS。いずれかの必須判定失敗をPASSへ変えない。
 - 返却はframe別スコア・モデル・時間・試行/呼出し単位のみ。画像/OCR原文/鍵/生エラーを返さず、価格不明の費用はnull。adapter成功だけで公開せず、DBで現設定/BAN/同意/状態を再検証して確定する。
 
-合成試験は固定応答・境界・取消し・retry枯渇の検査です。実quota・資格情報、200枚による校正、実応答形式、p95、費用と誤判定は未受入。共有quotaと原子的DB確定、consumerへの接続は進行中です。
+合成試験は固定応答・境界・取消し・retry枯渇の検査です。実quota・資格情報、200枚による校正、実応答形式、p95、費用と誤判定は未受入。共有quotaと原子的DB確定は次の内部runnerへ接続しました。Queue consumerは別工程です。
 
 一次資料：[OpenAI Moderation](https://developers.openai.com/api/docs/guides/moderation)、[API schema](https://developers.openai.com/api/reference/resources/moderations/methods/create)、[Vision annotate](https://docs.cloud.google.com/vision/docs/reference/rest/v1/images/annotate)、[Vision response](https://docs.cloud.google.com/vision/docs/reference/rest/v1/AnnotateImageResponse)、[Vision model選択](https://docs.cloud.google.com/vision/docs/reference/rest/v1/Feature)（2026-10-06確認）。閾値とSafeSearch正規化はKOKO側の設計で、公式サービスが安全性を保証するものではありません。
+
+## 判定までの内部接続（B2-4、既定OFF）
+
+`moderation-db.ts`の固定service RPCと`moderation-runner.ts`を`POST /internal/process`へ接続しました。画像段階の`/internal/image`は従来どおり`processComplete:false`です。新入口はDBが判定を原子的に記録した場合、または既に同jobを記録済みの場合だけ`processComplete:true`を返します。200自体をQueue ACKの代わりにしません。
+
+- 最初は画像保存→DBへ保存証拠記録→原本を再decodeしてAI用だけ生成。記録済み画像のretryでは派生物を再PUTせず、原本hashと保存証拠を照合して再判定する。
+- `KOKO_MEDIA_PROCESSING_ENABLED`、`KOKO_VISION_METADATA_ENABLED`、`OPENAI_API_KEY`を全て明示するまで無効。VisionはCloud Runに割り当てたservice accountの固定metadata endpointから短命access tokenを取得し、任意metadata URLを受け付けない。IAM権限付与・Secret入力は未実施。
+- 動画は`KOKO_VIDEO_MODERATION_ENABLED`と別途Stream設定が必要。DBが保持する非公開UID・原本/親clip関係、実測4秒以下・完全ready状態を固定管理APIで再検証し、3時点のprivate JPEGを取得。decode/metadata除去してからAIへ送り、入力HTTPのURL/画像bytesは受け付けない。
+- DB planは現在の所有者・BAN・同意・設定版・状態・期限へ結び付く。quotaと試行枠は永続予約し、HTTP再送やクラッシュで枠を補充しない。失敗・不明・必須判定欠落をPASSにしない。
+
+`moderation-runner.test.mjs`はPGliteの全migration→認証済み合成HTTP→実decode→模擬provider→DB公開確定→再送の縦通しを含みます。DockerのverificationだけにPGlite等のdev依存とmigrationを入れ、runtimeはproduction依存だけに維持します。これは実PostgREST・実AI・実IAM・実R2を通す受入ではありません。
 
 ## ローカル検証
 

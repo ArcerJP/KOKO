@@ -3,11 +3,118 @@ import { test } from "node:test";
 import { once } from "node:events";
 import { request as httpRequest } from "node:http";
 import { createImageService } from "../dist/service.js";
-const { Request, ReadableStream, AbortController, fetch } = globalThis;
+const { Request, Response, ReadableStream, AbortController, fetch } =
+  globalThis;
 import {
   configuredImageService,
   createImageHttpServer,
+  createVisionMetadataToken,
 } from "../dist/server.js";
+
+test("full process has separate default-OFF path and never changes image-stage completion", async () => {
+  const disabled = harness();
+  const processRequest = () =>
+    new Request("http://test/internal/process", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer fixture",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(job),
+    });
+  assert.equal((await disabled.handle(processRequest())).status, 404);
+  const h = harness({
+    processEnabled: true,
+    processRun: async () => ({
+      ok: true,
+      outcome: "moderation_recorded",
+      bytes: "private",
+    }),
+  });
+  assert.deepEqual(await (await h.handle(processRequest())).json(), {
+    stage: "moderation",
+    outcome: "moderation_recorded",
+    processComplete: true,
+  });
+  assert.equal(
+    (await (await h.handle(request())).json()).processComplete,
+    false,
+  );
+  assert.equal(
+    (
+      await h.handle(
+        new Request("http://test/internal/process", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(job),
+        }),
+      )
+    ).status,
+    401,
+  );
+});
+test("full process stale or thrown errors never return completion or secrets", async () => {
+  for (const processRun of [
+    async () => ({ ok: false, reason: "STALE" }),
+    async () => {
+      throw new Error("secret");
+    },
+    async () => ({ ok: true, outcome: "image_recorded" }),
+  ]) {
+    const h = harness({ processEnabled: true, processRun });
+    const response = await h.handle(
+      new Request("http://test/internal/process", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer fixture",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(job),
+      }),
+    );
+    assert.notEqual(response.status, 200);
+    assert.ok(!(await response.text()).includes("secret"));
+  }
+});
+test("metadata token uses only fixed Cloud Run service identity and bounded response", async () => {
+  const calls = [];
+  const token = createVisionMetadataToken(async (url, init) => {
+    calls.push({ url, init });
+    return new Response(
+      JSON.stringify({
+        access_token: "fixture_access_token",
+        token_type: "Bearer",
+        expires_in: 3600,
+      }),
+      {
+        headers: {
+          "content-type": "application/json",
+          "metadata-flavor": "Google",
+        },
+      },
+    );
+  });
+  assert.equal(
+    await token(new AbortController().signal),
+    "fixture_access_token",
+  );
+  assert.equal(
+    calls[0].url,
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+  );
+  assert.equal(calls[0].init.headers["Metadata-Flavor"], "Google");
+  assert.equal(calls[0].init.redirect, "manual");
+  for (const fetcher of [
+    async () => new Response("{}", { status: 302 }),
+    async () =>
+      new Response("{}", { headers: { "content-type": "application/json" } }),
+    () => new Promise(() => {}),
+  ])
+    await assert.rejects(
+      createVisionMetadataToken(fetcher, 10)(new AbortController().signal),
+      /METADATA_TOKEN_UNAVAILABLE/,
+    );
+});
 import { createImageRunner } from "../dist/runner.js";
 import { createImageDatabase } from "../dist/db.js";
 import {

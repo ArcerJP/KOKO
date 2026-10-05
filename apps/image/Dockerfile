@@ -23,10 +23,15 @@ USER node
 ENTRYPOINT ["node", "apps/image/dist/cli.js"]
 
 FROM runtime AS verification
+USER root
+# SQL-to-Node acceptance is verification-only; runtime remains production-only.
+RUN npm ci --include=dev --include-workspace-root --ignore-scripts --strict-peer-deps --no-audit --workspace @koko/image
 COPY apps/image/test apps/image/test
+COPY apps/api/supabase/migrations apps/api/supabase/migrations
+USER node
 WORKDIR /app/apps/image
 ENTRYPOINT ["node"]
-CMD ["--test", "test/transform.test.mjs", "test/cli.test.mjs", "test/r2.test.mjs", "test/pipeline.test.mjs", "test/db.test.mjs", "test/runner.test.mjs", "test/service-auth.test.mjs", "test/service.test.mjs", "test/moderation.test.mjs"]
+CMD ["--test", "test/transform.test.mjs", "test/cli.test.mjs", "test/r2.test.mjs", "test/pipeline.test.mjs", "test/db.test.mjs", "test/runner.test.mjs", "test/service-auth.test.mjs", "test/service.test.mjs", "test/moderation.test.mjs", "test/moderation-db.test.mjs", "test/moderation-runner.test.mjs", "test/moderation-frames.test.mjs"]
 
 # Explicit private HTTP service target; no deployment or IAM is configured here.
 FROM runtime AS service

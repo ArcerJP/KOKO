@@ -1,10 +1,16 @@
 import type { ImageJobReference } from "./db.js";
 import type { ImageRunResult } from "./runner.js";
+import type { ModerationRunResult } from "./moderation-runner.js";
 
 export type ImageServiceOptions = {
   enabled?: boolean;
   authenticate?: (authorization: string | null) => Promise<boolean>;
   run?: (job: ImageJobReference) => Promise<ImageRunResult>;
+  processEnabled?: boolean;
+  processRun?: (
+    job: ImageJobReference,
+    signal: AbortSignal,
+  ) => Promise<ModerationRunResult>;
   bodyTimeoutMs?: number;
 };
 const json = (body: object, status: number, headers: HeadersInit = {}) =>
@@ -98,6 +104,7 @@ export function createImageService(
 ): (request: Request) => Promise<Response> {
   const enabled = options.enabled === true;
   const { authenticate, run, bodyTimeoutMs = 5000 } = options;
+  const processEnabled = enabled && options.processEnabled === true;
   if (
     enabled &&
     (typeof authenticate !== "function" ||
@@ -106,6 +113,8 @@ export function createImageService(
       bodyTimeoutMs < 1 ||
       bodyTimeoutMs > 5000)
   )
+    throw new Error("INVALID_SERVICE_CONFIG");
+  if (processEnabled && typeof options.processRun !== "function")
     throw new Error("INVALID_SERVICE_CONFIG");
   let active = false;
   return async (request) => {
@@ -119,7 +128,13 @@ export function createImageService(
         { service: "koko-image", status: enabled ? "ready" : "disabled" },
         200,
       );
-    if (!enabled || target.pathname !== "/internal/image" || target.search)
+    const fullProcess = target.pathname === "/internal/process";
+    if (
+      !enabled ||
+      (target.pathname !== "/internal/image" && !fullProcess) ||
+      (fullProcess && !processEnabled) ||
+      target.search
+    )
       return error("NOT_FOUND", 404);
     if (request.method !== "POST")
       return error("METHOD_NOT_ALLOWED", 405, { allow: "POST" });
@@ -145,6 +160,28 @@ export function createImageService(
         return error("INVALID_REQUEST", 400);
       }
       if (request.signal.aborted) return error("INVALID_REQUEST", 400);
+      if (fullProcess) {
+        const result = await options.processRun!(job, request.signal);
+        if (
+          result?.ok &&
+          ["moderation_recorded", "moderation_already_recorded"].includes(
+            result.outcome,
+          )
+        )
+          return json(
+            {
+              stage: "moderation",
+              outcome: result.outcome,
+              processComplete: true,
+            },
+            200,
+          );
+        if (!result?.ok && result?.reason === "STALE")
+          return error("STALE", 409);
+        if (!result?.ok && result?.reason === "INVALID_INPUT")
+          return error("INVALID_REQUEST", 400);
+        return error("RETRY_LATER", 503, { "retry-after": "5" });
+      }
       const result = await run!(job);
       if (
         result.ok &&
