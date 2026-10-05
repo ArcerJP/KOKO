@@ -17,6 +17,7 @@
     "@koko/contract": "0.1.0",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.1",
+    "hls.js": "1.7.3",
     "mediabunny": "1.58.1",
     "next": "16.3.8",
     "react": "19.3.0",
