@@ -134,7 +134,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 
 署名期限はPUTの有効期限です。completeは新しいURLを発行せず、期限を延長しません。署名期限後でもイベント/お題の受付中なら原本確認を受け付けます。保存済みでも受付終了やBAN等によりcommitできない原本、固定後の誤ETag、provisioning結果不明は自動で作り直さず、後続の回収/運用手順へ残します。原本は既存singleの条件付きPUTと1投稿1multipartで上書きを防ぎ、将来の処理consumerも記録したobject version/ETagを確認する必要があります。
 
-**追加migrationは実DB未適用、completeは未配備。R2通知/定期照合の回復とoutbox配送は下記のローカル実装までで、実Queue・購読・Cronは未設定です。未完了uploadの孤児回収、変換/公開consumer、実環境の通し受入は未完了です。** [FE送信キュー](../web/README.md#端末内送信キューと投稿画面f1-5f2-1既定無効)もローカル実装済みですが、B1-6全体や原本保存の実受入が完了したとは扱いません。
+**追加migrationは実DB未適用、completeは未配備。R2通知/定期照合・outbox配送・変換/公開consumerは下記のローカル実装までで、実Queue・購読・Cronは未設定です。未完了uploadの孤児回収と実環境の通し受入は未完了です。** [FE送信キュー](../web/README.md#端末内送信キューと投稿画面f1-5f2-1既定無効)もローカル実装済みですが、B1-6全体や原本保存の実受入が完了したとは扱いません。
 
 [SQL試験](../../packages/contract/test/upload-completion.test.mjs)は全migration・service専用権限・再送・guard変化・実測不一致・outbox失敗時取消しを検証します。[HTTP試験](test/upload-completion.spec.ts)は上流mock、[R2試験](test/r2-completion.spec.ts)は公式ETagベクトルとローカルR2を使用します。固定Miniflareはpart ETagにランダム値を使うため、multipart試験だけ合成内容のMD5からlocal part識別子へ変換するfixtureを挟み、実ローカル組立てと最終HEADを検証します。本番コードのチェックは緩めません。実S3転送、多接続DB競合、Google/Accessを通した実受入は未検証です。
 
@@ -164,39 +164,40 @@ DLQ監視/回収、スキャンの滞留・負荷検証、未完了uploadの失�
 
 ## メディア処理予約のQueue配送（B1-6の後段、既定無効）
 
-[配送Worker](src/media-dispatch.ts)と[追加migration](supabase/migrations/20261005050000_dispatch_media_outbox.sql)は、complete/回復が作った`process_media` outboxをCloudflare Queuesのproducerへ渡すローカル実装です。**Queue受付は変換・判定・公開の成功ではありません。consumerは未実装のため、有効化しません。** 新依存や公開HTTP route、実binding/Cronは追加していません。
+[配送Worker](src/media-dispatch.ts)と[追加migration](supabase/migrations/20261005050000_dispatch_media_outbox.sql)は、complete/回復が作った`process_media` outboxをCloudflare Queuesのproducerへ渡すローカル実装です。**Queue受付は変換・判定・公開の成功ではありません。** 下記consumerもローカル実装済みですが、実binding/Cron・Cloud Run認証は未構成のため有効化しません。
 
 - **入口**：文字列`KOKO_MEDIA_DISPATCH_ENABLED=true`かつ専用cron `* * * * *`だけ。`MEDIA_PROCESSING_QUEUE` producer bindingと既存Supabase設定を検証してからDBへ接続します。indexで5分間隔のR2回復cronと振り分け、R2通知consumerをメディア処理用として共用しません。受付flagと独立して停止できます。
-- **claim**：service-role限定`claim_media_dispatch(10)`。`READ COMMITTED`・`FOR UPDATE SKIP LOCKED`で、未完了/未配送・配送期限到来・leaseなし/期限切れの`process_media`だけを最大10件、配送可能時刻/作成時刻/ID順で取得します。全eventを対象とし、120秒のleaseと単調増加する配送attemptを同transactionで記録します。
+- **claim**：service-role限定`claim_media_dispatch(固定event,50)`。`KOKO_EVENT_ID`の対象event内で`READ COMMITTED`・`FOR UPDATE SKIP LOCKED`を使い、未完了/未配送・配送期限到来・leaseなし/期限切れの`process_media`だけを最大50件、配送可能時刻/作成時刻/ID順で取得します。120秒のleaseと単調増加する配送attemptを同transactionで記録し、別eventの行には触れません。
 - **配送状態の分離**：`dispatch_attempt`、`dispatch_available_at`、`dispatch_locked_until`、`dispatched_at`を追加。従来の処理用`attempt`/`available_at`/`locked_until`/`completed_at`、投稿状態/version/counter/payloadには触れません。送信成功時でも処理完了にはしません。
 - **最小message**：`version:1`、`kind:process_media`、`job_id`/`event_id`/`post_id`/`asset_id`/`post_version`のみ。UUIDは小文字正規形、versionは正の32bit整数。raw payload、原本キー/URL、object version/ETag、利用者ID、秘密は送信しません。再送でも同じID/versionを使用し、配送attemptはmessageに含めません。不正payloadはQueueへ渡さず有限再試行へ残します。
-- **送信と確定**：1 batchをawaitし、正常受付後にだけservice専用`settle_media_dispatch`へ`sent`を渡します。現在のattemptと有効なleaseが一致する場合だけ更新し、期限切れ/旧世代/完了済みは`stale`。一括入力は全件検証後、ID順にlockして更新します。
+- **送信と確定**：返却jobのeventを全件照合し、別eventが混在すれば送信・settleとも行いません。1 batchをawaitし、正常受付後にだけservice専用`settle_media_dispatch(固定event,claims)`へ`sent`を渡します。対象eventの現在のattemptと有効なleaseが一致する場合だけ更新し、期限切れ/旧世代/完了済みは`stale`。一括入力は全件検証後、ID順にlockして更新します。
 - **障害**：送信失敗/10秒timeoutは結果不明として`retry`。DB時刻から15/30/60/120/240/480/900秒の指数backoff、最大8 claimで停止し、行を削除・処理完了にしません。claim応答喪失や送信後DB失敗はlease満了後の再取得になり、重複配送があり得ます。8回目の失敗/lease満了は`exhausted=true`で検出します。これは件数でなく枯渇行の存在、既存8回目の送信中はまだ枯渇としません。
 - **境界**：RPCは固定2本のPOST、redirect禁止、各5秒（本文読取り込み）・64KiB上限。Queue送信10秒を含め通常1 invocationは最大約20秒。生例外・ID・本文をログへ出さず、固定集計`claimed/sent/retry/invalid/settled/stale/exhausted/failed`だけ。`sent`はproducer受付件数、`settled`はsent/retry両方のDB更新件数であり、両者は一致するとは限りません。
 
-将来のconsumerはDB正本のjob/post/asset・object version/ETagを読み直し、削除/BAN/公開停止・post versionを再照合し、job IDとpost versionで冪等化する必要があります。Queueのat-least-onceと「送信→DB確定」の間の障害をexactly-onceと扱いません。配送済み後のconsumer失敗はQueue retry/DLQ側の責務です。
+下記consumerはDB正本のjob/post/asset・object version/ETagを読み直し、削除/BAN/公開停止・post versionを再照合します。Queueのat-least-onceと「送信→DB確定」の間の障害をexactly-onceと扱いません。配送済み後のconsumer失敗はQueue retry/DLQ側の責務です。
 
-有効化前にconsumer・DLQ/滞留/枯渇監視と回収手順を実装し、実Queue作成・binding/Cron・migration適用・配備を本人の個別確認へ分離します。枯渇行のpayload/attemptを自動修正・リセットしません。現時点は集計出力までで通知連携なし。10件/分は初期上限で、負荷・SLO達成の保証ではありません。
+有効化前に実Queue/DLQ・滞留/枯渇監視と回収手順を受け入れ、実Queue作成・binding/Cron・migration適用・配備を本人の個別確認へ分離します。枯渇行のpayload/attemptを自動修正・リセットしません。dispatcher自体の枯渇は集計出力であり、後段の処理障害通知とは別です。2026-10-06に30投稿/分の目標を下回る旧10件/分制約を最大50件へ修正しました。再送余地を含む有限バッチで、無制限drainではありません。[Queues公式上限](https://developers.cloudflare.com/queues/platform/limits/)の1sendBatch 100件/256KB以内を守りますが、負荷・公開SLO達成は別途実測します。
 
 [SQL試験](../../packages/contract/test/media-dispatch.test.mjs)と[Worker試験](test/media-dispatch.spec.ts)で権限・期限/世代・原子性・有限再送・不正/重複/遅延・最小投影を検査します。PGlite単一接続と模擬Queueの成功を、多接続PostgreSQL競合・実Queue配送・変換完了の証拠にはしません。根拠（2026-10-05確認）：[Queues producer API](https://developers.cloudflare.com/queues/configuration/javascript-apis/)、[配送保証](https://developers.cloudflare.com/queues/reference/delivery-guarantees/)、[PostgreSQL行lock](https://www.postgresql.org/docs/current/sql-select.html#SQL-FOR-UPDATE-SHARE)。
 
 ## 画像処理のDB確定（B2-1の一部、実環境未接続）
 
-`20261006000000_image_processing.sql`は、[内部画像pipeline](../image/README.md#内部画像処理pipelineb2-1の一部既定off)へ渡す処理計画と、4閲覧派生物の保存結果を管理します。[Node側のDB client/内部runner](../image/README.md#db接続と内部runnerb2-1の一部既定off)は模擬RPCでローカル接続済みですが、実DBへは未適用で、HTTP入口/Queue consumerとの接続はありません。公開API契約・既存RLSを変更せず、`service_role`だけが`manage_image_processing(event, post, job, action, input)`を呼べます。`SECURITY INVOKER`・空のsearch_pathで、ブラウザへ公開しません。
+`20261006000000_image_processing.sql`は、[内部画像pipeline](../image/README.md#内部画像処理pipelineb2-1の一部既定off)へ渡す処理計画と、4閲覧派生物の保存結果を管理します。[Node側のDB client/内部runner](../image/README.md#db接続と内部runnerb2-1の一部既定off)と認証HTTP/consumerはローカル接続済みですが、実DB・実Cloud Runへは未適用です。公開API契約・既存RLSを変更せず、`service_role`だけが`manage_image_processing(event, post, job, action, input)`を呼べます。`SECURITY INVOKER`・空のsearch_pathで、ブラウザへ公開しません。
 
 | action   | input                                | 成功時の範囲                                                                                                                                                      |
 | -------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `claim`  | `{}`                                 | 最新DBを検査し、120秒・最大3回の画像処理leaseを発行。初回だけuploaded→processing、post.version更新、4派生assetの固定キー予約。`CLAIMED`とpipeline形式のplanを返す |
 | `check`  | `{plan}`                             | 完全一致する現在のplanとDB状態・期限を再検査。`CURRENT`だけが継続可。行をlockするがデータを書き換えない                                                           |
 | `finish` | `{plan, originalSha256, deliveries}` | pipelineの4保存receiptをすべて検査後、寸法・byte数・hashと画像段階完了を同一transactionで記録。`RECORDED`を返す                                                   |
+| `fail`   | `{plan, reason}`                     | 現在lease・固定理由を照合し、AIとは別の処理失敗証拠、原本保持のheld、job決着、通知予約を原子的に記録                                                              |
 
 `READ COMMITTED`でevent→settings→member→consent→post→assets→jobの順にlockし、所有者・現行同意・BAN/latch・削除・受付/公開停止・投稿版・原本asset/ETag/version/bytesを照合します。画像用leaseはQueue配送leaseと別物です。既受付の写真は投稿受付終了後も処理できますが、eventがliveでない場合やprivate_at以降は拒否し、lease期限もprivate_atを超えません。所有者変更へ古いleaseを引き継ぎません。
 
-有効lease中のclaimは`BUSY`、期限後の再取得は同じ4asset・同じ処理版と新しいleaseId、3回消費後は`EXHAUSTED`。古いlease、改変plan、状態不一致は`STALE`です。原本64MiB・派生物各16MiBは現在のbuffer処理用の資源上限であり、投稿仕様のサイズ上限ではありません。原本上限超過は`RESOURCE_LIMIT`、不正な入力/receiptは`INVALID_INPUT`として保留し、自動削除しません。回復・通知への接続は後続です。
+有効lease中のclaimは`BUSY`、期限後の再取得は同じ4asset・同じ処理版と新しいleaseId、3回消費後は`EXHAUSTED`と非公開held記録です。古いlease、改変plan、状態不一致は`STALE`です。原本64MiB・派生物各16MiBは現在のbuffer処理用の資源上限であり、投稿仕様のサイズ上限ではありません。原本上限超過は`RESOURCE_LIMIT`としてheldと通知を記録し、不正入力/receiptは`INVALID_INPUT`で更新しません。どちらも自動削除せず、処理失敗をAI違反として加算しません。
 
 finishのreceiptは内部pipelineが得た`eventId / assetId / variant / format / outcome / sha256 / size / width / height`のみを受理します。異なる4asset・形式/寸法・整数・hash等を全件検査してから更新し、DB例外では全更新をrollback。完了済みの同じreceiptは、配列順や`stored`/`already_stored`の違いを除いて冪等です。異なる証拠・保存済みmetadataとの矛盾は`CONFLICT`。現在の認可・状態の再照合は省略しません。完了済みclaimの`IMAGE_SAVED`は画像段階の記録済みを示すだけです。
 
-**画像段階の完了は公開許可ではありません。** `outbox_jobs.completed_at`・配送状態・AI判定・投稿公開・カウンターは変更しません。DBは実R2のbytesを読まず、信頼済み内部処理の証拠を受けます。原本hashだけを追記し原本データは変更せず、AI用JPEGは保存しません。R2の4PUTとDB transactionは一体ではなく、部分保存や失効後のPUT完了が残り得ます。条件付き・非上書き保存と最終DB照合を維持し、失敗を公開へ進めません。
+**画像段階の完了は公開許可ではありません。** 正常finishは`outbox_jobs.completed_at`・配送状態・AI判定・投稿公開・カウンターを変更しません。DBは実R2のbytesを読まず、信頼済み内部処理の証拠を受けます。原本hashだけを追記し原本データは変更せず、AI用JPEGは保存しません。R2の4PUTとDB transactionは一体ではなく、部分保存や失効後のPUT完了が残り得ます。条件付き・非上書き保存と最終DB照合を維持し、失敗を公開へ進めません。
 
 `packages/contract/test/image-processing.test.mjs`は全migrationをPGliteへ適用して権限、期限/再取得、所有者変更、停止/BAN、receipt不正、版の上限、末尾更新失敗の全rollbackを検証します。単一接続のSQL試験であり、実PostgreSQLの多接続競合、pipelineとの実通信、実R2/Cloud Run/Queue・AI/公開の受入は未完了です。
 
@@ -206,16 +207,82 @@ finishのreceiptは内部pipelineが得た`eventId / assetId / variant / format 
 
 - **本人限定**：[追加migration](supabase/migrations/20261005040000_read_own_posts.sql)の`read_own_posts`はservice_roleのみ実行可能なSTABLE・SECURITY INVOKER・空search_pathの読取り関数です。所属と投稿は同一statement snapshotで確認し、event/userを必ず両方絞ります。管理者にも他人の投稿は返しません。他人・別event・不存在のIDは同じ404、未所属は403です。既存の本人索引を使い、RLS・テーブル権限・データは変更しません。
 - **投稿可否と分離**：BAN中・規約未同意/更新後・公開/受付停止・非公開イベントでも、所属本人は処理中・保留・BLOCK・削除済み等の状態を確認できます。これは公開フィードや原本を閲覧する権限ではなく、BANの解除や投稿の復活を行いません。
-- **最小限の応答**：ID・event・状態・version・作成時刻と、必要時の固定エラーコードだけを返します。BLOCKは`CONTENT_BLOCKED`、保留/送信失敗は許可済み固定コードまたは汎用理由へ変換します。自由記述の`block_category`・処理エラー・OCR・原本キー・URL・所有者情報を透過しません。分類語彙の確定までは契約上任意の`block_category`を省略します。
+- **最小限の応答**：ID・event・状態・version・作成時刻と、必要時の固定エラーコードを返します。BLOCKは`CONTENT_BLOCKED`とallowlistで検査した7大分類だけ、保留/送信失敗は許可済み固定コードまたは汎用理由へ変換します。処理エラー自由文・OCR・原本キー・URL・所有者情報を透過しません。deletedには保持情報不明・保持待ち・物理削除機能未有効・削除未確認の状態とDBに記録された保持期限を投影し、運営一覧でも同じ安全投影を使います。DBの期限は実バケットLock確認済みの証明ではなく、消去済みの断定もしません。
 - **キーセット**：一覧は`created_at DESC, id DESC`、limitは既定30・1〜100、最大limit+1件の読取り。Postgresのmicrosecond精度を丸めず、同時刻をUUIDで分けます。`next_cursor`は続きがなければnull。新着は再取得した先頭ページから表示し、カーソル行の削除でoffsetのようなずれを起こしません。複数ページを一つの固定snapshotとして保持する方式ではなく、各取得時点の状態を返します。
 - **署名cursor**：[専用codec](src/own-post-cursor.ts)でHMAC-SHA256、用途・順序・event・本人・limit・位置・15分の期限を結び付けます。改ざん・期限切れ・別本人/event/limit/鍵・未知形式は`INVALID_CURSOR`でDB前に拒否し、最初から取り直します。署名は暗号化ではなく、cursorには本人/event IDと位置が含まれます。認証の代用やログへの記録、共有をしません。
 - **通信と失敗**：全応答は`private, no-store`、共有cacheなし。AuthとRPCを合わせて10秒、各応答256 KiBのJSON上限、redirect禁止、クライアント中断時に取消し。型・順序・重複・scopeの異常は安全側に失敗し、上流本文・秘密headers・生例外を返しません。CORSは追加しません。
 
 将来の有効化には`KOKO_OWN_POSTS_ENABLED`が文字列`true`であることが必要です。未設定/その他はAuth・DB前に404。一覧には独立した乱数32byteを64桁hexで表す専用`KOKO_POST_CURSOR_SECRET`も必要で、欠落/不正なら500です（単一状態取得には不要）。Supabase/Access/CSRFの秘密を再利用せず、サーバーだけに保存します。今回は実鍵の生成・登録、Wrangler設定・公開範囲の変更、DB適用・配備を行っていません。
 
-[SQL試験](../../packages/contract/test/own-posts.test.mjs)と[Workers試験](test/own-posts.spec.ts)で全状態・本人/他人/別event/管理者・read-only transaction・microsecond/同時刻/途中削除・署名の独立既知ベクトル・改ざん/期限・不正応答・中断を検証します。[Web中継・本人投稿画面](../web/README.md#本人の投稿一覧状態画面f2-4f3-4の一部既定無効)も既定無効でローカル実装しました。公開フィード/詳細/10秒内部cache、正式理由分類・申立て/削除導線、AI/Streamの実処理、実Supabase RPCとWebの通し受入は後続です。B2-6全体やF2-4の完成とは扱いません。
+[SQL試験](../../packages/contract/test/own-posts.test.mjs)と[Workers試験](test/own-posts.spec.ts)で全状態・本人/他人/別event/管理者・read-only transaction・microsecond/同時刻/途中削除・署名の独立既知ベクトル・改ざん/期限・不正応答・中断を検証します。[Web中継・本人投稿画面](../web/README.md#本人の投稿一覧状態画面f2-4f3-4の一部既定無効)も既定無効で接続済みです。公開フィード/詳細/10秒DTO cache・申立て/削除導線は下記のStage3実装へ進みましたが、実Supabase RPCとWebの通し受入や実機は未実施です。模擬試験だけでB2-6全体やF2-4の完成とは扱いません。
 
 根拠（2026-10-05確認）：[PostgreSQLの行比較](https://www.postgresql.org/docs/current/functions-comparisons.html)、[STABLEとsnapshot](https://www.postgresql.org/docs/current/xfunc-volatility.html)、[Workers Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/)。
+
+## 第3の運営操作と認証付き閲覧（ローカル実装、実接続未受入）
+
+`stage-three-operations.ts`と`20261006030000_stage_three_operations.sql`は、`KOKO_STAGE_THREE_ENABLED=true`の明示設定時だけ、お題・通報・申立て・本人削除・運営操作を受け付けます。公開済み設定変更、Cloudflare等の保護変更、運用上の閾値承認を自動実行するものではありません。
+
+- service限定RPC、空search_path、event→settings→member→postのロック順、Google認証・最新所属/役割・Cookie/CSRF。moderatorは監視/非表示/復帰/削除/原本取得、adminは追加でBAN/解除・お題/閾値/申立て対応。本人削除/申立てはBAN中も可能。
+- 通報は本人重複を除き、1件で先に非表示、2件目で追加通知を予約。BAN解除だけでは投稿を復活させず、adminの明示復帰と現在の判定・保存証拠が必要。原本物理削除はこのRPCでは行わない。
+- お題は同一event、有効期間と状態を検証。使用中のお題削除は終了扱い。閾値変更は承認を解除し、未校正の設定を勝手に承認しない。全公開停止は受付停止も同時適用。
+- `public-feed.ts`/`20261006040000_media_read.sql`は既定OFFの共通一覧・単一投稿。全候補の現在版・可視性をDBで再確認してから10秒DTO cacheを使用し、認可はcacheしない。created_at/idの署名キーセット、一般DTOに原本キー/Stream UID/ユーザーIDなし。お題名は同eventの公開中/終了済みだけを返し、未選択・非公開はnull。名称変更もcache fingerprintへ反映。一般利用者はポーリング、管理者の更新ヒントだけ下記Realtimeへ分離。
+- 派生画像bytesだけをisolate内部cacheへ保存可能（合計4MiB、1件1MiB、16件、固定30秒TTL）。未完了capture/使用中entryも容量管理し、全長とSHA-256一致後だけ保存。原本・Stream・Range missは保存しない。取得ごとの認証/DB照合と途中の再認可、外部応答の`private, no-store`は維持。永続性・isolate間共有・費用削減率は保証せず、集計hit/missと費用を実環境で測定する。
+- `media-delivery.ts`は`KOKO_MEDIA_DELIVERY_ENABLED`で非公開派生物を中継。`KOKO_ADMIN_ORIGINALS_ENABLED`で`GET /admin/posts/{post_id}/original?expected_version=N`を運営役割に限定。BLOCK/deleted/削除予約・異event・版違いを拒否し、R2の版/etag/サイズ/派生hashを照合。原本はattachment、全応答no-store、任意URL・redirectなし、単一Rangeに対応。監査を記録するが物理取得の完了を保証するものではない。
+
+`stream-delivery.ts`は署名必須動画だけを固定customer hostから取得します。別用途のtoken資格情報・AES-GCM子参照用secretが必要で、既存cursor/Access secretは流用しません。HLS子URLもevent/post/version/120秒期限へ結び付け、都度認可し、転送中も停止状態を再確認します。MP4は既成のものだけで、取得中の生成操作はしません。
+
+**Stream技術例外**：[Cloudflareの自前player手順](https://developers.cloudflare.com/stream/viewing-videos/using-own-player/)はmanifestのproxyを推奨していません。KOKOではUIDや署名URLを一般に出さず、非公開化後の子リソースも遮断する要件を優先し、毎回fresh取得・no-store・限定書換えを採用しています。公式の一般経路と同じ互換保証とは扱わず、実Stream manifest/Range/期限/実機試験を必須とします。短命token APIの負荷上限も未計測であり、署名鍵方式への移行には別の本人確認が必要です。
+
+AI判定のDB確定は`20261006020000_media_moderation.sql`へ分離。承認済み24カテゴリとprovider共通quota、frame/engine/attemptのdurable消費、原本と変換証拠、BAN/停止/設定版を再照合します。PASS/FLAG/BLOCK/HELD・累積BAN・公開counter・通知outboxを同一transactionで確定し、不明な保持期間を推測して原本削除しません。単体部品の成功をQueue完了に読み替えません。
+
+Web側中継/運営画面は[Web README](../web/README.md)を参照。PGlite・Workers・Webの合成試験は実施しますが、実SQL適用、Secret/IAM、Stream/AI/Discord実呼出し、認証付き実機、校正/負荷、公開判断は未実施です。
+
+## Stream準備と処理Queue（B2-2、実環境未受入）
+
+`stream-processing.ts`・`stream-runner.ts`・`20261006050000_stream_processing.sql`で、固定原本HEAD→条件付き読取り署名→Stream copy/clip→非公開ready確認を接続します。受信入力は3 UUIDのみで、原本キー/UID/処理計画をDBから再取得します。
+
+- copy/clipのoperation IDを外部呼出し前に永続予約し、応答喪失・クラッシュ時にcreateを重ねません。有限のpollとメタデータ照合で既存操作を回復し、未知の結果は保留。旧世代の再利用も同じ原本asset/etag/version・event/postの証拠が必須です。
+- 全長fallbackは別UIDのclip、通常の短縮原本はsourceを使います。duration実測4秒以下、ready・処理完了・署名必須・許可origin・原本/親clipの一致なしでは判定へ渡しません。3.8/3.5/3.0秒の短縮候補も無制限に生成しません。
+- `media-consumer.ts`は固定Queue名・eventと厳密な7項目hintを照合し、DBの現状態→必要なら動画準備→private Cloud Run `/internal/process`→DB再照合。HTTP200だけでACKせず、永続した完了/保留/世代交代の証拠が必要です。Queue名の衝突・未設定は暗黙ACKを避けて拒否します。
+- サーバーの認証準備はブラウザログインと別です。`cloud-run-client.ts`は外部OIDC→固定Google STS→IAM Credentialsの短命ID token取得をローカル検証していますが、Workerで信頼するOIDC発行元/取得元は未確定です。`index.ts`は架空のassertionを注入しません。**現在の設定だけでCloud Runまで動く完成品とは扱わず、consumer有効化前のゲートです。**
+
+| 設定群                                                                                                                               | 用途・実登録の境界                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `KOKO_STREAM_PROCESSING_ENABLED`                                                                                                     | 既定OFF。DB側の処理flag/実受入と併せて有効化                                 |
+| `R2_ACCOUNT_ID`、`KOKO_STREAM_API_TOKEN`、`KOKO_STREAM_CUSTOMER_HOST`、`KOKO_STREAM_PLAYBACK_ORIGIN`                                 | 固定account・Stream管理・配信先。API tokenは秘密                             |
+| `KOKO_STREAM_R2_READ_ACCESS_KEY_ID`、`KOKO_STREAM_R2_READ_SECRET_ACCESS_KEY`                                                         | 原本読取り専用。アップロード用鍵と分離し、実発行/入力は本人                  |
+| `KOKO_MEDIA_CONSUMER_ENABLED`、`KOKO_MEDIA_PROCESSING_QUEUE`、`KOKO_EVENT_ID`                                                        | 既定OFFのconsumerと固定Queue/event。実Queue binding/consumer登録は未実施     |
+| `KOKO_IMAGE_SERVICE_URL`、`KOKO_IMAGE_CALLER_EMAIL`、`KOKO_IMAGE_CALLER_SUBJECT`                                                     | private Cloud Run origin・許可サービス主体。利用者Googleログインを代用しない |
+| `KOKO_GOOGLE_WIF_PROVIDER_AUDIENCE`、`KOKO_GOOGLE_WIF_SUBJECT_ISSUER`、`KOKO_GOOGLE_WIF_SUBJECT_AUDIENCE`、`KOKO_GOOGLE_WIF_SUBJECT` | WIFを選ぶ場合の固定照合値。信頼するassertion供給元が別途必要                 |
+
+`wrangler.jsonc`へQueue/Cron/秘密の実設定は追加していません。1分Cronは既存media dispatchと運営outboxへ分岐し、5分Cronは原本回復に使用します。登録・有効化、最大配送回数/DLQ・Cloud Runのinstance/並列上限は実配備前に確定します。
+
+`stream-webhook.ts`・`20261006090000_stream_webhook.sql`は`POST /internal/stream-webhook`のHMAC署名・本文64KiB・header8KiB・時刻窓とDB予約を検証し、DB由来の既存Queue hintだけ送ります。未知/他event/旧世代は状態を書き換えず、HTTP202は動画完成ではありません。copy応答より先に通知が来ても予約operation/原本の一致が必要で、consumerがproviderを再取得します。
+
+Envの`KOKO_STREAM_WEBHOOK_ENABLED`とDBの`stream_webhook_enabled`は既定OFF。秘密`KOKO_STREAM_WEBHOOK_SECRET`は固定`R2_ACCOUNT_ID`と同じStreamアカウントで発行したものが必要（payload自身にaccount IDはありません）。Stream送信元は現在のAccess資格情報を付けられないため、**既存Worker全体のAccessを解除せず、専用受信口の限定設計・登録を本人確認するまで未有効化**です。有限pollによる検知と、webhook実接続の受入を区別します。
+
+## 管理者だけのRealtime（B3-3、既定OFF）
+
+`20261006070000_admin_realtime.sql`はprivate topic `koko:admin:<event UUID>`へ`{changed:true}`だけ送ります。投稿本文・ID・名前・原本・OCR・秘密や行全体を配信しません。Google/現行同意/非BAN/adminまたはmoderatorを照合し、KOKO namespaceを他の広い許可policyからも限定します。一般利用者の書込みは許可しません。
+
+DBの`admin_realtime_enabled`とWebの`KOKO_ADMIN_REALTIME_ENABLED`は既定false。Supabaseの管理テーブルのRLSを勝手に変更せず、存在するがRLS無効ならmigrationを失敗させます。ローカルのRealtime schema不在は通知して既定OFFのまま通しますが、それをクラウドの接続成功にしません。
+
+Realtimeの認可はjoin/JWT更新時にcacheされるため即時サーバー失効を保証しません。受信は再読取りのヒントだけで、画面は最新の認証APIから再取得し、操作時にも再認可します。権限変更・切断・期限・背景化の試験を実接続後に実施してください。
+
+## 通知と削除待ちの運用outbox（B2-5/B3-5、既定OFF）
+
+`stage-three-outbox.ts`・`20261006080000_operational_outbox.sql`で、DB lease→最新情報の投影→外部送信前の永続予約→結果記録を行います。既存outboxを使い、追加Queueは作りません。`KOKO_OPERATIONAL_OUTBOX_ENABLED=true`とDBの`operational_outbox_enabled=true`が必要です。
+
+- Discordは別の`KOKO_DISCORD_NOTIFICATIONS_ENABLED`、秘密`KOKO_DISCORD_WEBHOOK_URL`と固定`KOKO_ADMIN_ORIGIN`が必要。固定Discord webhookだけ、mentionsなし、画像なし。表示名/投稿ID/固定カテゴリ/認証必須管理導線だけを送ります。個人データの通知先の閲覧権限・利用目的は人間の確認対象です。
+- 1Cron最大10件・同時2件、HTTP10秒、DB lease5分、最大5試行/24時間。明確な429だけ有限backoff。タイムアウトや送信済みか不明な結果は`ambiguous`で止め、成功にも自動再送にも変えません。送信意図を記録後のクラッシュも同じです。
+- `revoke_delivery`完了は最新DBのアプリ配信拒否確認であり、取得済みbytesや発行済みprovider tokenの回収を意味しません。
+- `delete_assets`は原本の保持/lock情報を検査し、不明・保持中・物理削除adapter未有効を`held`で可視化します。`completed_at`を埋めず、物理削除済みと誤表示しません。原本消去、Bucket Lock/Lifecycle設定は未実施で、本人ゲートを維持します。
+
+## R2容量監視（B3-6、既定OFF）
+
+`capacity-monitor.ts`と`20261006100000_capacity_monitor.sql`は、固定開発2バケットのpayload＋metadata使用量をCloudflare GraphQLから読み取り、承認済みbyte閾値以上なら通知outboxを原子的に予約します。`KOKO_CAPACITY_MONITOR_ENABLED`、専用読取り秘密`KOKO_CAPACITY_ANALYTICS_TOKEN`、固定event/accountに加え、DBの`capacity_limit_bytes`・人間による`capacity_limit_approved`と運用outbox設定が必要です。新しいtoken・権限・閾値をこのコードから設定しません。
+
+1時間の永続epochごと最大3試行、120秒lease、設定版/対象/時刻/件数を検査。時間別snapshotを加算せず、各バケットの最新値を使います。2時間を超える古い値、欠測、権限エラーは不明として扱い、0byteや正常通知済みにしません。閾値変更で承認を解除し、再承認まで停止します。これは容量観測と通知であり、料金・予算上限・自動停止の保証ではありません。実GraphQL権限/更新遅延/Discord到達は未受入です。根拠：[R2のmetrics](https://developers.cloudflare.com/r2/platform/metrics-analytics/)、[Analytics認証](https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth/)（2026-10-06確認）。
 
 ## ローカル検証
 

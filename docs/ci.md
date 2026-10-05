@@ -71,6 +71,8 @@ APIが共有契約の生成済み`dist/`を参照するため、rootの`typechec
 
 ## 画像変換コアの検査
 
+第3集約実装では既存jobのまま、Stream準備/署名Webhook・固定eventのQueue配送/consumer・通知outbox/容量監視・認証付きmedia/個別原本取得・お題/通報/管理・安全な状態投影・費用snapshotを検査します。Webにはgrid/全画面・HLS・お題選択・本人操作・管理画面の単体/Chromium試験を追加。内部cacheでも認可を省略しないこと、停止/BAN/版変更・遅延・失敗・有限retryを対象とします。AI/課金APIは合成応答で、実秘密・有料呼出し・公開・実配備は行いません。これらの成功は実環境の負荷/費用/失効SLOや実端末の受入を代替しません。
+
 判定接続には固定DB client/AI/Stream frame取得のmockと、PGlite全migration→HTTP→実decode→模擬AI→DB判定確定/再送の縦通しを含めます。Docker verification stageだけにroot dev依存のPGliteとmigrationをコピーし、production runtimeには追加しません。実サービス受入、校正、競合/負荷の証明とは区別します。
 
 認証HTTPも既存Image Tests/Container Buildへ含めます。合成RSA署名・Google JWKS fixtureを用いてaud/主体/期限・不正鍵・timeoutを検査し、Node loopbackで本文上限・header重複・最小応答と既存runner接続を確認。外部Google認証、実IAM、実DB/実R2、配備は行いません。Dockerの明示`service` targetとCLIは同じbuild成果物を使います。

@@ -1,8 +1,37 @@
 # KOKO フロントエンド
 
-Next.js App Router・TypeScriptをVercelで実行する領域です。[初期トークン](src/styles/tokens.css)を使う、端末内の撮影・トリム検証画面とGoogleログインの検証導線を実装しています。アップロード・AI判定は未接続です。Figmaデザインの確定とも区別します。
+Next.js App Router・TypeScriptをVercelで実行する領域です。[初期トークン](src/styles/tokens.css)を用い、撮影・Googleログイン・永続送信・フィード・運営画面を条件付きで実装しています。コードの接続と、実API・クラウド・実機での受入は別です。Figmaデザインの確定とも区別します。
 
 [起動方法・実機の確認手順](../../docs/product/stage-one-capture.md)、[クラウドの準備](../../docs/product/cloud-setup.md)、[自動検証](../../docs/ci.md)を参照してください。リポジトリルートで`npm.cmd ci`、`npm.cmd run dev`を実行すると起動します。
+
+## 第3の運営画面と個別取得（実環境未受入）
+
+`KOKO_STAGE_THREE_ENABLED`が既定OFFのまま、`/manage`・`/themes`・`/appeal`と本人削除/通報コンポーネントを実装しました。Googleセッション、固定event、操作前の最新`/me`、役割・版・理由と確認を要求し、曖昧な更新結果を自動再送しません。BAN中の申立てと本人削除は公開フィードへのアクセスから分離。ログアウト・別本人/世代・画面離脱・停止通知で進行中の処理と表示を破棄します。
+
+原本リンクは権限を持つ運営者が明示操作する個別取得だけです。`media-proxy.ts`は固定APIへ世代照合済みCookieとサーバー内Access資格情報だけを送り、原本キー/署名GET URL/Stream UIDをブラウザへ渡しません。BLOCK/deleted等の最終拒否はAPI側で必ず実行します。
+
+- `KOKO_MEDIA_DELIVERY_ENABLED`・`KOKO_ADMIN_ORIGINALS_ENABLED`も既定OFF。DB/APIの対応設定と受入が必要。
+- 画像/動画/単一Rangeはstreamingし、原本は固定attachment名。上流のCookie/Location/任意metadataを透過せず、redirect・交差origin・不正generation・任意転送先を拒否する。
+- 応答headersは10秒、転送無通信は30秒で中断。全応答no-store。ホスティング基盤の実行時間/転送制限を超える巨大原本の取得は未受入で、アプリが無制限転送を保証するものではない。
+- 合成unitとChromiumで操作・権限表示・破棄・390/1280pxを確認。実Google/Cookie/Access/DB/原本、実機、担当者による最終運用確認は未実施。
+
+管理者だけのRealtimeは`KOKO_ADMIN_REALTIME_ENABLED`と[DBの専用gate](../api/README.md#管理者だけのrealtimeb3-3既定off)が必要。最新本人/役割の前後照合、private channelの接続期限、10秒間隔の本人再確認、背景/終了時の解除を行います。payloadは再取得ヒントだけで、フォーム入力を勝手に書き換えず更新案内を出します。実Realtimeの認可cacheや再接続・役割取消しは別受入です。
+
+## 公開投稿フィード・全画面（F2-2/F2-3、実環境未受入）
+
+`/feed`、`feed-client/controller/proxy`、`feed-media`を接続しました。「公開投稿」もログイン・イベント所属・現行同意と配信可否の確認が必要で、未ログイン向け公開ではありません。`KOKO_PUBLIC_FEED_ENABLED`とメディア/既存セッション中継設定が必要です。
+
+- 3列grid、キーセット追加読込み、10秒ポーリングの新着案内。新着でスクロールを奪わず、お題filter・撮影/本人/運営画面への導線を用意。
+- gridは画面内だけ最大6動画・ミュート/playsinline/loop。全画面は縦snap・前後1件だけ先読み、明示タップ後の音、戻る/左swipe/履歴と位置復元。画面外・背景・認証破棄時に再生/取得を止める。
+- 全画面のお題名はAPIが同イベントの公開中/終了済みと確認した文字列のみ表示。非公開は名称を漏らさず、未選択は自由投稿と区別する。HTMLを解釈しない。
+- native HLS対応時はそれを用い、その他は固定`hls.js`1.7.3を遅延ロード。任意URLを受け付けず同一originの認証経路だけ。既成MP4 fallbackを使用し、再生失敗でサーバー動画生成を起動しない。
+- MSW/React/Chromiumの合成データで動作を検証。実Stream HLS/HEVC、iPhone/Androidの音・中断・復帰・4秒・10秒以内失効は別受入。端末へ取得済みのbytes回収は保証しない。
+
+## お題選択・ヘルプ・正式本文の境界
+
+送信画面はStage3 flag有効時だけ、最新のお題を明示読取りして任意選択できます。固定event・公開中・有効期間を照合し、期限切れ/再読込み/本人変更後は再選択を求めます。選択したお題を無断で自由投稿へ切り替えず、最終受付条件はAPIが検証します。本人一覧からは明示確認後の削除と申立てへ進み、削除ack後は最新状態を再取得します。論理削除を物理削除済みとは表示しません。
+
+`/help`は音・端末キュー・OS中断・ログイン必須・削除/保管の違いと飯島優人/公開連絡先を案内します。`/terms`と`/privacy`は採択済みcatalogだけを表示します。**現在catalogは空・privacy未受領のため「準備中」のままです。下書きを正式本文として採用せず、同意受付も有効にしていません。**
 
 ## 初期トークン（K-07、初版承認済み）
 
@@ -52,10 +81,10 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 - **入口**：[設定検査](src/api/own-posts-config.ts)でサーバー専用`KOKO_OWN_POSTS_UI_ENABLED`・`KOKO_OWN_POSTS_PROXY_ENABLED`と既存のアカウント画面/Cookie/API中継flagがすべて小文字の`true`、event IDがUUIDである場合だけ有効。Google単独の検証済みclaimsから期待本人を固定します。SSRで投稿/理由/cursorを取得せず、秘密をClientへ渡しません。未設定時は案内だけです。
 - **中継**：[専用descriptor](src/api/own-posts-proxy.ts)から既存の固定先JSON中継を使い、`GET /api/me/posts`と`GET /api/posts/{post_id}/status`だけを許可します。中継flagが未設定なら全methodで404、設定時もGET以外は405。一覧queryは重複なしの`limit`（1〜100、既定30）/`cursor`だけ、単一状態queryは不可。既存の本人情報/更新経路は引き続きqueryを拒否します。Cookie世代・Origin・Accessのサーバー専用header・上流10秒/256KiB・redirect拒否・応答秘密検出・`private, no-store`を維持し、CORSを追加しません。
-- **表示**：処理中・保留・BLOCK等の全契約状態、投稿ID・日本時間の作成日時・固定理由だけです。[応答投影](src/api/own-posts-contract.ts)で任意の分類・判定自由文・URL・所有者情報を捨てます。型/日付/並び順/重複/別eventを検査し、Postgresのmicrosecondを保ってページ境界を比較します。cursor署名/期限の最終検証と本人認可はWorkerの責務です。
+- **表示**：処理中・保留・BLOCK等の全契約状態、投稿ID・日本時間の作成日時・固定理由と安全な7大分類です。[応答投影](src/api/own-posts-contract.ts)で未知分類・判定自由文・URL・所有者情報を除外/拒否します。deletedの保持情報不明・保持待ち・物理削除未有効・削除未確認とDB記録の保持期限も表示し、実Lockや消去完了の確認済みとは扱いません。型/日付/並び順/重複/別eventを検査し、Postgresのmicrosecondを保ってページ境界を比較します。cursor署名/期限の最終検証と本人認可はWorkerの責務です。
 - **操作**：[controller](src/api/own-posts-controller.ts)は初期自動取得なし。「本人確認・先頭から読み込む」、30件ずつの「続きを読み込む」、表示済み投稿の単一更新だけです。各操作はCookie発行/更新→本人/event確認→投稿取得→本人/event再確認の順で最大30秒、同時1操作・自動再送/ポーリングなし。BAN・未同意でも本人の状態確認は妨げません。操作時の追加通信と手動更新は必要ですが、背景通信/古いセッションの自動使用を抑えます。
 - **保持と破棄**：最大300件まで画面メモリのみ、履歴/cursorをstorageや共有cacheへ保存しません。各操作中と失敗時は旧表示を消去。期限切れ/不正cursorは先頭再読込みを案内します。単一更新以外の行は前回取得時点であると表示し、一覧を固定snapshotとは扱いません。Auth通知、非表示、unmountで中断・破棄、別本人へのログイン/ログアウト・`pagehide`・既存のタブ間終了通知で画面を閉じ、遅延応答を拒否します。通知遅延/未配信・他端末の即時失効・取得済み画面の回収までは保証しません。
-- **未実装の区別**：写真/動画、原本/判定詳細は表示せず、公開フィードへのリンクや未実装の削除/異議申立て送信ボタンを作りません。保留/BLOCK/非表示では申立ては準備中、削除状態は保存先の物理削除完了を意味しないと明記します。正式な理由分類、申立て/本人削除、公開フィードは後続です。
+- **本人操作と取得の区別**：写真/動画、原本/AI判定自由文はこの一覧へ表示しません。Stage3 flag有効時だけ本人削除と異議申立ての導線を追加し、削除後はackで表示を決めず最新状態を再取得します。論理削除と原本の物理消去を区別します。公開投稿の閲覧は別の認証付きfeed、原本の個別取得は別の運営権限経路です。
 
 [client試験](test/own-posts-client.test.ts)・[中継試験](test/own-posts-proxy.test.ts)・[controller試験](test/own-posts-controller.test.ts)・[入口/表示試験](test/own-posts-page.test.ts)で境界と失敗を検証します。[Chromium試験](e2e/own-posts.spec.ts)はローカル限定bundleと合成Auth/HTTPを使い、実Reactの読込み/ページ送り/単一更新、期限切れ、別tabの終了通知、Auth変化/非表示/離脱と390/1280px表示を検査します。productionにはharnessや偽認証routeを追加しません。実Next経路の既定OFFも確認しますが、実Google→Cookie→Access→DBの通し受入や実機受入の代替ではありません。
 

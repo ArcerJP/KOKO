@@ -6,7 +6,7 @@ KOKOは、第49回技科大祭向けの写真・動画共有Webアプリです�
 
 ## 現在の状態
 
-第0日の共有契約は作成・検証・合意が完了しました。撮影・トリム検証に加え、認証・同意・アップロード制御と、既定無効の明示送信画面・端末内キューをローカル実装しています。機能ごとの実装・実クラウド適用・実機受入の現在地は[開発計画](docs/product/development-plan.md)を参照してください。起動・buildの成功を共有アプリ全体の完成とは扱いません。
+第0日の共有契約は作成・検証・合意が完了しました。認証・同意・端末内送信キューに続き、第1〜第3の画像/動画処理・AI判定・認証配信・フィード・運営操作をローカル実装中です。新機能は既定無効で、実クラウド適用・鍵/権限設定・実機受入は別工程です。機能ごとの現在地は[開発計画](docs/product/development-plan.md)を参照してください。起動・buildや模擬試験の成功を共有アプリ全体の完成とは扱いません。
 
 - [プロダクト要件](docs/product/requirements.md)
 - [開発計画・FE/BEタスク](docs/product/development-plan.md)
@@ -62,9 +62,9 @@ KOKOは次の5つのパターンを組み合わせます。
 KOKO/
 ├── AGENTS.md              リポジトリ全体のCodexルーティング
 ├── .agents/skills/        反復可能なCodexワークフロー
-├── apps/web/              Next.js撮影検証・トークン・Webテスト
-├── apps/api/              Workers API基盤・初期SQL・APIテスト
-├── apps/image/            画像変換コア・ローカルCLI・Docker検証
+├── apps/web/              Next.js投稿・閲覧・運営UI・認証中継・Webテスト
+├── apps/api/              Workers API・処理/配信ゲート・DB migration・テスト
+├── apps/image/            画像変換・AI判定・非公開HTTP・CLI・Docker検証
 ├── packages/contract/     OpenAPI・生成型・契約・テスト
 ├── docs/                  正式な文書とADR
 ├── knowledge/raw/         原証拠（プライベート優先）

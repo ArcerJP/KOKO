@@ -1,6 +1,6 @@
 # 画像変換コア（B1-7／B2-1の一部）
 
-Node.js 24で、入力bufferからAI用JPEGと閲覧用WebP/JPEGを生成します。`src/index.ts`が呼出し境界、`convert.ts`が変換、`worker.ts`が同期decoderの隔離、`cli.ts`がローカル受入用、`r2.ts`が既定OFFの内部ストレージadapter、`pipeline.ts`が既定OFFの取得・変換・保存の接続です。API/Webへはまだ接続しません。
+Node.js 24で、入力bufferからAI用JPEGと閲覧用WebP/JPEGを生成します。`src/index.ts`が呼出し境界、`convert.ts`が変換、`worker.ts`が同期decoderの隔離、`cli.ts`がローカル受入用、`r2.ts`が既定OFFの内部ストレージadapter、`pipeline.ts`が既定OFFの取得・変換・保存の接続です。下記の認証HTTPと判定runnerをローカル接続しています。実API/Webからのクラウド通し受入は未実施です。
 
 ## 実装と未実装
 
@@ -11,13 +11,13 @@ Node.js 24で、入力bufferからAI用JPEGと閲覧用WebP/JPEGを生成しま�
 - 同一process内は1変換だけ。実行中は`BUSY`。1回ごとにWorkerを作成し、既定15秒で停止してから次の処理を許可。自動retryなし。
 - 空入力/不正な期限は`INVALID_INPUT`、decode不可能・複数画像は`DECODE_FAILED`、期限は`TIMEOUT`、Worker起動/異常終了は`WORKER_FAILED`。失敗時に部分的な派生物を返さない。raw例外/metadata/依存ログは外へ出さない。
 
-HEICの多画像やアニメーションを先頭だけに切り捨てず失敗させます。これは公開許可や業務上の投稿拒否ではありません。後続consumerは原本保持・非公開保留・通知/再実行へ接続する必要があります。現在はそのDB処理を行っていません。
+HEICの多画像やアニメーションを先頭だけに切り捨てず失敗させます。これはAIの違反判定ではありません。変換コア自体はDBを変更せず、下記runnerが最新leaseを再検査して原本保持・非公開保留・通知予約へ接続します。
 
 sharp既定相当の268,402,689画素制限とdecoder/メモリ/期限の実行限界があります。投稿APIのサイズ・形式制限ではなく、全画像の変換成功を保証しません。Workerの256MiB V8 heap制限はnative/WASM領域を含む完全なメモリsandboxではありません。本番ではプロセス/コンテナーの制限とバックプレッシャが別途必要です。
 
 15秒は停止要求を出す期限です。native処理の終了待ちを含む厳密な応答時間の上限ではなく、停止完了までは次の変換枠を開放しません。
 
-変換コア・ローカルCLIに加え、下記の**既定OFFの認証HTTP入口**をローカル実装しました。固定R2/DBのadapterは合成試験までで、実IAM/DB/R2、Queue consumer、判定・公開は未接続です。CLIコンテナーの既定入口は変更せず、HTTPは明示したDocker targetに分離します。実機HEIC、HDR/広色域/特殊な向き、巨大/破損画像の網羅、30投稿/分・公開中央値60秒も未受入です。特にWASMのRGBA出力に原本ICCを移さないため、実機の色再現を確認するまで本番有効化しません。
+変換コア・ローカルCLIに加え、下記の**既定OFFの認証HTTP入口・AI判定・DB確定**をローカル実装しました。実IAM/DB/R2、[Queue consumer](../api/README.md#stream準備と処理queueb2-2実環境未受入)との外部接続・判定/公開は未受入です。CLIコンテナーの既定入口は変更せず、HTTPは明示したDocker targetに分離します。実機HEIC、HDR/広色域/特殊な向き、巨大/破損画像の網羅、30投稿/分・公開中央値60秒も未受入です。特にWASMのRGBA出力に原本ICCを移さないため、実機の色再現を確認するまで本番有効化しません。
 
 ## 非公開R2ストレージadapter（B2-1の一部・既定OFF）
 
@@ -50,7 +50,7 @@ sharp既定相当の268,402,689画素制限とdecoder/メモリ/期限の実行�
 
 ## DB接続と内部runner（B2-1の一部・既定OFF）
 
-`src/db.ts`の`createImageDatabase`と`src/runner.ts`の`createImageRunner`で、DB claim→pipelineの7地点check→4保存→DB finishを接続します。いずれも`enabled: true`の明示と正しい依存が必要です。単体は環境変数やHTTPに依存せず、下記サービス構成が呼び出します。Queue consumer登録、CLIの実DB接続はありません。
+`src/db.ts`の`createImageDatabase`と`src/runner.ts`の`createImageRunner`で、DB claim→pipelineの7地点check→4保存→DB finishを接続します。いずれも`enabled: true`の明示と正しい依存が必要です。単体は環境変数やHTTPに依存せず、下記サービス構成が呼び出します。CLIの実DB接続はありません。Queue consumerのコードはAPI側にありますが、実登録/外部接続は未実施です。
 
 - **DB設定**：信頼するサーバー設定の`supabaseUrl`・`secretKey`だけを使う。HTTPSの20文字project ref＋`.supabase.co`のoriginに限定し、user info・port指定・path・query・fragmentを拒否。job/payloadから送信先や鍵を決めない。Secretは`apikey` headerだけで、Bearer/Cookie/ログ/戻り値へ複製しない。キー入力・登録は今回未実施。
 - **RPC**：固定の`/rest/v1/rpc/manage_image_processing`へPOST。redirect・cache・自動retryなし。既定/最大5秒でfetchとbodyをまとめて制限し、応答16KiB、200＋JSON＋厳格UTF-8、既知のcode/shapeだけ受理。エラー本文は返さず`DB_FAILED`、期限は`DB_TIMEOUT`。遅れて到着したbodyも破棄する。
@@ -59,7 +59,9 @@ sharp既定相当の268,402,689画素制限とdecoder/メモリ/期限の実行�
 - **runner**：1インスタンス1件。通常成功はclaim 1回＋check 7回＋finish 1回で、finishの`RECORDED`後だけ`image_recorded`とメモリ内AI用画像を返す。DB/変換/保存失敗・停止/旧leaseでは後続を止め、AI bytesや部分成功を返さない。これはプロセス全体・複数instanceの同時実行上限ではない。
 - **重複/曖昧結果**：`IMAGE_SAVED`は`image_already_recorded`という別の結果で、画像I/Oとfinishを繰り返さず、AI bytesもない。claim/finish応答を失った場合はDB commit済みでも失敗として保留する。自動のlease解放/取消し・再送・削除はせず、次の明示runは最新DBへ照会する。
 
-**どちらの成功結果もQueue ACK、process_media全体の完了、AI判定や公開許可ではありません。** 特に記録済みの再配送やfinish応答喪失後はAI縮小物が戻らず、後続AI段階の回復処理が必要です。その処理と外部consumerはまだ実装していません。入力jobは認証済み内部呼出元が渡す3 UUIDだけであり、このrunnerを認証なしのHTTPへ公開しないでください。
+**どちらの画像段階の成功結果もQueue ACK、process_media全体の完了、AI判定や公開許可ではありません。** 記録済みの再配送やfinish応答喪失後はAI縮小物が戻らないため、下記の判定runnerが原本を再照合・decodeして回復します。入力jobは認証済み内部呼出元が渡す3 UUIDだけであり、このrunnerを認証なしのHTTPへ公開しないでください。
+
+decode不可能・派生物不正・原本不一致・保存競合・資源上限は、現在leaseとDB認可が有効なら専用の`processing_failure_receipt`を記録して非公開`held`へ進めます。通知予約とjob決着は同一transactionで、AI判定・違反加算・BANは作りません。通信障害/クラッシュは期限付き再取得を最大3回に制限し、枯渇時も同様に保留します。DB自体の停止や未承認設定を成功/違反に読み替えません。運営者の明示再処理は新job・現在版を使い、同一原本と過去証拠の一致時だけ既存予約を再利用します。原本/途中保存物を自動消去しません。
 
 DB client/runner試験は模擬RPCで通信契約・7地点の停止・曖昧なfinishを検証し、合成HEIC→実decoder→署名付き模擬R2→metadata確定→重複runまで通します。SQL/PGliteは別試験で、実PostgREST/実DBと画像処理を通した試験ではありません。同じ新規試験をDockerにも登録し、実IAM/DB適用/R2/Queue/実機/負荷は別の受入ゲートに残します。
 
@@ -73,7 +75,7 @@ DB client/runner試験は模擬RPCで通信契約・7地点の停止・曖昧な
 - 検証鍵は固定Google JWKSからのみ取得。JWT内の任意鍵/URLを採用せず、64KiB・5秒・redirect禁止、5分の鍵cacheと30秒のunknown-kid cooldown。JWT/claims/鍵/例外本文をログや応答へ出さない。
 - `Authorization: Bearer`だけを使用。Cookie/Origin/`X-Serverless-Authorization`併用を拒否し、forwarded identity headerを信用しない。Googleが後者の署名を除去する方式へ暗黙fallbackしない。実IAMとの通し試験は未実施。
 - `POST /internal/image`は認証後に最大1KiBのJSONを5秒以内で読み、eventId/postId/jobIdの3 UUIDだけ受理。任意URL/plan/鍵/画像は入力不可。1handlerにつき同時1件、busyは429。Node transportでもheader上限・重複Authorization拒否・読取り期限を設定。
-- 成功応答はstage/outcome/`processComplete:false`だけ。画像bytes・原本キー・DB plan・provider本文を返さない。HTTP 200をQueue ACK、AI完了、公開許可に使わない。画像記録済みからのAI回復と全process consumerは後続。
+- `/internal/image`の成功応答はstage/outcome/`processComplete:false`だけ。画像bytes・原本キー・DB plan・provider本文を返さない。HTTP 200をQueue ACK、AI完了、公開許可に使わない。全処理は別の`/internal/process`と下記判定runnerへ接続し、consumerがDBで最終確認する。
 - `GET /health`はready/disabledの固定状態だけ。Google/R2/DBへの疎通確認ではない。Cloud Run上ではこれもIAMの背後に置く。
 
 サービスを有効化するには`KOKO_IMAGE_SERVICE_ENABLED=true`に加え、`KOKO_IMAGE_SERVICE_AUDIENCE`（実サービスのHTTPS run.app origin、path/末尾slashなし）、`KOKO_IMAGE_CALLER_EMAIL`、`KOKO_IMAGE_CALLER_SUBJECT`が必要です。さらに既存R2設定と`SUPABASE_URL`/`SUPABASE_SECRET_KEY`をサーバー専用に渡します。不足時は固定構成エラーで起動せず、秘密値を出力しません。既定OFFなら秘密/構成を解決せずhealth以外404です。
@@ -93,7 +95,13 @@ Dockerの`--target service`がHTTP専用入口です。importでlistenせず、�
 - 正常なOCR文字なしを`no_text`と記録し、失敗/nullと区別する。判定は既存契約のBLOCK > HELD > FLAG > PASS。いずれかの必須判定失敗をPASSへ変えない。
 - 返却はframe別スコア・モデル・時間・試行/呼出し単位のみ。画像/OCR原文/鍵/生エラーを返さず、価格不明の費用はnull。adapter成功だけで公開せず、DBで現設定/BAN/同意/状態を再検証して確定する。
 
-合成試験は固定応答・境界・取消し・retry枯渇の検査です。実quota・資格情報、200枚による校正、実応答形式、p95、費用と誤判定は未受入。共有quotaと原子的DB確定は次の内部runnerへ接続しました。Queue consumerは別工程です。
+合成試験は固定応答・境界・取消し・retry枯渇の検査です。実quota・資格情報、200枚による校正、実応答形式、p95、費用と誤判定は未受入。共有quotaと原子的DB確定は次の内部runnerへ、Queue consumerは[API実装](../api/README.md#stream準備と処理queueb2-2実環境未受入)へ接続しました。実サービス間認証・有効化は未完了です。
+
+### 費用推計の記録
+
+`moderation-cost.ts`はclaim時の任意の`event_settings.moderation_cost_rates`をsnapshotし、HTTP試行数×設定単価のUSD参考推計をrunごとに保存します。版・UTC確認日/有効期限・固定公式出典・整数microUSD単価を厳格検査し、DBでもusageから独立再計算します。再試行も記録し、設定を消去しても版を巻き戻しません。既定は未設定で、未知・期限外・使った単価が不明ならnull、既知の0と区別します。料金は自動投入せず、設定変更も閾値承認を兼ねません。
+
+これは請求確定額ではありません。月間無料枠、割引、税、他用途との合算、Stream/R2/Cloud Run等の費用や支出上限は含みません。料金変更は次のclaimから採用し、処理中120秒leaseのsnapshotは保持します。[費用方針](../../docs/product/cost-policy.md)に従い、実料金採択と請求照合は別に行います。公式出典は[OpenAI Moderation](https://developers.openai.com/api/docs/guides/moderation)と[Cloud Vision料金](https://cloud.google.com/vision/pricing)です。
 
 一次資料：[OpenAI Moderation](https://developers.openai.com/api/docs/guides/moderation)、[API schema](https://developers.openai.com/api/reference/resources/moderations/methods/create)、[Vision annotate](https://docs.cloud.google.com/vision/docs/reference/rest/v1/images/annotate)、[Vision response](https://docs.cloud.google.com/vision/docs/reference/rest/v1/AnnotateImageResponse)、[Vision model選択](https://docs.cloud.google.com/vision/docs/reference/rest/v1/Feature)（2026-10-06確認）。閾値とSafeSearch正規化はKOKO側の設計で、公式サービスが安全性を保証するものではありません。
 
@@ -109,6 +117,14 @@ Dockerの`--target service`がHTTP専用入口です。importでlistenせず、�
 `moderation-runner.test.mjs`はPGliteの全migration→認証済み合成HTTP→実decode→模擬provider→DB公開確定→再送の縦通しを含みます。DockerのverificationだけにPGlite等のdev依存とmigrationを入れ、runtimeはproduction依存だけに維持します。これは実PostgREST・実AI・実IAM・実R2を通す受入ではありません。
 
 ## ローカル検証
+
+### 校正結果のオフライン集計（B3-7の準備）
+
+`evaluation.ts` / `evaluation-cli.ts` は人間が正解ラベルを付けた匿名化済み結果だけを集計します。画像やAIへの通信、DB設定変更は行いません。build後に `Get-Content -Raw <非公開の結果JSON> | node apps/image/dist/evaluation-cli.js` で実行し、結果の保管先はPrivate資料にします。入力は `{"version":1,"policy_version":1,"samples":[{"sample_sha256":"原本の64桁SHA256","expected":"allow","observed":"PASS","processing_ms":100}]}`。ラベルはallow/block、結果はPASS/FLAG/BLOCK/HELD/ERROR、未測定時間はnullです。本文・氏名・メール・原本パスは渡しません。
+
+正常系200枚を不適切サンプルと別に数え、同一hashの重複を拒否します。BLOCK率・FLAG率・保留/障害率、不適切サンプルの公開率、nearest-rankの中央値/p95を別々に示します。保留/エラーをPASSとして除外せず、分母0と未計測はnull。件数を満たしても権利・ラベル・サンプル独立性・誤検知目標・運営承認は確認できず、閾値の自動承認はしません。実quota/料金、30投稿/分の負荷と公開までのSLOは別測定です。
+
+### 自動検査
 
 KOKOルートで実行します。依存はroot lockfileに固定し、既存Webのsharp版は変更しません。
 

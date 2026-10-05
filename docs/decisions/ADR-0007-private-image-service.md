@@ -27,7 +27,11 @@ HTTPは固定route・3 UUIDだけ。認証後に本文を有限読取りし、�
 
 ## 制約と検証
 
-合成RSA/JWKS、期限・別主体・別aud・通信失敗・上限・Node loopback・模擬DB/runnerを試験。成功は画像段階に限定し、Queue ACK/公開を許可しません。実Cloud Runのheader伝搬、IAM、token取得方式、複数instance quota、実DB/R2、実機は未検証。JWTの失効は有効期限とIAMの両方を考慮し、アプリ内検証だけで即時失効を保証しません。
+合成RSA/JWKS、期限・別主体・別aud・通信失敗・上限・Node loopback・模擬DB/runnerを試験。画像段階の成功だけでQueue ACK/公開を許可しません。実Cloud Runのheader伝搬、IAM、token取得方式、複数instance quota、実DB/R2、実機は未検証。JWTの失効は有効期限とIAMの両方を考慮し、アプリ内検証だけで即時失効を保証しません。
+
+同日の後続実装で、画像専用routeを維持したまま、画像/動画3フレームからAI合議とDB完了記録まで進める固定`/internal/process`を追加しました。Queue consumerはHTTP成功とは別にDBの現行job/投稿版・完了証拠を再取得してACKを判断します。処理失敗の保留もAI違反や公開成功に置き換えません。
+
+Cloudflare側にはWIFのSTS交換とサービスアカウントID token取得を行う限定クライアントを追加していますが、信頼できる外部署名assertionの発行源は未構成です。WorkerがambientなGoogle認証を持つと仮定せず、未構成なら呼出しを拒否します。鍵を使う代案の採用、issuer/broker、IAM、実token入力は本人判断・保護操作として残します。
 
 サービス作成/課金/権限/鍵/Secret/配備をこのADRのAccepted状態から実行しません。実接続前に許可主体とIAM設定、短命tokenの取得方式を確認し、必要な本人操作を分離します。
 
