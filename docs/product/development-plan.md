@@ -19,6 +19,8 @@
 
 **実装を止めず先行して確定すべき外部条件**：private Cloud Run呼出しのサービス認証方式（Workerで外部OIDC assertionを得る経路は未確定）、Stream webhook専用受信口と既存Accessの両立、privacy本文、保持/容量閾値です。サイトへログイン済みでもAPI権限・鍵・サービス間認証の完成ではありません。保護解除や架空の鍵で穴埋めしません。
 
+**設定だけでは解消しない残件**：Workerの信頼できる認証assertion取得元は方式確定後のコード接続が必要です。既存ready multipartがprovider側で失効/中止された後の自動的なsession再作成と、孤児の能動削除は未実装。原本の物理削除adapterも未実装であり、第3の論理停止・削除予約・保持待ち表示と区別します。保持日数を設定しただけで物理削除が始まるものではありません。
+
 ### 基盤の段階別記録
 
 B1-4/F1-4の[初回イベント参加](../../apps/web/README.md#初回イベント参加b1-4f1-4既定無効)を追加しました。Google本人・固定eventの読取り→明示表示名登録→所属/規約再確認をSQL/API/Webへ接続し、既存member/BAN/roleを上書きしません。専用flagは既定OFF。自動試験はローカルのSQL/HTTP/Chromiumであり、実DB/実Cookie・Access/実機は未受入です。
