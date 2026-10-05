@@ -2,6 +2,8 @@
 import { errors } from "@koko/contract";
 import type { OwnPost } from "../../../api/own-posts-contract";
 import type { OwnPostsState } from "../../../api/own-posts-controller";
+import Link from "next/link";
+import { PostActions } from "../../../components/post-actions";
 
 const labels: Record<OwnPost["status"], string> = {
   uploading: "送信中",
@@ -20,11 +22,15 @@ export function PostsView({
   onReload,
   onMore,
   onRefresh,
+  operationsEnabled = false,
+  onDeleted,
 }: {
   state: OwnPostsState;
   onReload: () => void;
   onMore: () => void;
   onRefresh: (id: string) => void;
+  operationsEnabled?: boolean;
+  onDeleted?: () => void;
 }) {
   return (
     <section className="panel" aria-labelledby="own-posts-heading">
@@ -86,7 +92,14 @@ export function PostsView({
             )}
             {["blocked", "held", "hidden"].includes(post.status) && (
               <p>
-                この画面から再公開はできません。異議申立て機能は準備中です。
+                この画面から再公開はできません。
+                {operationsEnabled ? (
+                  <Link href={`/appeal?post=${post.id}`} prefetch={false}>
+                    この投稿について異議を申し立てる
+                  </Link>
+                ) : (
+                  "異議申立て機能は準備中です。"
+                )}
               </p>
             )}
             <button
@@ -96,6 +109,16 @@ export function PostsView({
             >
               この投稿の状態を更新
             </button>
+            {operationsEnabled &&
+            state.phase === "ready" &&
+            post.status !== "deleted" ? (
+              <PostActions
+                eventId={post.event_id}
+                postId={post.id}
+                mode="delete-own"
+                {...(onDeleted ? { onCompleted: onDeleted } : {})}
+              />
+            ) : null}
           </article>
         ))}
       </div>

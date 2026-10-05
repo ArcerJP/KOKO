@@ -17,6 +17,7 @@ test.beforeAll(async () => {
     ],
     bundle: true,
     write: false,
+    outfile: "own-posts.js",
     format: "iife",
     platform: "browser",
     jsx: "automatic",
@@ -25,6 +26,16 @@ test.beforeAll(async () => {
       {
         name: "synthetic-auth-only",
         setup(builder) {
+          builder.onResolve({ filter: /^next\/link$/ }, () => ({
+            path: "link",
+            namespace: "next-interop",
+          }));
+          builder.onLoad({ filter: /.*/, namespace: "next-interop" }, () => ({
+            loader: "js",
+            resolveDir: fileURLToPath(new URL("..", import.meta.url)),
+            contents:
+              'import Link from "next/dist/client/link"; export default Link.default ?? Link;',
+          }));
           builder.onResolve({ filter: /auth\/browser$/ }, () => ({
             path: "auth",
             namespace: "synthetic-auth",
@@ -44,7 +55,7 @@ test.beforeAll(async () => {
       },
     ],
   });
-  script = built.outputFiles[0]!.text;
+  script = built.outputFiles.find((file) => file.path.endsWith(".js"))!.text;
   const css = await readFile(
     new URL("../src/app/globals.css", import.meta.url),
     "utf8",
@@ -53,15 +64,21 @@ test.beforeAll(async () => {
     new URL("../src/styles/tokens.css", import.meta.url),
     "utf8",
   );
-  html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${tokens}${css}</style></head><body><div id="root"></div><script src="/__posts-harness.js"></script></body></html>`;
+  const operationCss = built.outputFiles
+    .filter((file) => file.path.endsWith(".css"))
+    .map((file) => file.text)
+    .join("");
+  html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${tokens}${css}${operationCss}</style></head><body><div id="root"></div><script src="/__posts-harness.js"></script></body></html>`;
 });
-async function mount(page: Page) {
+async function mount(page: Page, query = "") {
   await page.route("**/__posts-harness**", (route) =>
     route.fulfill({
-      contentType: route.request().url().endsWith(".js")
+      contentType: new URL(route.request().url()).pathname.endsWith(".js")
         ? "application/javascript"
         : "text/html",
-      body: route.request().url().endsWith(".js") ? script : html,
+      body: new URL(route.request().url()).pathname.endsWith(".js")
+        ? script
+        : html,
     }),
   );
   await page.route("**/auth/api-session", (route) =>
@@ -84,7 +101,7 @@ async function mount(page: Page) {
       }),
     }),
   );
-  await page.goto("/__posts-harness");
+  await page.goto(`/__posts-harness${query}`);
   await expect(
     page.getByRole("button", { name: "本人確認・先頭から読み込む" }),
   ).toBeEnabled();
@@ -233,4 +250,58 @@ test("ログアウトボタンは終了失敗時にも投稿画面を再開し�
   await expect(page.getByRole("alert")).toContainText(
     "ログアウトを完了できませんでした",
   );
+});
+test("本人はBAN中も明示削除でき、再読取り後は削除受付と申立て導線を区別", async ({
+  page,
+}) => {
+  await mount(page, "?actions=1");
+  let deleted = false;
+  await page.route("**/api/me", (route) =>
+    route.fulfill({
+      json: {
+        ...me,
+        is_banned: true,
+        csrf_token: "synthetic-csrf-abcdefghijklmnopqrstuvwxyz",
+      },
+    }),
+  );
+  await page.route("**/api/me/posts?**", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          post(1, { status: deleted ? "deleted" : "hidden" }),
+          post(2, { status: "blocked" }),
+        ],
+        next_cursor: null,
+      },
+    }),
+  );
+  let writes = 0;
+  await page.route(`**/api/posts/${post(1).id}`, (route) => {
+    if (route.request().method() !== "DELETE") return route.abort();
+    writes++;
+    deleted = true;
+    return route.fulfill({
+      json: { request_id: "00000000-0000-4000-8000-000000000030" },
+    });
+  });
+  await page
+    .getByRole("button", { name: "本人確認・先頭から読み込む" })
+    .click();
+  const first = page.getByRole("article").first();
+  await expect(
+    first.getByRole("link", { name: "この投稿について異議を申し立てる" }),
+  ).toHaveAttribute("href", `/appeal?post=${post(1).id}`);
+  expect(writes).toBe(0);
+  await first.getByText("自分の投稿を削除", { exact: true }).click();
+  await first.getByRole("button", { name: "本人確認・操作を準備" }).click();
+  await first.getByRole("checkbox").check();
+  await first.getByRole("button", { name: "本人の投稿を削除する" }).click();
+  await expect(
+    first.getByRole("heading", { name: "削除受付済み" }),
+  ).toBeVisible();
+  expect(writes).toBe(1);
+  await expect(
+    first.getByText("自分の投稿を削除", { exact: true }),
+  ).toHaveCount(0);
 });

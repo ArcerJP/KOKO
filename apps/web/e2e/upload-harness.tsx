@@ -108,7 +108,11 @@ function App() {
       {other ? (
         <p>別の画面（実行中の送信は保持）</p>
       ) : (
-        <UploadPanel queue={queue} />
+        <UploadPanel
+          queue={queue}
+          eventId={destination.eventId}
+          themesEnabled={new URL(location.href).searchParams.has("themes")}
+        />
       )}
     </main>
   );

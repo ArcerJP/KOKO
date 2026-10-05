@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useCallback,
   useRef,
   useState,
   useSyncExternalStore,
@@ -17,6 +18,11 @@ import {
 } from "../media/trim-policy";
 import type { UploadQueue } from "../media/upload-queue";
 import type { UploadRequest } from "../api/upload-contract";
+import { validId } from "../api/upload-contract";
+import {
+  UploadThemePicker,
+  type UploadThemeChoice,
+} from "./upload-theme-picker";
 
 const notice =
   "写る人の同意を得て、個人情報・位置情報・著作権に配慮してください。危険な行為や不適切な内容は投稿できません。";
@@ -29,7 +35,15 @@ type Draft = {
   previewUrl: string | null;
   duration: number | null;
 };
-export function UploadPanel({ queue }: { queue: UploadQueue }) {
+export function UploadPanel({
+  queue,
+  eventId,
+  themesEnabled = false,
+}: {
+  queue: UploadQueue;
+  eventId?: string;
+  themesEnabled?: boolean;
+}) {
   const state = useSyncExternalStore(
     queue.subscribe,
     queue.getSnapshot,
@@ -38,6 +52,15 @@ export function UploadPanel({ queue }: { queue: UploadQueue }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [theme, setTheme] = useState<UploadThemeChoice | null>(null);
+  const invalidateTheme = useCallback(
+    () =>
+      setTheme((previous) =>
+        previous?.valid ? { ...previous, valid: false } : previous,
+      ),
+    [],
+  );
+  const allowThemes = themesEnabled && validId(eventId);
   const operation = useRef<AbortController | null>(null);
   const urls = useRef(new Set<string>());
   const submitting = useRef(false);
@@ -56,6 +79,7 @@ export function UploadPanel({ queue }: { queue: UploadQueue }) {
       release();
       setDraft(null);
       setBusy(false);
+      setTheme(null);
     };
     const unsubscribe = queue.subscribe(() => {
       if (!queue.getSnapshot().ready) stop();
@@ -132,6 +156,13 @@ export function UploadPanel({ queue }: { queue: UploadQueue }) {
   }
   async function submit() {
     if (!draft || !state.ready || busy || submitting.current) return;
+    if (theme && (!allowThemes || !theme.valid || theme.endsAt <= Date.now())) {
+      invalidateTheme();
+      setMessage(
+        "お題を確認できません。開催中のお題を選び直すか、自由投稿を選んでください。",
+      );
+      return;
+    }
     if (
       draft.kind === "video" &&
       (!draft.result ||
@@ -156,13 +187,14 @@ export function UploadPanel({ queue }: { queue: UploadQueue }) {
           : draft.result?.status === "ready"
             ? "client_trimmed"
             : "full_video_fallback",
-      theme_id: null,
+      theme_id: theme?.id ?? null,
     };
     try {
       if (await queue.enqueue(blob, request)) {
         release();
         setDraft(null);
         setMessage("");
+        setTheme(null);
       }
     } finally {
       submitting.current = false;
@@ -172,6 +204,7 @@ export function UploadPanel({ queue }: { queue: UploadQueue }) {
   const canSubmit =
     state.ready &&
     !busy &&
+    (!theme || theme.valid) &&
     draft &&
     (draft.kind === "photo" ||
       (draft.result &&
@@ -192,6 +225,15 @@ export function UploadPanel({ queue }: { queue: UploadQueue }) {
       <section className="panel" aria-labelledby="upload-capture">
         <h2 id="upload-capture">撮影・プレビュー</h2>
         <p>{notice}</p>
+        {allowThemes ? (
+          <UploadThemePicker
+            eventId={eventId}
+            value={theme}
+            disabled={!state.ready || busy}
+            onChange={setTheme}
+            onInvalidate={invalidateTheme}
+          />
+        ) : null}
         <div className="actions">
           {(["photo", "video"] as const).map((kind) => (
             <label
