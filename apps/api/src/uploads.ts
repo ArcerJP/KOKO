@@ -35,6 +35,7 @@ type Session = {
   mode: "single" | "multipart";
   expires_at: string;
   provider_upload_id: string | null;
+  provisioning_locked_until: string | null;
   request: UploadRequest;
 };
 const admissionErrors: readonly ApiErrorCode[] = [
@@ -99,6 +100,7 @@ function sessionResult(
   value: unknown,
   eventId: string,
   now: number,
+  attemptId: string,
 ): Session | null {
   if (
     !object(value) ||
@@ -124,7 +126,15 @@ function sessionResult(
     value.mode !== plan.mode ||
     (plan.mode === "single" &&
       (value.code !== "ready" || value.provider_upload_id !== null)) ||
-    (value.code === "provision" && value.provider_upload_id !== null) ||
+    (value.code === "provision" &&
+      (value.provider_upload_id !== null ||
+        value.provisioning_attempt !== attemptId ||
+        typeof value.provisioning_locked_until !== "string" ||
+        !Number.isFinite(Date.parse(value.provisioning_locked_until)) ||
+        Date.parse(value.provisioning_locked_until) <= now ||
+        Date.parse(value.provisioning_locked_until) > now + 120000 ||
+        Date.parse(value.provisioning_locked_until) >
+          Date.parse(value.expires_at))) ||
     (value.mode === "multipart" &&
       value.code === "ready" &&
       (typeof value.provider_upload_id !== "string" ||
@@ -139,6 +149,10 @@ function sessionResult(
     mode: plan.mode,
     expires_at: value.expires_at,
     provider_upload_id: value.provider_upload_id as string | null,
+    provisioning_locked_until:
+      value.code === "provision"
+        ? (value.provisioning_locked_until as string)
+        : null,
     request,
   };
 }
@@ -262,7 +276,7 @@ export async function handleUploads(
       // Invalid upstream values must never become caller-facing input errors or URLs.
       try {
         return (
-          sessionResult(result, eventId, Date.now()) ??
+          sessionResult(result, eventId, Date.now(), attemptId) ??
           failure("INTERNAL_ERROR")
         );
       } catch {
@@ -285,17 +299,36 @@ export async function handleUploads(
     if (session.code === "provision") {
       if (action !== "open") return failure("INTERNAL_ERROR");
       const pending = session;
-      const provider = await r2.beginMultipart(
-        {
-          eventId: eventId.toLowerCase(),
-          postId: pending.post_id,
-          assetId: pending.asset_id,
-        },
-        pending.request.file_size_bytes,
-        pending.request.content_type,
-      );
-      // No automatic create retry or blind abort after an ambiguous DB response.
-      // A later open sees ready (committed) or stays pending (needs recovery).
+      const leaseEnd = Date.parse(pending.provisioning_locked_until!);
+      if (leaseEnd <= Date.now()) return failure("UPLOAD_INCOMPLETE");
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let provider: Awaited<ReturnType<typeof r2.beginMultipart>> | null;
+      try {
+        provider = await Promise.race([
+          r2.beginMultipart(
+            {
+              eventId: eventId.toLowerCase(),
+              postId: pending.post_id,
+              assetId: pending.asset_id,
+            },
+            pending.request.file_size_bytes,
+            pending.request.content_type,
+          ),
+          new Promise<null>((resolve) => {
+            timer = setTimeout(
+              () => resolve(null),
+              Math.max(0, leaseEnd - Date.now()),
+            );
+          }),
+        ]);
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
+      if (provider === null || Date.now() >= leaseEnd)
+        return failure("UPLOAD_INCOMPLETE");
+      // No inline create retry or blind abort after an ambiguous result. A later
+      // open reuses ready, or DB grants one new generation after lease expiry.
+      // Expired/old generations cannot attach even if provider creation succeeds late.
       session = await rpc("attach", {
         upload_id: pending.upload_id,
         attempt_id: attemptId,

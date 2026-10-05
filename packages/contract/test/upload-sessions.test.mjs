@@ -101,6 +101,17 @@ const attach = (
 const count = async () =>
   (await db.query("SELECT count(*)::integer AS n FROM public.upload_sessions"))
     .rows[0].n;
+const storedSession = async (session) =>
+  (
+    await db.query("SELECT * FROM public.upload_sessions WHERE id=$1", [
+      session.upload_id,
+    ])
+  ).rows[0];
+const expireProvision = async (session) =>
+  db.query(
+    "UPDATE public.upload_sessions SET provisioning_locked_until=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [session.upload_id],
+  );
 
 test("service-only invoker RPC preserves RLS and empty search path", async () => {
   for (const role of ["anon", "authenticated"])
@@ -163,6 +174,10 @@ test("only first multipart claim provisions; same/different attempts do not retr
   const first = await open(multipart);
   assert.equal(first.code, "provision");
   assert.equal(first.provider_upload_id, null);
+  assert.equal(first.provisioning_attempt, attempt);
+  assert.ok(Date.parse(first.provisioning_locked_until) > Date.now());
+  assert.ok(Date.parse(first.provisioning_locked_until) <= Date.now() + 120000);
+  assert.equal((await storedSession(first)).provisioning_attempts, 1);
   for (const result of [
     await open(multipart),
     await open(multipart, randomUUID()),
@@ -184,6 +199,123 @@ test("only first multipart claim provisions; same/different attempts do not retr
     (await open(multipart)).provider_upload_id,
     "opaque-provider-id",
   );
+});
+test("expired unknown create permits exactly one new generation and rejects the old attach", async () => {
+  const first = await open(multipart);
+  await expireProvision(first);
+  assert.equal((await attach(first)).code, "STATE_CONFLICT");
+  for (const result of [
+    await open(multipart),
+    await rpc("refresh", { upload_id: first.upload_id }),
+    await rpc("parts", { upload_id: first.upload_id }),
+  ])
+    assert.equal(result.code, "UPLOAD_INCOMPLETE");
+  const replacement = randomUUID();
+  const second = await open(multipart, replacement);
+  assert.equal(second.code, "provision");
+  for (const key of ["upload_id", "post_id", "asset_id", "object_key"])
+    assert.equal(second[key], first[key]);
+  assert.equal(second.provisioning_attempt, replacement);
+  assert.equal((await storedSession(first)).provisioning_attempts, 2);
+  assert.equal((await open(multipart, randomUUID())).code, "UPLOAD_INCOMPLETE");
+  assert.equal((await open(multipart, replacement)).code, "UPLOAD_INCOMPLETE");
+  const before = await storedSession(first);
+  assert.equal((await attach(first)).code, "STATE_CONFLICT");
+  assert.deepEqual(await storedSession(first), before);
+  assert.equal(
+    (await attach(second, "replacement-provider", replacement)).code,
+    "ready",
+  );
+  assert.equal((await attach(first)).code, "STATE_CONFLICT");
+  assert.equal(
+    (await open(multipart, randomUUID())).provider_upload_id,
+    "replacement-provider",
+  );
+  assert.equal(await count(), 1);
+});
+test("at most three provisioning generations are granted, without unbounded lease extension", async () => {
+  const first = await open(multipart);
+  for (let number = 2; number <= 3; number++) {
+    await expireProvision(first);
+    assert.equal((await open(multipart, randomUUID())).code, "provision");
+    assert.equal((await storedSession(first)).provisioning_attempts, number);
+  }
+  await expireProvision(first);
+  const before = await storedSession(first);
+  for (let i = 0; i < 4; i++)
+    assert.equal(
+      (await open(multipart, randomUUID())).code,
+      "UPLOAD_INCOMPLETE",
+    );
+  assert.deepEqual(await storedSession(first), before);
+  assert.equal(await count(), 1);
+});
+test("the last allowed generation may attach while current but cannot replace its ready provider", async () => {
+  const first = await open(multipart);
+  let currentAttempt = attempt;
+  for (let number = 2; number <= 3; number++) {
+    await expireProvision(first);
+    currentAttempt = randomUUID();
+    assert.equal((await open(multipart, currentAttempt)).code, "provision");
+  }
+  assert.equal(
+    (await attach(first, "last-provider", currentAttempt)).code,
+    "ready",
+  );
+  assert.equal(
+    (await open(multipart, randomUUID())).provider_upload_id,
+    "last-provider",
+  );
+  assert.equal((await storedSession(first)).provisioning_attempts, 3);
+  assert.equal(
+    (await attach(first, "old-provider", attempt)).code,
+    "STATE_CONFLICT",
+  );
+});
+test("an attach committed before response loss is reused even after the old lease time", async () => {
+  const first = await open(multipart);
+  await attach(first);
+  await db.query(
+    "UPDATE public.upload_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [first.upload_id],
+  );
+  const ready = await open(multipart, randomUUID());
+  assert.equal(ready.code, "ready");
+  assert.equal(ready.provider_upload_id, "opaque-provider-id");
+  assert.equal((await storedSession(first)).provisioning_attempts, 1);
+  assert.equal((await storedSession(first)).provisioning_locked_until, null);
+  assert.equal((await attach(first)).code, "ready");
+  assert.equal((await attach(first, "different")).code, "STATE_CONFLICT");
+});
+test("provisioning lease is bounded by event/theme end and unknown legacy lease stays closed", async () => {
+  await db.exec(
+    "UPDATE public.themes SET ends_at=clock_timestamp()+interval '30 seconds'",
+  );
+  const first = await open({ ...multipart, theme_id: theme });
+  assert.ok(Date.parse(first.provisioning_locked_until) <= Date.now() + 30000);
+  assert.ok(
+    Date.parse(first.provisioning_locked_until) <= Date.parse(first.expires_at),
+  );
+  await db.query(
+    "UPDATE public.upload_sessions SET provisioning_locked_until=NULL WHERE id=$1",
+    [first.upload_id],
+  );
+  const before = await storedSession(first);
+  assert.equal(
+    (await open({ ...multipart, theme_id: theme }, randomUUID())).code,
+    "UPLOAD_INCOMPLETE",
+  );
+  assert.equal((await attach(first)).code, "STATE_CONFLICT");
+  assert.deepEqual(await storedSession(first), before);
+});
+test("rollback of a replacement leaves the old generation and count unchanged", async () => {
+  const first = await open(multipart);
+  await expireProvision(first);
+  const before = await storedSession(first);
+  await db.exec("BEGIN");
+  assert.equal((await open(multipart, randomUUID())).code, "provision");
+  await db.exec("ROLLBACK");
+  assert.deepEqual(await storedSession(first), before);
 });
 test("expired multipart refuses parts but refresh renews same provider without create", async () => {
   const pending = await open(multipart);
@@ -267,8 +399,9 @@ for (const [label, sql, code] of [
   test(`every issuance and provider attach recheck ${label}`, async () => {
     const input = { ...multipart, theme_id: theme };
     const session = await open(input);
+    await expireProvision(session);
     await db.exec(sql);
-    assert.equal((await open(input)).code, code);
+    assert.equal((await open(input, randomUUID())).code, code);
     assert.equal(
       (await rpc("refresh", { upload_id: session.upload_id })).code,
       code,
@@ -283,6 +416,7 @@ for (const [label, sql, code] of [
         .rows[0].provisioning_state,
       "provisioning",
     );
+    assert.equal((await storedSession(session)).provisioning_attempts, 1);
   });
 test("completed sessions and single parts are rejected without renewal", async () => {
   const first = await open();

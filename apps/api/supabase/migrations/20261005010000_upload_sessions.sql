@@ -6,6 +6,8 @@ ALTER TABLE public.upload_sessions
   ADD COLUMN provisioning_state text NOT NULL DEFAULT 'ready'
     CHECK (provisioning_state IN ('provisioning', 'ready')),
   ADD COLUMN provisioning_attempt uuid,
+  ADD COLUMN provisioning_attempts integer NOT NULL DEFAULT 0 CHECK (provisioning_attempts BETWEEN 0 AND 3),
+  ADD COLUMN provisioning_locked_until timestamptz CHECK (provisioning_locked_until IS NULL OR isfinite(provisioning_locked_until)),
   ADD CONSTRAINT upload_sessions_one_per_post UNIQUE (event_id, post_id),
   ADD CONSTRAINT upload_sessions_provider_state CHECK (
     (mode = 'single' AND provisioning_state = 'ready' AND provider_upload_id IS NULL)
@@ -33,6 +35,8 @@ DECLARE
   deadline timestamptz;
   event_end timestamptz;
   theme_end timestamptz;
+  observed_at timestamptz;
+  provisioning_deadline timestamptz;
   create_provider boolean := false;
 BEGIN
   IF p_event_id IS NULL OR p_user_id IS NULL OR p_action IS NULL
@@ -91,13 +95,16 @@ BEGIN
     WHERE event_id=p_event_id AND id=(reservation->'request'->>'theme_id')::uuid;
   deadline := date_trunc('second', least(clock_timestamp()+interval '15 minutes', event_end, theme_end));
   IF deadline <= clock_timestamp() THEN RETURN jsonb_build_object('code', 'EVENT_CLOSED'); END IF;
+  observed_at := clock_timestamp();
+  provisioning_deadline := least(observed_at+interval '2 minutes',deadline);
 
   IF session_row.id IS NULL THEN
     IF p_action <> 'open' THEN RETURN jsonb_build_object('code', 'NOT_FOUND'); END IF;
     create_provider := expected_mode = 'multipart';
-    INSERT INTO public.upload_sessions(event_id,post_id,asset_id,mode,expires_at,provisioning_state,provisioning_attempt)
+    INSERT INTO public.upload_sessions(event_id,post_id,asset_id,mode,expires_at,provisioning_state,provisioning_attempt,provisioning_attempts,provisioning_locked_until)
     VALUES(p_event_id,(reservation->>'post_id')::uuid,(reservation->>'asset_id')::uuid,expected_mode,deadline,
-      CASE WHEN create_provider THEN 'provisioning' ELSE 'ready' END,attempt_id)
+      CASE WHEN create_provider THEN 'provisioning' ELSE 'ready' END,attempt_id,
+      CASE WHEN create_provider THEN 1 ELSE 0 END,CASE WHEN create_provider THEN provisioning_deadline ELSE NULL END)
     RETURNING * INTO session_row;
     IF NOT FOUND THEN RAISE EXCEPTION 'Upload session was not inserted'; END IF;
   ELSE
@@ -108,16 +115,28 @@ BEGIN
     END IF;
     IF p_action = 'attach' THEN
       IF session_row.mode <> 'multipart' OR session_row.provisioning_attempt IS DISTINCT FROM attempt_id
-        OR (session_row.provider_upload_id IS NOT NULL AND session_row.provider_upload_id <> provider_id) THEN
+        OR (session_row.provider_upload_id IS NOT NULL AND session_row.provider_upload_id <> provider_id)
+        OR (session_row.provisioning_state='provisioning' AND (session_row.provisioning_attempts<1
+          OR session_row.provisioning_locked_until IS NULL OR session_row.provisioning_locked_until<=observed_at)) THEN
         RETURN jsonb_build_object('code', 'STATE_CONFLICT');
       END IF;
-      UPDATE public.upload_sessions SET provider_upload_id=provider_id, provisioning_state='ready', expires_at=deadline
+      UPDATE public.upload_sessions SET provider_upload_id=provider_id, provisioning_state='ready', expires_at=deadline,provisioning_locked_until=NULL
         WHERE id=session_row.id RETURNING * INTO session_row;
       IF NOT FOUND THEN RAISE EXCEPTION 'Upload session was not attached'; END IF;
     ELSIF session_row.provisioning_state = 'provisioning' THEN
-      -- No lease takeover or repeated create, even for the same attempt: the
-      -- previous provider outcome may be unknown. Recovery is a separate task.
-      RETURN jsonb_build_object('code', 'UPLOAD_INCOMPLETE');
+      -- A provider created by an expired generation may be orphaned, but never
+      -- attached/ticketed later. Only a new explicit open gets one bounded retry.
+      -- Legacy/unknown lease metadata stays closed; never infer a safe takeover.
+      IF p_action<>'open' OR session_row.provisioning_attempt=attempt_id
+        OR session_row.provisioning_attempts NOT BETWEEN 1 AND 2
+        OR session_row.provisioning_locked_until IS NULL OR session_row.provisioning_locked_until>observed_at THEN
+        RETURN jsonb_build_object('code', 'UPLOAD_INCOMPLETE');
+      END IF;
+      UPDATE public.upload_sessions SET provisioning_attempt=attempt_id,provisioning_attempts=provisioning_attempts+1,
+        provisioning_locked_until=provisioning_deadline,expires_at=deadline
+        WHERE id=session_row.id RETURNING * INTO session_row;
+      IF NOT FOUND THEN RAISE EXCEPTION 'Upload session was not reclaimed'; END IF;
+      create_provider:=true;
     ELSIF p_action IN ('open', 'refresh') THEN
       UPDATE public.upload_sessions SET expires_at=deadline WHERE id=session_row.id RETURNING * INTO session_row;
       IF NOT FOUND THEN RAISE EXCEPTION 'Upload session was not refreshed'; END IF;
@@ -132,12 +151,14 @@ BEGIN
     'code', CASE WHEN create_provider THEN 'provision' ELSE 'ready' END,
     'upload_id', session_row.id, 'mode', session_row.mode,
     'expires_at', least(session_row.expires_at, deadline),
-    'provider_upload_id', session_row.provider_upload_id);
+    'provider_upload_id', session_row.provider_upload_id)
+    || CASE WHEN create_provider THEN jsonb_build_object('provisioning_attempt',session_row.provisioning_attempt,
+      'provisioning_locked_until',session_row.provisioning_locked_until) ELSE '{}'::jsonb END;
 END;
 $$;
 
 REVOKE ALL ON FUNCTION public.manage_upload_session(uuid,uuid,text,jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.manage_upload_session(uuid,uuid,text,jsonb) TO service_role;
-COMMENT ON FUNCTION public.manage_upload_session(uuid,uuid,text,jsonb) IS 'Worker-only after Google/CSRF. open winner provisions once; ambiguous provisioning stays pending. Never return this internal result to a client.';
+COMMENT ON FUNCTION public.manage_upload_session(uuid,uuid,text,jsonb) IS 'Worker-only after Google/CSRF. Provisioning uses a 120s lease and at most 3 create claims. Only a new open can reclaim an expired unknown generation; ready provider is immutable. Never return this internal result to a client.';
 NOTIFY pgrst, 'reload schema';
 COMMIT;

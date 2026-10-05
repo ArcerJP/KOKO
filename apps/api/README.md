@@ -112,13 +112,13 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 
 ## アップロード受付と送信session（B1-5、既定無効）
 
-[HTTP受付](src/uploads.ts)は`POST /uploads`・`POST /uploads/{upload_id}/refresh`・`POST /uploads/{upload_id}/parts`を接続します。`KOKO_UPLOADS_ENABLED`が文字列`true`の場合だけ有効で、それ以外は404・上流接続なしです。Wranglerへflagや秘密の値は追加していません。**実DB適用、原本bucket限定資格情報、CORS、complete/HEAD・回収の実装と受入がそろうまで実受付を有効化しません。** Web側の送信UI・同一origin中継も後続です。
+[HTTP受付](src/uploads.ts)は`POST /uploads`・`POST /uploads/{upload_id}/refresh`・`POST /uploads/{upload_id}/parts`を接続します。`KOKO_UPLOADS_ENABLED`が文字列`true`の場合だけ有効で、それ以外は404・上流接続なしです。Wranglerへflagや秘密の値は追加していません。**実DB適用、原本bucket限定資格情報、CORS、complete/HEAD・回復の実受入がそろうまで実受付を有効化しません。** Web側の送信UI・同一origin中継もローカル接続済みですが、実機/実サービスの受入は別です。
 
 - [共通認証](src/api-context.ts)で既存本人情報と同じGoogle本人照合を使い、Cookie書込みはOrigin/CSRFを必須にします。本人IDはAuth応答からのみ取得し、DBで所属・現行同意・BAN・停止・お題・投稿状態を毎回再確認します。Content-Type、最大4KiB・厳格UTF-8のJSON、追加属性、サイズ、part指定を検査します。refreshは本文を受けません。
 - [追加migration](supabase/migrations/20261005010000_upload_sessions.sql)の内部`manage_upload_session`は`open/refresh/parts/attach`を扱います。`reserve_upload`のlock順序の後でsessionをlockし、`UNIQUE(event_id, post_id)`で1投稿1sessionを保証します。既存に重複行があればmigrationは失敗させ、データを自動削除しません。単発送信は同じtransactionでreadyになります。
-- multipartは新規winnerだけが`provisioning`となり、Worker生成attempt UUIDでR2作成権を束縛します。R2開始後に`attach`がguardを再照合してprovider IDを保存し、readyへ変更します。同じattempt/providerのattachは冪等で、別値への変更は拒否します。内部provider ID・原本キー・申告snapshotをAPI本文へ丸ごと返さず、既存`UploadTicket`だけを組み立てます（part署名URL内のopaque provider IDはプロトコル上必要です）。
-- 同じリクエストの再送とrefreshは同じ投稿/session/providerを使い、新しいmultipartを作りません。期限はDB時刻から15分以内かつイベント/お題終了以下、秒単位切下げです。partsでは期限を延長せず、期限切れは`UPLOAD_EXPIRED`。refreshは期限切れでも未完了・本人・guardを再確認して更新します。完了session、削除/BANラッチ済み投稿へは再発行しません。
-- DB予約の応答喪失・R2作成結果不明・作成後crashではprovisioningが残ることがあります。同じ/別attemptの再送でも自動的に作成し直さず`UPLOAD_INCOMPLETE`で保留します。attach応答だけ失われた場合は後のopenでreadyを取得できます。結果不明のproviderを盲目的にabortしません。lease takeoverは未知の旧作成との重複を招くため採用していません。**provisioning保留/未完了multipartの孤児回収、provider側失効・中止後の回復は未実装**であり、下記の保存済み原本の回復とは区別します。
+- multipartはwinnerだけが`provisioning`となり、Worker生成attempt UUIDと最大120秒のleaseでR2作成権を束縛します。R2開始後に`attach`がguardと世代/期限を再照合してprovider IDを保存し、readyへ変更します。ready後の同じattempt/providerのattachは冪等で、別値への変更は拒否します。内部provider ID・原本キー・lease・申告snapshotをAPI本文へ丸ごと返さず、既存`UploadTicket`だけを組み立てます（part署名URL内のopaque provider IDはプロトコル上必要です）。
+- ready後の再送とrefreshは同じ投稿/session/providerを使い、新しいmultipartを作りません。期限はDB時刻から15分以内かつイベント/お題終了以下、秒単位切下げです。partsでは期限を延長せず、期限切れは`UPLOAD_EXPIRED`。refreshは期限切れでも未完了・本人・guardを再確認して更新します。完了session、削除/BANラッチ済み投稿へは再発行しません。
+- DB予約の応答喪失・R2作成結果不明・作成後crashではprovisioningが残ることがあります。期限後の新attemptによるopenだけに再作成権を渡し、初回を含む最大3回で止めます。古い/期限切れ結果はattachせず、provider待機もleaseで打ち切ります。attachがDBに保存済みなら後のopenでreadyを再利用。旧provider作成が遅れて成功した孤児は残り得るため、結果不明のproviderを盲目的にabortしません。**上限到達、未知lease、ready providerの失効/中止後の自動再開、孤児の能動削除は未解消**です。元ファイルを残し、権限者がDB/providerを照合してから対象限定の修復を判断します。新しい投稿IDでの再投稿・DB reset・abortを自動実行しません。未完了multipartの7日破棄は別途本人設定が必要で、下記の保存済み原本の回復とは別です。
 - DB/R2応答の不正・redirect・不明エラーを閉じ、秘密や生応答を返しません。成功・失敗とも`private, no-store`。DBの期限検査と署名を経ても、すでに発行したURLの即時失効は保証しません。単発の実サイズ・multipartの実在/最終サイズは下記のcomplete/HEADが判定します。
 
 [session SQL試験](../../packages/contract/test/upload-sessions.test.mjs)は全migrationをメモリDBへ適用して権限・所有者・単一winner・期限・guard更新・保存失敗の取消しを検証します。[HTTP試験](test/uploads.spec.ts)はWorkers上の実署名と模擬Auth/RPC/provider応答で受付・再発行・part・CSRF・応答不明を検証します。実PostgreSQLの多接続競合、実PostgRESTからR2までの通し試験、実配備は未実施です。
