@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
+import process from "node:process";
+import { Buffer } from "node:buffer";
 import { summarizeEvaluation } from "../dist/evaluation.js";
 const sample = (
   index = 1,
