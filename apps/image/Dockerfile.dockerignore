@@ -10,3 +10,9 @@
 !apps/image/test/
 !apps/image/test/**
 !apps/image/Dockerfile
+!packages/
+!packages/contract/
+!packages/contract/package.json
+!packages/contract/tsconfig.json
+!packages/contract/src/
+!packages/contract/src/**

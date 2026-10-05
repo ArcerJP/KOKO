@@ -1,6 +1,6 @@
 # 画像変換コア（B1-7／B2-1の一部）
 
-Node.js 24で、入力bufferからAI用JPEGと閲覧用WebP/JPEGを生成します。`src/index.ts`が呼出し境界、`convert.ts`が変換、`worker.ts`が同期decoderの隔離、`cli.ts`がローカル受入用です。API/Webへはまだ接続しません。
+Node.js 24で、入力bufferからAI用JPEGと閲覧用WebP/JPEGを生成します。`src/index.ts`が呼出し境界、`convert.ts`が変換、`worker.ts`が同期decoderの隔離、`cli.ts`がローカル受入用、`r2.ts`が既定OFFの内部ストレージadapterです。API/Webへはまだ接続しません。
 
 ## 実装と未実装
 
@@ -17,11 +17,29 @@ sharp既定相当の268,402,689画素制限とdecoder/メモリ/期限の実行�
 
 15秒は停止要求を出す期限です。native処理の終了待ちを含む厳密な応答時間の上限ではなく、停止完了までは次の変換枠を開放しません。
 
-**これはCloud Run向けの変換コアとローカルCLIの段階です。** HTTP待受/サービス間認証、固定R2キーの取得/保存、Queue consumer、判定・公開は未実装。CLIコンテナーをそのままCloud Run serviceへ配備できるとは扱いません。実機HEIC、HDR/広色域/特殊な向き、巨大/破損画像の網羅、30投稿/分・公開中央値60秒も未受入です。特にWASMのRGBA出力に原本ICCを移さないため、実機の色再現を確認するまで本番有効化しません。
+**これはCloud Run向けの変換コアとローカルCLIの段階です。** 固定R2キーの取得/保存adapterは下記の合成試験までで、HTTP待受/サービス間認証、DB/Queue consumerとの接続、判定・公開は未実装。CLIコンテナーをそのままCloud Run serviceへ配備できるとは扱いません。実機HEIC、HDR/広色域/特殊な向き、巨大/破損画像の網羅、30投稿/分・公開中央値60秒も未受入です。特にWASMのRGBA出力に原本ICCを移さないため、実機の色再現を確認するまで本番有効化しません。
+
+## 非公開R2ストレージadapter（B2-1の一部・既定OFF）
+
+`src/r2.ts`の`createImageR2Store`は内部のprovider adapterです。`KOKO_IMAGE_R2_ENABLED`が小文字`true`に完全一致しない場合はnull。CLI/HTTPから呼び出さず、実行時環境変数も自動で読みません。現段階で設定・tokenを追加する必要はありません。
+
+- 固定の開発用`koko-dev-originals`はGETのみ、`koko-dev-derived`はPUTと再送照合用GETのみ。任意URL/バケット/キーを入力にせず、固定R2 hostと`@koko/contract`の`originalKey`/`deliveryKey`から構成。LIST/DELETE/原本PUT・署名URL生成なし。
+- 将来の設定は`R2_ACCOUNT_ID`と、原本読取り専用の`R2_ORIGINAL_READ_ACCESS_KEY_ID`/`R2_ORIGINAL_READ_SECRET_ACCESS_KEY`、派生物読書き専用の`R2_DERIVED_ACCESS_KEY_ID`/`R2_DERIVED_SECRET_ACCESS_KEY`。同じkey IDを両用途へ設定することを拒否。実際のbucket限定権限は外部での本人確認が別途必要で、設定名だけでは最小権限を保証しない。
+- `getOriginal`へはDBで確認したevent/post/asset・byte size・ETag・既知ならSHA-256を渡す。If-Match GETで200/ETag/Content-Length/実body長を照合し、SHA-256を算出。既知hashがある場合は比較する。既知hashなしの初回算出を「元ファイルとのhash一致確認」と扱わない。multipart ETagは原本全体のMD5ではない。
+- `putDelivery`へはDBで予約した**派生asset固有ID**、variant/formatと、信頼できる変換コアの生成物を渡す。4閲覧用だけ許可し、AI用1024は保存しない。寸法/名前/形式/hashを照合しbytesをsnapshot。画像自体のdecode・安全判定をこのadapterで代行しない。
+- PUTはIf-None-Match `*`とContent-MD5、SHA-256 metadata、`private, no-store`付き。200とsingle-PUT ETag一致で保存応答。412だけ条件付きGETへ進み、実bytesのSHA-256・長さ・ETag・Content-Type・private/no-store・hash metadataが一致した場合だけ`already_stored`。別内容/metadataは`DELIVERY_CONFLICT`で上書きしない。MD5は転送整合性であって安全性判定ではない。
+- 署名・通信・body読取り全体で既定15秒、redirect/自動retryなし。圧縮応答を拒否し、失敗/期限切れ/遅延応答のstreamは取消す。例外は固定理由だけで、provider body/秘密/URLをログ・例外へ付けない。
+- buffer方式の資源上限は原本64MiB、派生物1件16MiB。超過時は通信前に`RESOURCE_LIMIT`。これは投稿APIの容量上限ではなく、原本を保持して処理保留/別方式へ接続するための実行限界。全同時処理の上限・バックプレッシャは将来のconsumerで別途実装する。
+
+認証・最新DB job/lease/post version/所有者・BAN/削除/停止・原本identityの再照合は**呼出元の必須責務**です。adapterはDBを更新せず、公開を許可しません。4件の保存は原子的でなく、途中失敗の部分保存や期限切れ後のPUT完了があり得ます。全件の照合後にDBで最新処理版を原子的に確定し、AI/公開条件を別途確認する必要があります。曖昧な結果を成功扱いせず、原本/派生物を自動削除しません。
+
+既存採用済みaws4fetch 1.0.20と共有契約だけを直接依存に追加しました。[R2 S3互換表](https://developers.cloudflare.com/r2/api/s3/api/)と[公式署名例](https://developers.cloudflare.com/r2/examples/aws/aws4fetch/)を根拠に、模擬fetchで条件付き操作と署名を検証。実R2/IAM/Secret/クラウド料金・実機の受入は未実施です。
 
 ## ローカル検証
 
 KOKOルートで実行します。依存はroot lockfileに固定し、既存Webのsharp版は変更しません。
+
+image workspaceのbuild/typecheckはpre hookで共有契約を先にbuildします。Dockerにも同じ共有契約package/distを含め、過去の生成物へ依存しません。aws4fetchのFetch API宣言に必要なDOM型は画像workspaceだけへ追加し、Node runtimeやブラウザ非依存の共有契約は変えません。
 
 ```powershell
 npm.cmd ci --include=dev --strict-peer-deps

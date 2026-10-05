@@ -7,11 +7,15 @@
     "node": ">=24"
   },
   "scripts": {
+    "prebuild": "npm run build --workspace @koko/contract",
     "build": "tsc -p tsconfig.json",
+    "pretypecheck": "npm run build --workspace @koko/contract",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test test/*.test.mjs"
   },
   "dependencies": {
+    "@koko/contract": "0.1.0",
+    "aws4fetch": "1.0.20",
     "heic-decode": "2.1.0",
     "sharp": "0.35.5"
   },
