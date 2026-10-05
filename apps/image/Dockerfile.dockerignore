@@ -10,6 +10,10 @@
 !apps/image/test/
 !apps/image/test/**
 !apps/image/Dockerfile
+!apps/api/
+!apps/api/supabase/
+!apps/api/supabase/migrations/
+!apps/api/supabase/migrations/*.sql
 !packages/
 !packages/contract/
 !packages/contract/package.json
