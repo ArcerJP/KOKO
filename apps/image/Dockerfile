@@ -26,7 +26,7 @@ FROM runtime AS verification
 COPY apps/image/test apps/image/test
 WORKDIR /app/apps/image
 ENTRYPOINT ["node"]
-CMD ["--test", "test/transform.test.mjs", "test/cli.test.mjs", "test/r2.test.mjs", "test/pipeline.test.mjs", "test/db.test.mjs", "test/runner.test.mjs", "test/service-auth.test.mjs", "test/service.test.mjs"]
+CMD ["--test", "test/transform.test.mjs", "test/cli.test.mjs", "test/r2.test.mjs", "test/pipeline.test.mjs", "test/db.test.mjs", "test/runner.test.mjs", "test/service-auth.test.mjs", "test/service.test.mjs", "test/moderation.test.mjs"]
 
 # Explicit private HTTP service target; no deployment or IAM is configured here.
 FROM runtime AS service

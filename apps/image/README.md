@@ -82,6 +82,21 @@ Dockerの`--target service`がHTTP専用入口です。importでlistenせず、�
 
 **今はクラウドへ設定・配備しないでください。** サービス作成、IAM invoker限定、token取得方式、Secret登録、予算/instance上限、実DB migration、実R2権限を本人確認後に準備します。共有の長期サービス鍵を安易に発行せず、短命ID tokenを使う構成を実接続前に確定します。ライブラリは`jose` 6.2.12を直接依存/lockfileで固定し、JWT検証の自作実装を避けています。
 
+## AI判定adapter（B2-4、実接続未受入）
+
+`src/moderation.ts`は、メタデータ除去済み`ai-1024.jpg`だけを受ける内部adapterです。写真は1枚、動画は実測4秒以下・異なる3時点が必要。SHA-256・JPEG寸法・metadata不在を再確認し、原本・任意URLを送りません。実AI呼出し、課金や鍵登録は今回行っていません。
+
+- 既定OFF。承認済みの設定版・24カテゴリ全件の閾値、用途別token供給、共有quota予約callbackがそろわなければ起動しない。欠落値を仮の安全閾値で補完しない。
+- OpenAIは`omni-moderation-2024-09-26`に固定。画像6カテゴリ、SafeSearch5カテゴリ、OCR文字判定13カテゴリ。画像非対応カテゴリの0を安全の根拠としない。OCRによって写真に写った人の年齢を判定できるとは扱わない。
+- SafeSearchは`likelihood-ordinal-v1`（0 / 0.25 / 0.5 / 0.75 / 1）の順序尺度で、確率ではない。モデルや写像変更時は再校正が必要。Visionは`builtin/stable`指定で、実モデルの細かな版は非報告と記録する。
+- 固定API URL、redirect禁止、最大15秒/試行、最大2retry。429・quota不足は待ち戻し。インスタンス内同時実行と共有quotaを区別し、各provider呼出し前にframe/engine/attempt/providerごとのdurable予約を要求する。DBから渡す`attemptStarts`でクラッシュ後も試行枠を補充しない。
+- 正常なOCR文字なしを`no_text`と記録し、失敗/nullと区別する。判定は既存契約のBLOCK > HELD > FLAG > PASS。いずれかの必須判定失敗をPASSへ変えない。
+- 返却はframe別スコア・モデル・時間・試行/呼出し単位のみ。画像/OCR原文/鍵/生エラーを返さず、価格不明の費用はnull。adapter成功だけで公開せず、DBで現設定/BAN/同意/状態を再検証して確定する。
+
+合成試験は固定応答・境界・取消し・retry枯渇の検査です。実quota・資格情報、200枚による校正、実応答形式、p95、費用と誤判定は未受入。共有quotaと原子的DB確定、consumerへの接続は進行中です。
+
+一次資料：[OpenAI Moderation](https://developers.openai.com/api/docs/guides/moderation)、[API schema](https://developers.openai.com/api/reference/resources/moderations/methods/create)、[Vision annotate](https://docs.cloud.google.com/vision/docs/reference/rest/v1/images/annotate)、[Vision response](https://docs.cloud.google.com/vision/docs/reference/rest/v1/AnnotateImageResponse)、[Vision model選択](https://docs.cloud.google.com/vision/docs/reference/rest/v1/Feature)（2026-10-06確認）。閾値とSafeSearch正規化はKOKO側の設計で、公式サービスが安全性を保証するものではありません。
+
 ## ローカル検証
 
 KOKOルートで実行します。依存はroot lockfileに固定し、既存Webのsharp版は変更しません。
