@@ -9,6 +9,7 @@ import {
   type AccountEnv,
 } from "./api-context";
 import { ownPostsCursorKey, validPosition } from "./own-post-cursor";
+import { projectPostStateDetails } from "./own-posts";
 
 export type StageThreeEnv = AccountEnv & {
   KOKO_STAGE_THREE_ENABLED?: string;
@@ -427,6 +428,7 @@ function projectAdminPost(x: unknown, eventId: string) {
         status: p.status,
         version: p.version,
         created_at: p.created_at,
+        ...projectPostStateDetails(p, p.status as (typeof postStates)[number]),
       },
       user_id: x.user_id,
       report_count: x.report_count,

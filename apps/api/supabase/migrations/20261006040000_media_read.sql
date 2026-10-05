@@ -4,7 +4,7 @@ BEGIN;
 CREATE FUNCTION koko_private.public_post_projection(p_event_id uuid,p_post_id uuid) RETURNS jsonb
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path='' AS $$
   SELECT jsonb_build_object('id',p.id,'event_id',p.event_id,'kind',p.kind,'display_name',m.display_name,'crown','none',
-    'theme_id',p.theme_id,'created_at',to_char(p.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'like_count',0,
+    'theme_id',p.theme_id,'theme_name',t.title,'created_at',to_char(p.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'like_count',0,
     'media',CASE WHEN p.kind='photo' THEN jsonb_build_object('kind','photo',
       'webp_600','/media/'||p.event_id||'/'||p.id||'/webp-600','jpg_600','/media/'||p.event_id||'/'||p.id||'/jpg-600',
       'webp_1600','/media/'||p.event_id||'/'||p.id||'/webp-1600','jpg_1600','/media/'||p.event_id||'/'||p.id||'/jpg-1600')
@@ -12,6 +12,7 @@ LANGUAGE sql STABLE SECURITY INVOKER SET search_path='' AS $$
         'thumbnail_url','/media/'||p.event_id||'/'||p.id||'/thumbnail','duration_seconds',p.measured_duration_seconds) END)
   FROM public.posts p JOIN public.event_members m ON m.event_id=p.event_id AND m.user_id=p.user_id
   JOIN public.events e ON e.event_id=p.event_id
+  LEFT JOIN public.themes t ON t.event_id=p.event_id AND t.id=p.theme_id AND t.status IN ('published','ended')
   WHERE p.event_id=p_event_id AND p.id=p_post_id AND p.status IN ('published','published_flagged')
     AND p.moderation_verdict IN ('PASS','FLAG') AND NOT p.ban_latched AND p.deleted_at IS NULL AND NOT m.is_banned
     AND EXISTS(SELECT 1 FROM public.consents c WHERE c.event_id=p.event_id AND c.user_id=p.user_id AND c.terms_version=e.terms_version)

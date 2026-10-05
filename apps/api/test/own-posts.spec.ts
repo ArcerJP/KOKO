@@ -66,6 +66,85 @@ async function code(response: Response, expected: keyof typeof errors) {
   expect(response.headers.get("cache-control")).toBe("private, no-store");
   expect(await response.json()).toMatchObject({ code: expected });
 }
+it.each([
+  "sexual",
+  "violence",
+  "hate",
+  "harassment",
+  "self_harm",
+  "illicit",
+  "other",
+])("projects only safe BLOCK category %s", async (category) => {
+  const item = { ...post, status: "blocked", block_category: category };
+  const f = fixture({
+    ...result,
+    items: [{ ...item, raw_moderation: "private" }],
+  });
+  expect(
+    await (await handleOwnPosts(request(), f.env, f.fetcher)).json(),
+  ).toEqual(item);
+});
+it.each([
+  ["RETENTION_UNKNOWN", null],
+  ["RETENTION_PENDING", "2099-01-01T00:00:00.000000Z"],
+  ["PHYSICAL_DELETION_NOT_ENABLED", "2000-01-01T00:00:00Z"],
+  ["DELETION_UNCONFIRMED", null],
+])(
+  "projects deletion state %s without asset IDs/raw provider details",
+  async (state, date) => {
+    const item = {
+      ...post,
+      status: "deleted",
+      deletion: { state, retention_until: date },
+    };
+    const f = fixture({
+      ...result,
+      items: [
+        {
+          ...item,
+          deletion: {
+            ...item.deletion,
+            object_key: "private",
+            job_id: "private",
+          },
+        },
+      ],
+    });
+    expect(
+      await (await handleOwnPosts(request(), f.env, f.fetcher)).json(),
+    ).toEqual(item);
+  },
+);
+it.each([
+  { status: "blocked", block_category: "ocr:sexual raw private" },
+  { status: "published", block_category: "sexual" },
+  { status: "deleted", deletion: { state: "DONE", retention_until: null } },
+  {
+    status: "held",
+    deletion: { state: "RETENTION_UNKNOWN", retention_until: null },
+  },
+  {
+    status: "deleted",
+    deletion: { state: "RETENTION_PENDING", retention_until: null },
+  },
+  {
+    status: "deleted",
+    deletion: { state: "RETENTION_UNKNOWN", retention_until: "infinity" },
+  },
+  {
+    status: "deleted",
+    deletion: {
+      state: "RETENTION_UNKNOWN",
+      retention_until: "2099-02-30T00:00:00Z",
+    },
+  },
+])("rejects malformed state details %#", async (change) => {
+  const f = fixture({ ...result, items: [{ ...post, ...change }] });
+  await code(
+    await handleOwnPosts(request(), f.env, f.fetcher),
+    "INTERNAL_ERROR",
+  );
+});
 it("GET status projects current state only, fresh verified user/event and no response headers leak", async () => {
   const f = fixture({
     ...result,
@@ -74,7 +153,7 @@ it("GET status projects current state only, fresh verified user/event and no res
       {
         ...post,
         user_id: userId,
-        block_category: "private text",
+        raw_block_category: "private text",
         object_key: "secret path",
       },
     ],

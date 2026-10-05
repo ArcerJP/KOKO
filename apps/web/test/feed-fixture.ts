@@ -18,6 +18,7 @@ export function publicPost(n = 100, video = false): PublicPost {
     crown: "none",
     like_count: 0,
     theme_id: null,
+    theme_name: null,
     created_at: new Date(Date.UTC(2026, 9, 10, 0, 0, n)).toISOString(),
     ...(video
       ? {

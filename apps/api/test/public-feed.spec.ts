@@ -16,6 +16,7 @@ const post = {
   display_name: "Synthetic",
   crown: "none",
   theme_id: null,
+  theme_name: null,
   created_at: "2026-10-06T00:00:00.123456Z",
   like_count: 0,
   media: {
@@ -33,6 +34,29 @@ const page = {
   has_more: false,
   cache: [{ id: postId, fingerprint: "a".repeat(32) }],
 };
+it.each([undefined, "", "x".repeat(101), false, { title: "x" }])(
+  "rejects missing or invalid theme name %#",
+  async (theme_name) => {
+    const f = fixture({
+      ...page,
+      items: [{ ...post, theme_id: userId, theme_name }],
+    });
+    await code(await f.run(), "INTERNAL_ERROR");
+  },
+);
+it("projects theme name as plain text only with its theme ID", async () => {
+  const safe = { ...post, theme_id: userId, theme_name: "<b>合成のお題</b>" };
+  expect(
+    await (await fixture({ ...page, items: [safe] }).run()).json(),
+  ).toMatchObject({ items: [safe] });
+  await code(
+    await fixture({
+      ...page,
+      items: [{ ...post, theme_name: "undeclared theme" }],
+    }).run(),
+    "INTERNAL_ERROR",
+  );
+});
 function request(path = "/feed") {
   return new Request(`https://api.example.test${path}`, {
     headers: { authorization: "Bearer synthetic-token", "X-Event-ID": eventId },

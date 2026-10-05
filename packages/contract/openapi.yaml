@@ -1048,10 +1048,25 @@ components:
         error_code:
           $ref: "#/components/schemas/ApiError/properties/code"
         block_category:
-          {
-            type: string,
-            description: 本人向けの大分類のみ。生スコア・OCR文・モデル内部情報は返さない。,
-          }
+          type: string
+          enum: [sexual, violence, hate, harassment, self_harm, illicit, other]
+          description: blocked時のみの大分類。生スコア・OCR文・モデル内部情報は返さない。
+        deletion:
+          type: object
+          additionalProperties: false
+          description: deleted時のみ。保持・削除予約と物理削除完了は異なる。実ストレージ照合未実装のため完了状態は返さない。
+          required: [state, retention_until]
+          properties:
+            state:
+              type: string
+              enum:
+                [
+                  RETENTION_UNKNOWN,
+                  RETENTION_PENDING,
+                  PHYSICAL_DELETION_NOT_ENABLED,
+                  DELETION_UNCONFIRMED,
+                ]
+            retention_until: { type: [string, "null"], format: date-time }
     PublicPost:
       type: object
       description: アプリ内で公開済みの投稿。匿名アクセス可能という意味ではない。
@@ -1075,6 +1090,7 @@ components:
           display_name,
           crown,
           theme_id,
+          theme_name,
           created_at,
           like_count,
           media,
@@ -1086,6 +1102,11 @@ components:
         display_name: { type: string }
         crown: { type: string, enum: [none, white, gold] }
         theme_id: { type: [string, "null"], format: uuid }
+        theme_name:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 100
+          description: 同イベントの公開中・終了済みのお題名。未選択・非公開お題はnull。HTMLとして解釈しない。
         created_at: { type: string, format: date-time }
         like_count: { type: integer, minimum: 0, description: 第4要件までは0 }
         media:

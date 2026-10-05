@@ -99,7 +99,7 @@ it("renders all contract states with no fake appeal/delete/media controls or raw
         phase: "ready",
         items: postStates.map((status, n) => ({
           ...post(n + 1, { status }),
-          block_category: "PRIVATE_RAW",
+          raw_block_category: "PRIVATE_RAW",
         })),
         nextCursor: null,
         message: "<script>unsafe</script>",

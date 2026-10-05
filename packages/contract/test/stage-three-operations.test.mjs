@@ -138,6 +138,42 @@ async function row(id) {
   return (await db.query("SELECT * FROM public.posts WHERE id=$1", [id]))
     .rows[0];
 }
+test("operator state details share safe owner projection and deletion is never a completion claim", async () => {
+  const id = await post("blocked");
+  await db.query(
+    "UPDATE public.posts SET block_category='ocr:hate/threatening' WHERE id=$1",
+    [id],
+  );
+  const blocked = await call(
+    "admin_feed",
+    null,
+    { limit: 30 },
+    { user: admin },
+  );
+  assert.equal(
+    blocked.items.find((x) => x.post.id === id).post.block_category,
+    "hate",
+  );
+  await assets(id);
+  await call("delete", id, action, { user: admin });
+  const result = await call(
+    "admin_feed",
+    null,
+    { limit: 30 },
+    { user: moderator },
+  );
+  const item = result.items.find((x) => x.post.id === id).post;
+  assert.deepEqual(item.deletion, {
+    state: "RETENTION_UNKNOWN",
+    retention_until: null,
+  });
+  assert.equal(item.block_category, undefined);
+  assert.equal(JSON.stringify(item).includes("ocr:"), false);
+  assert.equal(
+    (await call("admin_feed", null, { limit: 30 }, { user: owner })).code,
+    "FORBIDDEN",
+  );
+});
 async function count(table, clause = "true", args = []) {
   return Number(
     (

@@ -439,6 +439,32 @@ it.each(["review-webp-600", "review-thumbnail"])(
   },
 );
 it.each([
+  { status: "blocked", block_category: "violence" },
+  {
+    status: "deleted",
+    deletion: { state: "RETENTION_UNKNOWN", retention_until: null },
+  },
+])("operator safely projects shared state details %#", async (details) => {
+  const f = fixture({
+    code: "ok",
+    items: [
+      {
+        ...adminItem,
+        post: { ...post, ...details, raw_moderation: "private" },
+      },
+    ],
+    has_more: false,
+  });
+  const r = await handleStageThreeOperations(
+    request("/admin/feed", "GET"),
+    f.env,
+    f.fetcher,
+  );
+  expect(r.status).toBe(200);
+  const value = (await r.json()) as { items: { post: unknown }[] };
+  expect(value.items[0]!.post).toEqual({ ...post, ...details });
+});
+it.each([
   { ...adminItem, preview_resource: "https://external.test/private" },
   { ...adminItem, preview_resource: "review-thumbnail", is_banned: true },
   {

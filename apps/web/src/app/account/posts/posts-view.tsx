@@ -4,6 +4,7 @@ import type { OwnPost } from "../../../api/own-posts-contract";
 import type { OwnPostsState } from "../../../api/own-posts-controller";
 import Link from "next/link";
 import { PostActions } from "../../../components/post-actions";
+import { PostStateDetails } from "../../../components/post-state-details";
 
 const labels: Record<OwnPost["status"], string> = {
   uploading: "送信中",
@@ -82,6 +83,7 @@ export function PostsView({
             {post.error_code && (
               <p className="warning">{errors[post.error_code].message}</p>
             )}
+            <PostStateDetails post={post} />
             {["uploading", "upload_failed"].includes(post.status) && (
               <p>送信の再開は、元の端末の送信画面で確認してください。</p>
             )}

@@ -51,6 +51,30 @@ beforeEach(async () => {
   }
 });
 after(async () => db.close());
+
+async function assetFor(
+  postId,
+  { purpose = "original", retention = null, physical = null } = {},
+) {
+  const id = randomUUID(),
+    original = purpose === "original";
+  await db.query(
+    `INSERT INTO public.media_assets(event_id,id,post_id,purpose,provider,object_key,retention_until,deletion_requested_at,physically_deleted_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,now(),$8)`,
+    [
+      event,
+      id,
+      postId,
+      purpose,
+      original ? "r2_original" : "r2_delivery",
+      original
+        ? `events/${event}/posts/${postId}/original/${id}.bin`
+        : `events/${event}/delivery/${id}/600.webp`,
+      retention,
+      physical,
+    ],
+  );
+}
 async function insert(
   id = randomUUID(),
   scope = event,
@@ -168,6 +192,7 @@ test("never returns raw processing details, free category, media or owner identi
     version: 1,
     created_at: stamp,
     error_code: "CONTENT_BLOCKED",
+    block_category: "other",
   });
   await db.exec("UPDATE public.posts SET status='held'");
   assert.equal((await read()).items[0].error_code, "PROCESSING_HELD");
@@ -177,6 +202,111 @@ test("never returns raw processing details, free category, media or owner identi
     "UPDATE public.posts SET status='published',moderation_verdict='PASS',published_at=now()",
   );
   assert.equal((await read()).items[0].error_code, undefined);
+});
+for (const [raw, category] of [
+  ["openai:sexual", "sexual"],
+  ["safesearch:adult", "sexual"],
+  ["safesearch:racy", "sexual"],
+  ["ocr:sexual/minors", "sexual"],
+  ["openai:violence/graphic", "violence"],
+  ["safesearch:violence", "violence"],
+  ["ocr:hate/threatening", "hate"],
+  ["ocr:harassment/threatening", "harassment"],
+  ["openai:self-harm/intent", "self_harm"],
+  ["ocr:illicit/violent", "illicit"],
+  ["safesearch:medical", "other"],
+  [null, "other"],
+  ["ocr:sexual raw private transcript", "other"],
+  ["unknown:sexual", "other"],
+])
+  test(`BLOCK coarse category ${raw}`, async () => {
+    await insert(id1);
+    await db.query(
+      "UPDATE public.posts SET status='blocked',block_category=$1 WHERE id=$2",
+      [raw, id1],
+    );
+    const result = (await read({ id: id1 })).items[0];
+    assert.equal(result.block_category, category);
+    assert.equal(
+      JSON.stringify(result).includes("raw private transcript"),
+      false,
+    );
+  });
+for (const [retention, state, recorded] of [
+  [null, "RETENTION_UNKNOWN", null],
+  ["infinity", "RETENTION_UNKNOWN", null],
+  ["2099-01-01T00:00:00Z", "RETENTION_PENDING", "2099-01-01T00:00:00.000000Z"],
+  [
+    "2000-01-01T00:00:00Z",
+    "PHYSICAL_DELETION_NOT_ENABLED",
+    "2000-01-01T00:00:00.000000Z",
+  ],
+])
+  test(`deleted own state uses current asset evidence ${state}/${retention}`, async () => {
+    await insert(id1);
+    await db.query(
+      "UPDATE public.posts SET status='deleted',deleted_at=now() WHERE id=$1",
+      [id1],
+    );
+    await assetFor(id1, { retention });
+    assert.deepEqual((await read({ id: id1 })).items[0].deletion, {
+      state,
+      retention_until: recorded,
+    });
+  });
+test("unknown original retention wins over known derivative date; completed metadata never asserts real deletion", async () => {
+  await insert(id1);
+  await db.query(
+    "UPDATE public.posts SET status='deleted',deleted_at=now() WHERE id=$1",
+    [id1],
+  );
+  assert.deepEqual((await read({ id: id1 })).items[0].deletion, {
+    state: "DELETION_UNCONFIRMED",
+    retention_until: null,
+  });
+  await assetFor(id1);
+  await assetFor(id1, {
+    purpose: "delivery_600_webp",
+    retention: "2099-02-01T00:00:00Z",
+  });
+  assert.deepEqual((await read({ id: id1 })).items[0].deletion, {
+    state: "RETENTION_UNKNOWN",
+    retention_until: "2099-02-01T00:00:00.000000Z",
+  });
+  await db.query(
+    "UPDATE public.media_assets SET physically_deleted_at=now() WHERE post_id=$1",
+    [id1],
+  );
+  assert.deepEqual((await read({ id: id1 })).items[0].deletion, {
+    state: "DELETION_UNCONFIRMED",
+    retention_until: null,
+  });
+  await db.query(
+    "UPDATE public.posts SET status='held',deleted_at=null WHERE id=$1",
+    [id1],
+  );
+  assert.equal((await read({ id: id1 })).items[0].deletion, undefined);
+  assert.equal((await read({ id: id1 })).items[0].block_category, undefined);
+});
+test("shared details helper is service-only, scoped and read-only", async () => {
+  await insert(id1);
+  for (const role of ["anon", "authenticated"]) {
+    await db.exec(`SET ROLE ${role}`);
+    await assert.rejects(
+      db.query("SELECT koko_private.post_state_details($1,$2)", [event, id1]),
+      /permission denied/,
+    );
+    await db.exec("RESET ROLE");
+  }
+  assert.equal(
+    (
+      await db.query("SELECT koko_private.post_state_details($1,$2) value", [
+        otherEvent,
+        id1,
+      ])
+    ).rows[0].value,
+    null,
+  );
 });
 test("microsecond and UUID ties paginate without loss; later new arrivals do not shift the cursor", async () => {
   await insert(id1);

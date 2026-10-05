@@ -45,6 +45,13 @@ export function parsePublicPost(
     value.crown !== "none" ||
     value.like_count !== 0 ||
     !(value.theme_id === null || validId(value.theme_id)) ||
+    !(
+      value.theme_name === null ||
+      (typeof value.theme_name === "string" &&
+        [...value.theme_name].length >= 1 &&
+        [...value.theme_name].length <= 100 &&
+        value.theme_id !== null)
+    ) ||
     typeof value.created_at !== "string" ||
     !record(value.media)
   )
@@ -102,6 +109,7 @@ export function parsePublicPost(
     crown: "none",
     like_count: 0,
     theme_id: value.theme_id,
+    theme_name: value.theme_name,
     created_at: value.created_at,
     media,
   } as PublicPost;

@@ -192,7 +192,7 @@ BEGIN
       SELECT * FROM page WHERE before_id IS NULL OR (priority,created_at,id)<(before_priority,before_at,before_id)
       ORDER BY priority DESC,created_at DESC,id DESC LIMIT page_limit+1
     ) SELECT coalesce(jsonb_agg(jsonb_build_object('post',jsonb_build_object('id',id,'event_id',event_id,'status',status,'version',version,
-      'created_at',to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')),
+      'created_at',to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) || koko_private.post_state_details(event_id,id),
       'user_id',user_id,'report_count',report_count,'is_banned',is_banned,'priority',priority,
       'preview_resource',CASE WHEN status IN ('published','published_flagged','hidden') AND moderation_verdict IN ('PASS','FLAG') AND NOT is_banned THEN
         CASE WHEN kind='photo' AND EXISTS(SELECT 1 FROM public.media_assets preview WHERE preview.event_id=selected.event_id AND preview.post_id=selected.id

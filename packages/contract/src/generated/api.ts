@@ -996,8 +996,29 @@ export interface components {
       /** Format: date-time */
       created_at: string;
       error_code?: components["schemas"]["ApiError"]["code"];
-      /** @description 本人向けの大分類のみ。生スコア・OCR文・モデル内部情報は返さない。 */
-      block_category?: string;
+      /**
+       * @description blocked時のみの大分類。生スコア・OCR文・モデル内部情報は返さない。
+       * @enum {string}
+       */
+      block_category?:
+        | "sexual"
+        | "violence"
+        | "hate"
+        | "harassment"
+        | "self_harm"
+        | "illicit"
+        | "other";
+      /** @description deleted時のみ。保持・削除予約と物理削除完了は異なる。実ストレージ照合未実装のため完了状態は返さない。 */
+      deletion?: {
+        /** @enum {string} */
+        state:
+          | "RETENTION_UNKNOWN"
+          | "RETENTION_PENDING"
+          | "PHYSICAL_DELETION_NOT_ENABLED"
+          | "DELETION_UNCONFIRMED";
+        /** Format: date-time */
+        retention_until: string | null;
+      };
     };
     /** @description アプリ内で公開済みの投稿。匿名アクセス可能という意味ではない。 */
     PublicPost: {
@@ -1012,6 +1033,8 @@ export interface components {
       crown: "none" | "white" | "gold";
       /** Format: uuid */
       theme_id: string | null;
+      /** @description 同イベントの公開中・終了済みのお題名。未選択・非公開お題はnull。HTMLとして解釈しない。 */
+      theme_name: string | null;
       /** Format: date-time */
       created_at: string;
       /** @description 第4要件までは0 */

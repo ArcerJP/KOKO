@@ -80,7 +80,7 @@ test.beforeAll(async () => {
 });
 async function mount(
   page: Page,
-  options: { video?: boolean; theme?: string } = {},
+  options: { video?: boolean; theme?: string; themeName?: string | null } = {},
 ) {
   const runtimeErrors: string[] = [];
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
@@ -118,15 +118,28 @@ async function mount(
     rows.items = rows.items.map((p) => ({
       ...publicPost(Number(p.id.slice(-12)), options.video),
       theme_id: options.theme ?? null,
+      theme_name: options.theme
+        ? options.themeName === undefined
+          ? "合成のお題"
+          : options.themeName
+        : null,
     }));
     return route.fulfill({ json: rows });
   });
   await page.route("**/api/posts/*", (route) =>
     route.fulfill({
-      json: publicPost(
-        Number(new URL(route.request().url()).pathname.split("/").at(-1)),
-        options.video,
-      ),
+      json: {
+        ...publicPost(
+          Number(new URL(route.request().url()).pathname.split("/").at(-1)),
+          options.video,
+        ),
+        theme_id: options.theme ?? null,
+        theme_name: options.theme
+          ? options.themeName === undefined
+            ? "合成のお題"
+            : options.themeName
+          : null,
+      },
     }),
   );
   await page.route("**/api/posts/*/reports", (route) =>
@@ -158,6 +171,25 @@ test("feature gate remains closed in the actual default server route", async ({
 }) => {
   await page.goto("/feed");
   await expect(page.getByText(/公開投稿の閲覧は現在無効/)).toBeVisible();
+});
+test("fullscreen identifies its theme with escaped text; unpublished names have no link", async ({
+  page,
+}) => {
+  await mount(page, { theme, themeName: "<b>合成のお題</b>" });
+  await page
+    .getByRole("button", { name: "投稿者100さんの投稿を全画面で開く" })
+    .click();
+  const link = page.getByRole("link", { name: "お題：<b>合成のお題</b>" });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute("href", `/feed?theme_id=${theme}`);
+  await expect(link.locator("b")).toHaveCount(0);
+  await page.getByRole("button", { name: "一覧に戻る" }).click();
+  await mount(page, { theme, themeName: null });
+  await page
+    .getByRole("button", { name: "投稿者100さんの投稿を全画面で開く" })
+    .click();
+  await expect(page.getByText("お題は現在非公開です")).toBeVisible();
+  await expect(page.getByRole("link", { name: /お題：/ })).toHaveCount(0);
 });
 test("three columns, explicit pagination, fullscreen ±1 resources and restored anchor", async ({
   page,

@@ -159,15 +159,17 @@ export function FeedFullscreen({
               {current ? (
                 <div className={styles.details}>
                   <p>{item.post.display_name}</p>
-                  {item.post.theme_id ? (
+                  {item.post.theme_id && item.post.theme_name !== null ? (
                     <Link
                       href={`/feed?theme_id=${item.post.theme_id}`}
                       prefetch={false}
                     >
-                      このお題の投稿
+                      お題：{item.post.theme_name}
                     </Link>
                   ) : (
-                    <p>自由投稿</p>
+                    <p>
+                      {item.post.theme_id ? "お題は現在非公開です" : "自由投稿"}
+                    </p>
                   )}
                   {item.post.kind === "video" ? (
                     <p>

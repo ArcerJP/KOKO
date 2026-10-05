@@ -1,4 +1,5 @@
 "use client";
+import { PostStateDetails } from "../../components/post-state-details";
 import { useState } from "react";
 import { hasPermission } from "@koko/contract";
 import { useOperations } from "../../components/operations-session";
@@ -245,6 +246,7 @@ function PostReview({
         通報：{item.report_count} 件 {item.is_banned ? "・BAN中" : ""}
       </p>
       <p>投稿日時：{timeLabel(post.created_at)}（日本時間）</p>
+      <PostStateDetails post={post} />
       {safeMedia && item.preview_url ? (
         <p>
           <a href={item.preview_url} target="_blank" rel="noopener noreferrer">

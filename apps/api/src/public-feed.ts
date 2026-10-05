@@ -150,6 +150,13 @@ function projectPost(x: unknown, eventId: string): PublicPost {
     x.like_count !== 0 ||
     (x.theme_id !== null &&
       (typeof x.theme_id !== "string" || !uuid.test(x.theme_id))) ||
+    !(
+      x.theme_name === null ||
+      (typeof x.theme_name === "string" &&
+        [...x.theme_name].length >= 1 &&
+        [...x.theme_name].length <= 100 &&
+        x.theme_id !== null)
+    ) ||
     typeof x.created_at !== "string" ||
     !validPosition({ id: x.id, createdAt: x.created_at }) ||
     !object(x.media)
@@ -199,6 +206,7 @@ function projectPost(x: unknown, eventId: string): PublicPost {
     display_name: x.display_name,
     crown: "none",
     theme_id: x.theme_id,
+    theme_name: x.theme_name,
     created_at: x.created_at,
     like_count: 0,
     media,

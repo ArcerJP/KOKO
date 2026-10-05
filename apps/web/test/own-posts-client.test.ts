@@ -9,6 +9,66 @@ import {
 import { cursor, eventId, origin, page, post } from "./own-posts-fixture";
 
 afterEach(() => vi.unstubAllGlobals());
+it.each([
+  "sexual",
+  "violence",
+  "hate",
+  "harassment",
+  "self_harm",
+  "illicit",
+  "other",
+] as const)(
+  "safe coarse category %s survives browser projection",
+  (category) => {
+    const item = post(1, { status: "blocked", block_category: category });
+    expect(
+      parseOwnPost({ ...item, raw_moderation: "private" }, eventId),
+    ).toEqual(item);
+  },
+);
+it.each([
+  "RETENTION_UNKNOWN",
+  "RETENTION_PENDING",
+  "PHYSICAL_DELETION_NOT_ENABLED",
+  "DELETION_UNCONFIRMED",
+] as const)("safe deletion state %s survives browser projection", (state) => {
+  const item = post(1, {
+    status: "deleted",
+    deletion: { state, retention_until: "2099-01-01T00:00:00Z" },
+  });
+  expect(
+    parseOwnPost(
+      { ...item, deletion: { ...item.deletion, object_key: "private" } },
+      eventId,
+    ),
+  ).toEqual(item);
+});
+it.each([
+  { status: "blocked", block_category: "ocr:raw" },
+  { status: "published", block_category: "sexual" },
+  { status: "deleted", deletion: { state: "DONE", retention_until: null } },
+  {
+    status: "held",
+    deletion: { state: "RETENTION_UNKNOWN", retention_until: null },
+  },
+  {
+    status: "deleted",
+    deletion: { state: "RETENTION_PENDING", retention_until: null },
+  },
+  {
+    status: "deleted",
+    deletion: { state: "RETENTION_UNKNOWN", retention_until: "infinity" },
+  },
+  {
+    status: "deleted",
+    deletion: {
+      state: "RETENTION_UNKNOWN",
+      retention_until: "2099-02-30T00:00:00Z",
+    },
+  },
+])("rejects unknown or inconsistent state detail %#", (change) => {
+  expect(parseOwnPost({ ...post(), ...change }, eventId)).toBeNull();
+});
 it("uses fixed same-origin GETs, normalized IDs, canonical pagination and safe projections", async () => {
   const id = "abcdefab-0000-4000-8000-000000000001";
   const fetcher = vi
@@ -17,7 +77,7 @@ it("uses fixed same-origin GETs, normalized IDs, canonical pagination and safe p
     .mockResolvedValueOnce(
       Response.json({
         ...post(1, { id }),
-        block_category: "RAW",
+        raw_block_category: "RAW",
         signed_url: "discard",
       }),
     );
@@ -81,7 +141,7 @@ it.each(postStates)("projects state %s without internal fields", (status) => {
   const item = post(1, { status });
   expect(
     parseOwnPost(
-      { ...item, block_category: "private", provider_error: "private" },
+      { ...item, raw_block_category: "private", provider_error: "private" },
       eventId,
     ),
   ).toEqual(item);

@@ -2,6 +2,35 @@
 -- No media, moderation raw text, writes or shared cache.
 BEGIN;
 
+-- Shared positive projection for owner status and authorized operator feeds.
+-- Metadata is not proof of a provider lock configuration or completed physical deletion.
+CREATE FUNCTION koko_private.post_state_details(p_event_id uuid,p_post_id uuid) RETURNS jsonb
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path='' AS $$
+  SELECT CASE WHEN p.status='blocked' THEN jsonb_build_object('block_category',CASE
+      WHEN p.block_category IN ('openai:sexual','ocr:sexual','ocr:sexual/minors','safesearch:adult','safesearch:racy') THEN 'sexual'
+      WHEN p.block_category IN ('openai:violence','openai:violence/graphic','ocr:violence','ocr:violence/graphic','safesearch:violence') THEN 'violence'
+      WHEN p.block_category IN ('ocr:hate','ocr:hate/threatening') THEN 'hate'
+      WHEN p.block_category IN ('ocr:harassment','ocr:harassment/threatening') THEN 'harassment'
+      WHEN p.block_category IN ('openai:self-harm','openai:self-harm/intent','openai:self-harm/instructions','ocr:self-harm','ocr:self-harm/intent','ocr:self-harm/instructions') THEN 'self_harm'
+      WHEN p.block_category IN ('ocr:illicit','ocr:illicit/violent') THEN 'illicit'
+      ELSE 'other' END) ELSE '{}'::jsonb END
+    || CASE WHEN p.status='deleted' THEN jsonb_build_object('deletion',jsonb_build_object(
+      'state',CASE
+        WHEN a.remaining=0 THEN 'DELETION_UNCONFIRMED'
+        WHEN a.unknown_retention THEN 'RETENTION_UNKNOWN'
+        WHEN a.retention_until>statement_timestamp() THEN 'RETENTION_PENDING'
+        ELSE 'PHYSICAL_DELETION_NOT_ENABLED' END,
+      'retention_until',CASE WHEN isfinite(a.retention_until) THEN to_char(a.retention_until AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') ELSE NULL END)) ELSE '{}'::jsonb END
+  FROM public.posts p
+  CROSS JOIN LATERAL (SELECT count(*) FILTER(WHERE physically_deleted_at IS NULL) remaining,
+    coalesce(bool_or(provider='r2_original' AND (retention_until IS NULL OR NOT isfinite(retention_until))) FILTER(WHERE physically_deleted_at IS NULL),false) unknown_retention,
+    max(retention_until) FILTER(WHERE physically_deleted_at IS NULL AND isfinite(retention_until)) retention_until
+    FROM public.media_assets WHERE event_id=p.event_id AND post_id=p.id) a
+  WHERE p.event_id=p_event_id AND p.id=p_post_id;
+$$;
+REVOKE ALL ON FUNCTION koko_private.post_state_details(uuid,uuid) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION koko_private.post_state_details(uuid,uuid) TO service_role;
+
 CREATE FUNCTION public.read_own_posts(
   p_event_id uuid,
   p_user_id uuid,
@@ -49,7 +78,7 @@ BEGIN
             WHEN p.status = 'held' THEN 'PROCESSING_HELD'
             ELSE 'UPLOAD_INCOMPLETE' END
           ELSE NULL END
-      )) AS item
+      )) || koko_private.post_state_details(p.event_id,p.id) AS item
     FROM public.posts p
     WHERE p.event_id = p_event_id AND p.user_id = p_user_id
       AND (p_post_id IS NULL OR p.id = p_post_id)

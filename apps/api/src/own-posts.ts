@@ -39,6 +39,69 @@ const safeReasons = [
 function invalid(): never {
   throw new OwnPostsError("INTERNAL_ERROR");
 }
+const blockCategories = [
+  "sexual",
+  "violence",
+  "hate",
+  "harassment",
+  "self_harm",
+  "illicit",
+  "other",
+] as const;
+const deletionStates = [
+  "RETENTION_UNKNOWN",
+  "RETENTION_PENDING",
+  "PHYSICAL_DELETION_NOT_ENABLED",
+  "DELETION_UNCONFIRMED",
+] as const;
+function validRetentionTimestamp(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/.test(value)
+  )
+    return false;
+  const wall = value.slice(0, 19);
+  return (
+    Number.isFinite(Date.parse(value)) &&
+    new Date(`${wall}Z`).toISOString().slice(0, 19) === wall
+  );
+}
+/** Only coarse categories and recorded retention metadata; never raw moderation/provider output. */
+export function projectPostStateDetails(
+  value: Record<string, unknown>,
+  current: PostStatus["status"],
+): Pick<PostStatus, "block_category" | "deletion"> {
+  const details: Pick<PostStatus, "block_category" | "deletion"> = {};
+  if (value.block_category !== undefined) {
+    if (
+      current !== "blocked" ||
+      !blockCategories.includes(
+        value.block_category as (typeof blockCategories)[number],
+      )
+    )
+      invalid();
+    details.block_category = value.block_category as NonNullable<
+      PostStatus["block_category"]
+    >;
+  }
+  if (value.deletion !== undefined) {
+    const d = value.deletion;
+    if (
+      current !== "deleted" ||
+      !object(d) ||
+      !deletionStates.includes(d.state as (typeof deletionStates)[number]) ||
+      (d.retention_until !== null &&
+        !validRetentionTimestamp(d.retention_until)) ||
+      (d.state === "RETENTION_PENDING" && d.retention_until === null)
+    )
+      invalid();
+    details.deletion = {
+      state: d.state as NonNullable<PostStatus["deletion"]>["state"],
+      retention_until: d.retention_until as string | null,
+    };
+  }
+  return details;
+}
 /** All response fields are explicitly projected, never a spread of RPC data. */
 function status(value: unknown, eventId: string, postId?: string): PostStatus {
   if (
@@ -70,7 +133,7 @@ function status(value: unknown, eventId: string, postId?: string): PostStatus {
       PostStatus["error_code"]
     >;
   }
-  return result;
+  return { ...result, ...projectPostStateDetails(value, result.status) };
 }
 /** Bound upstream JSON before parsing, without propagating secret headers or bodies. */
 function boundedFetch(

@@ -59,6 +59,46 @@ beforeEach(async () => {
   }
 });
 after(async () => db.close());
+test("public theme name stays event scoped, suppresses drafts and invalidates cached names", async () => {
+  const p = await post();
+  const theme = randomUUID();
+  await db.query(
+    "INSERT INTO public.themes(event_id,id,title,status,starts_at,ends_at) VALUES($1,$2,'合成のお題','published','2020-01-01','2099-01-01')",
+    [event, theme],
+  );
+  await db.query("UPDATE public.posts SET theme_id=$1 WHERE id=$2", [theme, p]);
+  const first = await call();
+  assert.equal(first.items[0].theme_name, "合成のお題");
+  await db.query("UPDATE public.themes SET title='名称変更' WHERE id=$1", [
+    theme,
+  ]);
+  const rename = await call("feed", null, null, {
+    limit: 30,
+    cache: first.cache,
+  });
+  assert.equal(rename.cache_valid, false);
+  assert.equal(rename.items[0].theme_name, "名称変更");
+  await db.query("UPDATE public.themes SET status='ended' WHERE id=$1", [
+    theme,
+  ]);
+  assert.equal((await call("post", p)).post.theme_name, "名称変更");
+  await db.query("UPDATE public.themes SET status='draft' WHERE id=$1", [
+    theme,
+  ]);
+  const hidden = await call("feed", null, null, {
+    limit: 30,
+    cache: rename.cache,
+  });
+  assert.equal(hidden.cache_valid, false);
+  assert.equal(hidden.items[0].theme_name, null);
+  assert.ok(!JSON.stringify(hidden).includes("名称変更"));
+  assert.equal(
+    (await call("post", p, null, {}, { scope: otherEvent })).code,
+    "NOT_FOUND",
+  );
+  await db.query("UPDATE public.posts SET theme_id=NULL WHERE id=$1", [p]);
+  assert.equal((await call("post", p)).post.theme_name, null);
+});
 async function call(
   action = "feed",
   id = null,
