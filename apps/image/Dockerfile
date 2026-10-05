@@ -26,7 +26,7 @@ FROM runtime AS verification
 COPY apps/image/test apps/image/test
 WORKDIR /app/apps/image
 ENTRYPOINT ["node"]
-CMD ["--test", "test/transform.test.mjs", "test/cli.test.mjs", "test/r2.test.mjs"]
+CMD ["--test", "test/transform.test.mjs", "test/cli.test.mjs", "test/r2.test.mjs", "test/pipeline.test.mjs"]
 
 # Only used to generate our synthetic fixture; never shipped in runtime.
 FROM verification AS fixture-generator

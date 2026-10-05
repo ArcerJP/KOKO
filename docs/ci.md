@@ -67,6 +67,8 @@ APIが共有契約の生成済み`dist/`を参照するため、rootの`typechec
 
 ## 画像変換コアの検査
 
+内部pipelineの試験も既存`Image Tests`と`Image Container Build`で実行します。`test/pipeline.test.mjs`は実decoderと模擬R2を通す再送、全確認点の中断、部分失敗・改変を検証し、新しいjob/秘密情報/実クラウド書込みは追加しません。DB確認はテスト用callbackであり、実DB認可・実機受入を検証済みとはしません。
+
 既存Image TestsとImage Container Buildには、R2ストレージadapterの合成fetch試験を含めます。固定キー/署名・原本GET・派生物の条件付きPUT/既存内容照合・期限/サイズ/redirect/異常系を検証し、実HEIC変換→4閲覧派生物の模擬保存も実行します。Dockerは共有契約も同一ソースからbuildしてruntimeへ含めます。実バケット・秘密・課金・DB/consumerを使う試験ではありません。
 
 画像向け3jobは`.github/workflows/image-check.yml`に定義します。画像変換の仕様・実機未受入・依存/配布境界は[画像コアREADME](../apps/image/README.md)が正本です。Node test runnerによる実HEVC符号化の合成fixtureを含みますが、実端末HEIC・HDR・SLO・クラウド受入ではありません。JS/TS lintは既存`TypeScript Lint`で画像workspaceも対象にします。rootのtypecheck/test/buildにも接続し、Docker試験だけは`npm run test:image:docker`で別実行します。新jobの定義と、mainの必須checkへの登録は別工程で、登録はmerge後に本人が行います。
@@ -242,7 +244,7 @@ workflowを追加しただけではmergeを技術的にブロックできませ�
 
 ### 新しい必須checkを導入する順序
 
-2026-10-05、PR #43のmerge後にmainの実効rulesを読取り確認しました。既存13checkは維持され、`Image Type Check`・`Image Tests`・`Image Container Build`は未登録でした。3jobは導入PRで成功済みですが、必須化は未完了です。本人が既存項目を残して追加し、送信元をGitHub Actionsに限定して保存・Required表示を確認する必要があります。AIはこの保護設定を変更していません。
+2026-10-05、本人の設定完了報告後にmainの実効rulesを再読取りし、既存13checkに加えて`Image Type Check`・`Image Tests`・`Image Container Build`の計16checkが必須登録されていることを確認しました。PR #43直後の未登録という記録を更新します。AIは保護設定を変更していません。各PRの最新headで実際に成功したか、送信元・Required表示・独立レビューの条件を満たすかは引き続き個別確認します。
 
 1. workflow、検査command、検査対象を同じPRへ追加し、そのPRの最新commitで成功を確認します。
 2. 人間のレビューを経て導入PRをmainへmergeします。

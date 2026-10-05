@@ -52,7 +52,7 @@ apps/web内では、`src/api/approved-terms.ts`が採択本文の選択入口（
 
 ## 登録表の保守
 
-`apps/image/src/`に変換とCLI、`test/`に自作素材と検証を保持し、現仕様は[画像コアREADME](../../apps/image/README.md)に集約します。トップレベルの追加や新しい指示ファイルは不要です。
+`apps/image/src/`に変換・CLI・R2 adapterと既定無効の内部pipeline、`test/`に自作素材と検証を保持し、現仕様は[画像コアREADME](../../apps/image/README.md)に集約します。トップレベルの追加や新しい指示ファイルは不要です。
 
 `apps/web/src/media/upload-queue*`は端末内送信状態・IndexedDB adapter・再開engine、`src/components/upload-*`はroot常駐実行と投稿UI、`src/app/upload/`は既定無効の認証入口です。実装は公開ソースとして追跡し、Blob/実本人/端末DBはGitへ置きません。`e2e/upload-harness.tsx`は試験時だけbundleする合成UIで、本番route/publicには配置しません。構成変更時に同じ試験と[ADR-0006](../decisions/ADR-0006-durable-browser-upload-queue.md)を照合します。
 
