@@ -77,7 +77,10 @@ const sha = (x: unknown): x is string =>
   typeof x === "string" && /^[a-f0-9]{64}$/.test(x);
 const variants = ["600/webp", "600/jpg", "1600/webp", "1600/jpg"];
 
-function snapshot(value: unknown): ImageProcessingPlan {
+/** Shape validation only; not DB authorization. Shared by the internal DB client. */
+export function snapshotImageProcessingPlan(
+  value: unknown,
+): ImageProcessingPlan {
   let x: unknown;
   try {
     x = structuredClone(value);
@@ -246,7 +249,7 @@ export function createImagePipeline(
       if (active) return { ok: false, reason: "BUSY" };
       active = true;
       try {
-        const plan = snapshot(input);
+        const plan = snapshotImageProcessingPlan(input);
         await check(plan);
         const source = await getOriginal(plan.original);
         const bytes = Buffer.from(source.bytes);

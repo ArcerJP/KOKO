@@ -45,7 +45,7 @@ Pull Requestの作成・更新時に再現可能な自動検証を行い、既�
 
 Markdownlintは`.gitignore`を尊重して追跡対象相当のMarkdownを検査します。日本語文書と表の可読性をPrettierへ委ねるため、行長の`MD013`を無効化します。また、タスクテンプレートのfront matterにある`title`は文書見出しではなくmetadataとして扱うため、`MD025`ではfront matterを見出しとして数えません。それ以外は既定ruleを使用します。
 
-画像処理の[DB確定](../apps/api/README.md#画像処理のdb確定b2-1の一部未接続)は既存`Contract Tests`の`image-processing.test.mjs`で検査します。全migration・service限定権限・lease/所有者/版・停止/BAN・原本identity・4receipt全検査・例外時の全rollback・冪等再送を対象とし、公開状態やQueue配送完了へ進めないことも確認します。PGlite単一接続の成功を実PostgreSQLの多接続競合や実R2/HTTP/consumerの受入としません。新job、秘密、実DB接続は不要です。
+画像処理の[DB確定](../apps/api/README.md#画像処理のdb確定b2-1の一部実環境未接続)は既存`Contract Tests`の`image-processing.test.mjs`で検査します。全migration・service限定権限・lease/所有者/版・停止/BAN・原本identity・4receipt全検査・例外時の全rollback・冪等再送を対象とし、公開状態やQueue配送完了へ進めないことも確認します。PGlite単一接続の成功を実PostgreSQLの多接続競合や実R2/HTTP/consumerの受入としません。新job、秘密、実DB接続は不要です。
 
 ## Web検査とLintの保守
 
@@ -69,7 +69,7 @@ APIが共有契約の生成済み`dist/`を参照するため、rootの`typechec
 
 ## 画像変換コアの検査
 
-内部pipelineの試験も既存`Image Tests`と`Image Container Build`で実行します。`test/pipeline.test.mjs`は実decoderと模擬R2を通す再送、全確認点の中断、部分失敗・改変を検証し、新しいjob/秘密情報/実クラウド書込みは追加しません。DB確認はテスト用callbackであり、実DB認可・実機受入を検証済みとはしません。
+内部pipelineの試験も既存`Image Tests`と`Image Container Build`で実行します。`test/pipeline.test.mjs`は実decoderと模擬R2を通す再送、全確認点の中断、部分失敗・改変を検証。追加の`test/db.test.mjs`・`test/runner.test.mjs`は固定RPC・秘密非露出・応答/期限制限・claim→7地点check→finish・記録済み再配送を確認し、実decoder＋署名付き模擬R2＋模擬DB通信の通し試験も行います。Dockerの明示test一覧にも追加し、新job/秘密情報/実クラウド書込みはありません。実SQLは別PGlite試験で、実DB/PostgREST/IAM・実機受入を検証済みとはしません。
 
 既存Image TestsとImage Container Buildには、R2ストレージadapterの合成fetch試験を含めます。固定キー/署名・原本GET・派生物の条件付きPUT/既存内容照合・期限/サイズ/redirect/異常系を検証し、実HEIC変換→4閲覧派生物の模擬保存も実行します。Dockerは共有契約も同一ソースからbuildしてruntimeへ含めます。実バケット・秘密・課金・DB/consumerを使う試験ではありません。
 
