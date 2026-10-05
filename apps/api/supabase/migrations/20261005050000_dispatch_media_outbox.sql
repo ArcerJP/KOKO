@@ -20,7 +20,7 @@ BEGIN
   IF current_setting('transaction_isolation') <> 'read committed' THEN
     RAISE EXCEPTION USING ERRCODE='25001', MESSAGE='claim_media_dispatch requires READ COMMITTED';
   END IF;
-  IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 10 THEN
+  IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 50 THEN
     RETURN jsonb_build_object('code','INVALID_INPUT');
   END IF;
   WITH candidates AS (
@@ -66,7 +66,7 @@ BEGIN
   IF jsonb_typeof(p_claims) IS DISTINCT FROM 'array' THEN
     RETURN jsonb_build_object('code','INVALID_INPUT');
   END IF;
-  IF jsonb_array_length(p_claims) NOT BETWEEN 1 AND 10 THEN
+  IF jsonb_array_length(p_claims) NOT BETWEEN 1 AND 50 THEN
     RETURN jsonb_build_object('code','INVALID_INPUT');
   END IF;
   -- Validate the entire batch before mutations; reject duplicates and extra fields.

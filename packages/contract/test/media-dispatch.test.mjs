@@ -155,6 +155,19 @@ test("claim is bounded and oldest-first across events, without taking other job 
   assert.equal((await claim()).jobs.length, 3);
   assert.equal((await claim()).jobs.length, 0);
 });
+test("fifty-row batch admits the thirty-per-minute target with bounded retry headroom", async () => {
+  for (let i = 0; i < 51; i++) await insert();
+  const batch = await claim(50);
+  assert.equal(batch.jobs.length, 50);
+  assert.equal(new Set(batch.jobs.map((j) => j.job_id)).size, 50);
+  assert.deepEqual(await settle(batch.jobs.map((j) => ack(j))), {
+    code: "ok",
+    settled: 50,
+    stale: 0,
+  });
+  assert.equal((await claim(50)).jobs.length, 1);
+});
+
 test("skips future, leased, completed, dispatched, and exhausted work", async () => {
   for (const expr of [
     "dispatch_available_at=now()+interval '1 hour'",
@@ -292,7 +305,7 @@ test("rejects stronger isolation instead of accepting stale snapshots", async ()
   );
   await db.exec("ROLLBACK");
 });
-for (const value of [null, 0, -1, 11])
+for (const value of [null, 0, -1, 51])
   test(`invalid limit ${value}`, async () => {
     const id = await insert();
     assert.equal((await claim(value)).code, "INVALID_INPUT");
@@ -328,7 +341,7 @@ test("empty, oversized, duplicate, non-array and null settlement inputs are reje
     {},
     [null],
     [ack(job), ack(job)],
-    Array(11).fill(ack(job)),
+    Array(51).fill(ack(job)),
   ])
     assert.equal((await settle(input)).code, "INVALID_INPUT");
   assert.equal((await row(job.job_id)).dispatched_at, null);

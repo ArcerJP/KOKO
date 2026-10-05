@@ -122,7 +122,7 @@ it("sends stable allowlisted envelope, waits before ack, and returns only safe a
     failed: false,
   });
   expect(f.calls).toEqual([
-    { p_limit: 10 },
+    { p_limit: 50 },
     { p_claims: [{ job_id: job.job_id, attempt: 1, outcome: "sent" }] },
   ]);
   expect(f.sendBatch).toHaveBeenCalledWith([
@@ -151,24 +151,24 @@ it("empty claim does not enqueue or settle and preserves exhaustion warning", as
   expect(f.sendBatch).not.toHaveBeenCalled();
 });
 it("maximum batch uses one send and one settlement with bounded message bytes", async () => {
-  const jobs = Array.from({ length: 10 }, (_, i) => ({
+  const jobs = Array.from({ length: 50 }, (_, i) => ({
     ...job,
     job_id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`,
   }));
   const f = fixture(
     { ...claimed, jobs },
-    { code: "ok", settled: 10, stale: 0 },
+    { code: "ok", settled: 50, stale: 0 },
   );
   expect(await run(f)).toMatchObject({
-    claimed: 10,
-    sent: 10,
-    settled: 10,
+    claimed: 50,
+    sent: 50,
+    settled: 50,
     failed: false,
   });
   expect(f.sendBatch).toHaveBeenCalledTimes(1);
   expect(f.calls).toHaveLength(2);
   expect(JSON.stringify(f.sendBatch.mock.calls[0]![0]).length).toBeLessThan(
-    4096,
+    32768,
   );
 });
 it("late claim response after timeout is discarded without queue delivery or settlement", async () => {
@@ -248,7 +248,13 @@ it.each([
   { ...claimed, exhausted: 1 },
   { ...claimed, jobs: null },
   { ...claimed, jobs: [job, job] },
-  { ...claimed, jobs: Array(11).fill(job) },
+  {
+    ...claimed,
+    jobs: Array.from({ length: 51 }, (_, i) => ({
+      ...job,
+      job_id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`,
+    })),
+  },
   ...[0, 9, 1.5, "1", null].map((attempt) => ({
     ...claimed,
     jobs: [{ ...job, attempt }],

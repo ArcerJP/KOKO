@@ -15,7 +15,8 @@ export type MediaDispatchEnv = AccountEnv & {
   MEDIA_PROCESSING_QUEUE?: Pick<Queue<MediaProcessingMessage>, "sendBatch">;
 };
 export const mediaDispatchCron = "* * * * *";
-const limit = 10;
+// Admit the 30 posts/minute target with bounded retry headroom, not an unbounded drain.
+const limit = 50;
 const summary = () => ({
   claimed: 0,
   sent: 0,
