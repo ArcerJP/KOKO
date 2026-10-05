@@ -76,6 +76,8 @@ B2-6の[本人状態・本人一覧](../../apps/api/README.md#本人の投稿状
 
 共有コードをUI・Node・クラウドSDKから分離し、Web、Workers、将来のnativeから同じ契約を使います。DOM/Nodeの暗黙型を読み込まず、ESLintでも主要な環境依存importを禁止します。認証保管、カメラ、player、端末キューは各アプリの責務です。[native対応準備](../../docs/architecture/native-readiness.md)に従い、ストア版の更新遅延を考慮したAPI互換性を実装時に検証します。
 
+[画像処理のDB確定](../../apps/api/README.md#画像処理のdb確定b2-1の一部未接続)の内部RPC試験は`test/image-processing.test.mjs`に置きます。pipeline用planの予約・最新状態の照合・4派生物の原子的記録を検証し、画像段階の完了とAI/公開を分離します。公開API型を増やす変更ではなく、実DB/Queue/HTTPへは未接続です。
+
 ## 生成と検証
 
 リポジトリルートで実行します。
