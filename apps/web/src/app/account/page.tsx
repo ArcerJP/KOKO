@@ -20,7 +20,13 @@ export default async function AccountPage() {
   const termsDocument = eventId ? getApprovedTerms(eventId) : null;
   // RSC更新で本文/版が変わった場合も、旧チェック・進行中操作を引き継がない。
   const panelKey = createHash("sha256")
-    .update(JSON.stringify([eventId, termsDocument]))
+    .update(
+      JSON.stringify([
+        eventId,
+        termsDocument,
+        process.env.KOKO_ENROLLMENT_ENABLED === "true",
+      ]),
+    )
     .digest("hex");
 
   return (
@@ -34,6 +40,7 @@ export default async function AccountPage() {
             key={panelKey}
             eventId={eventId}
             termsDocument={termsDocument}
+            enrollmentEnabled={process.env.KOKO_ENROLLMENT_ENABLED === "true"}
           />
         ) : (
           <LogoutButton

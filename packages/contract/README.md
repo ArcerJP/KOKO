@@ -20,7 +20,7 @@
 - `X-Event-ID`で対象を限定し、主体は検証済みJWTの`sub`から取得。Google provider、署名、issuer、audience、期限、イベント所属を確認します。API型の生成はHTTP入力検証の代わりではありません。
 - 本人用APIは`private, no-store`。共通feedもブラウザ・Vercel側は`private, no-store`、Worker内部だけ短時間共有cache。キャッシュより前に認証と公開可否を検査します。
 - 画像・動画は同一originの`/media/{event_id}/{post_id}/{resource}`。HTMLの画像・videoからはHttpOnly Cookie、APIクライアントからはBearerを使用できます。URLにセッションやStream署名を入れません。詳細は[認証配信ADR](../../docs/decisions/ADR-0002-authenticated-delivery.md)。
-- Cookie認証の書込みは、許可Originとセッションに束縛した`X-CSRF-Token`を検証。トークンは`GET /me`の`csrf_token`から取得し、ログ/共有cacheへ入れません。CORSを認証と見なしません。CSRF不正はFORBIDDEN。Supabase OAuth callbackのstate/PKCEも検証します。
+- Cookie認証の書込みは、許可Originとセッションに束縛した`X-CSRF-Token`を検証。通常は`GET /me`、初回参加だけは本人・固定eventを検証する`GET /me/enrollment`の`csrf_token`から取得し、ログ/共有cacheへ入れません。CSRFは所属・権限の代わりではなく、既存APIの所属条件は維持します。CORSを認証と見なしません。CSRF不正はFORBIDDEN。Supabase OAuth callbackのstate/PKCEも検証します。
 - 一覧は`created_at DESC, id DESC`。不透明cursorへイベント・フィルター・位置を束縛し、改ざん・別条件への流用を拒否。公開フィード/詳細では未公開/削除/別イベントの投稿を一律NOT_FOUNDとし存在を漏らしません。本人状態・本人一覧は別の所有者認可で非公開状態も扱い、メディアは返しません。
 - `client_request_id`を本人・イベント単位で一意に保持。同じ内容の再送は同じ投稿を返し、内容違いは409。complete、通知、webhook、like、削除は重複安全にします。
 - 入力サイズは文字列やページ件数に技術上の上限を設けますが、メディアの独自容量制限は設けません。実サービス上限はPROVIDER_LIMIT。single/multipartを切り替え、署名は対象キー・メソッド・期限へ限定します。

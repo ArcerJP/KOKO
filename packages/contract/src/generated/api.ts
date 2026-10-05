@@ -55,6 +55,40 @@ export interface paths {
     patch: operations["updateMe"];
     trace?: never;
   };
+  "/me/enrollment": {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。 */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 固定イベントへの本人の参加状態と初回受付可否を取得
+     * @description Google本人とサーバー設定の固定eventを確認。所属がなくても利用できる専用読取り経路。
+     *     状態変更や規約同意は行わない。Cookie時だけ同一セッション/eventのCSRFを返す。
+     *     role・BAN・他人の情報は含めず、既存APIの所属認可を代替しない。private, no-store。
+     */
+    get: operations["getEnrollment"];
+    put?: never;
+    /**
+     * 表示名を明示して固定イベントへ初回参加
+     * @description Google本人からIDを決定し、Cookie時はOriginとセッション束縛CSRFが必須。
+     *     初回はlive・開催期間内・受付有効・公開停止なしを原子的に確認しuser権限で登録。
+     *     既存所属は表示名・role・BAN・同意を一切変更せず成功。規約同意はPOST /consentsで別途行う。
+     *     専用flagは既定OFF。一般利用者が任意eventやroleを指定する登録経路ではない。
+     */
+    post: operations["enrollEvent"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/consents": {
     parameters: {
       query?: never;
@@ -833,6 +867,20 @@ export interface components {
       /** Format: uuid */
       resource_id?: string;
     };
+    EnrollmentStatus: {
+      /** Format: uuid */
+      user_id: string;
+      /** Format: uuid */
+      event_id: string;
+      enrolled: boolean;
+      /** @description 未参加かつ現在の初回受付条件を満たす場合のみtrue。 */
+      registration_open: boolean;
+      /** @description Cookie時だけ。メモリ内限定、ログや永続保存は禁止。 */
+      csrf_token?: string;
+    };
+    EnrollmentRequest: {
+      display_name: string;
+    };
     Me: {
       /** Format: uuid */
       user_id: string;
@@ -1179,6 +1227,64 @@ export interface operations {
         "application/json": {
           display_name: string;
         };
+      };
+    };
+    responses: {
+      /** @description 処理完了 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Acknowledgement"];
+        };
+      };
+      401: components["responses"]["Error"];
+      default: components["responses"]["Error"];
+    };
+  };
+  getEnrollment: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。 */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 本人専用の初回参加preflight */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EnrollmentStatus"];
+        };
+      };
+      401: components["responses"]["Error"];
+      default: components["responses"]["Error"];
+    };
+  };
+  enrollEvent: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。 */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["EnrollmentRequest"];
       };
     };
     responses: {

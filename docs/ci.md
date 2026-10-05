@@ -49,6 +49,8 @@ Markdownlintは`.gitignore`を尊重して追跡対象相当のMarkdownを検査
 
 ## Web検査とLintの保守
 
+初回参加も既存Contract/API/Web Tests・Web Browser Testsへ含めます。SQL権限/再送/rollback、固定event/本人・Cookie/CSRF、表示名だけの登録、直前の本人変更・取消し・曖昧結果、390/1280pxでの実React操作と実routeの既定OFFを検査します。合成Google/DB応答は実認証・実DB適用・多接続競合の代替ではありません。
+
 Web向け3jobは`.github/workflows/web-check.yml`に定義します。秘密やクラウド課金なしで実行でき、実機のカメラ・実OAuth・R2通信をモック成功で代替しません。詳細は[撮影検証](product/stage-one-capture.md)を参照してください。既存の契約job名は維持し、`Contract Tests`は`test:contract`、`Contract Build`は`build:contract`へ明示的に限定します。
 
 Web Testsにはアップロード制御・同一origin JSON中継・R2直接転送の合成試験を含みます。Web Browser Testsではproduction Route Handlerのupload既定無効を確認します。single/multipartの模擬通信成功と、実R2のCORS・署名・保存・Googleセッション受入は区別します。詳細は[Web README](../apps/web/README.md#アップロード制御とr2直接転送f1-5既定無効)を参照してください。

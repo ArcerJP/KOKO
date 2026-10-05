@@ -61,6 +61,19 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 
 根拠：[PostgREST RPC](https://docs.postgrest.org/en/stable/references/api/functions.html)、[Supabaseの関数権限](https://supabase.com/docs/guides/database/functions)、[PostgreSQLの行ロック](https://www.postgresql.org/docs/current/explicit-locking.html)（2026-10-04確認）。
 
+## 初回イベント参加（B1-4、既定無効）
+
+[enrollment.ts](src/enrollment.ts)と[追加migration](supabase/migrations/20261006010000_event_enrollment.sql)は、Googleログイン済み・イベント未所属の利用者が表示名を明示して参加する専用経路です。既存`/me`等の未所属拒否や役割・同意の検査は緩めません。実DB適用・設定・配備・Web画面の通し受入は未実施です。
+
+- **固定対象と既定OFF**：`KOKO_ENROLLMENT_ENABLED`が文字列`true`、`KOKO_EVENT_ID`がUUIDの場合だけ有効。ヘッダー`X-Event-ID`は固定値と一致が必須です。後者はWebと同じ設定名で、任意イベントへ加入できるAPIではありません。Wranglerや実クラウドへ設定は追加していません。
+- **読取りpreflight**：`GET /me/enrollment`はGoogle本人を検証後、service限定の`read_event_enrollment`を呼びます。本人/event ID、`enrolled`、`registration_open`だけを明示投影し、Cookieの場合だけ既存HMACのセッション/event束縛CSRFを追加。プロフィール・役割・BAN・秘密は返さず、DBへ書きません。未所属者が従来`GET /me`でCSRFを取得できない循環を、この限定読取り経路で解消します。CSRFは所属・参加・同意の証明ではありません。
+- **明示的な初回登録**：`POST /me/enrollment`は`display_name`だけのJSONを受けます。CookieのOrigin/CSRFは従来どおり必須。Supabaseが検証した本人と固定eventだけを`enroll_event`へ渡し、role=user、BANなし、crown=none、counter=0で初回行を作ります。既存memberは入力名が異なっても更新せず、BAN/role/同意や日時を戻しません。成功後は`GET /me`を再取得し、必要な規約同意は従来`POST /consents`で別途行います。
+- **初回受付条件**：既存投稿予約と同じ`live`・開始以上/終了未満・`uploads_enabled=true`・公開停止なし。開催前の新規所属を別途許可する仕様は追加しません。Googleログイン自体は参加とは別で、開会前の通し試験は承認済み開発イベントの期間・設定で行います。既所属者は期間終了/停止/BAN中もpreflight可能で、登録再送は不変の成功です。`registration_open=false`は既参加、または初回受付停止を意味します。
+- **SQL境界**：2関数は`SECURITY DEFINER`・空`search_path`で、PUBLIC/anon/authenticatedの実行権限を剥奪しservice_roleだけへ付与。登録はREAD COMMITTED、event→settings→memberのlock順序、複合一意制約と`ON CONFLICT DO NOTHING`で再送/競合を安全側に扱います。規約同意・投稿・外部操作は作りません。行挿入が抑止された場合は成功とせずrollbackします。
+- **通信制限**：query/余分な属性/不正UTF-8/制御文字/format文字・50文字超を拒否。入力1KiB・上流JSON16KiB・全体10秒、固定Supabase経路、redirect禁止、自動再送なし。応答不明でもDB保存済みの可能性があるため、失敗を未登録と断定しません。すべて`private, no-store`、CSRFや本文をログへ出しません。
+
+[SQL試験](../../packages/contract/test/enrollment.test.mjs)と[HTTP試験](test/enrollment.spec.ts)は、service限定権限・初回/既存・停止/期間・再送・rollback、固定event/本人、Cookie/CSRF、秘密非出力、期限を検証します。PGliteの同一接続による再送試験を実PostgreSQL多接続競合の証拠とは扱わず、実OAuth/Cloudflare Access・実DB/配備・Web/実機受入を後続ゲートへ残します。
+
 ## 投稿受付のDB予約（B1-5、ローカル実装）
 
 [追加migration](supabase/migrations/20261004010000_reserve_upload.sql)の`reserve_upload(event_id, user_id, request)`は、既存`UploadRequest`の申告内容を受け、投稿と原本資産の保存先を1 transactionで予約します。下記のHTTP受付・session RPCから呼び出します。内部RPCの結果は`UploadTicket`ではなく、原本キーを含むため利用者向け応答へそのまま返しません。**実Supabaseへの追加migration適用と実R2保存は未完了です。**

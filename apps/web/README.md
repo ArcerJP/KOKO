@@ -35,6 +35,17 @@ API型は`@koko/contract/api`、純粋な契約は`@koko/contract`から使用�
 
 根拠：[Fetch標準のrequest mode](https://fetch.spec.whatwg.org/#concept-request-mode)、[OWASPのCSRF対策](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)。API契約は[OpenAPI](../../packages/contract/openapi.yaml)、Workerと追加migrationの実装/未適用境界は[API README](../api/README.md#現行規約の同意保存ローカル実装)を正本とします。
 
+## 初回イベント参加（B1-4/F1-4、既定無効）
+
+`/account`の[参加フォーム](src/app/account/enrollment-form.tsx)から、Google本人が表示名を明示して参加できます。既存アカウント画面/Cookie/中継flagに加え、サーバー専用`KOKO_ENROLLMENT_ENABLED=true`が必要です。実設定は変更していません。通常の`/me`の所属必須条件を緩めず、[専用API](../api/README.md#初回イベント参加b1-4既定無効)を使います。
+
+- [中継](src/api/enrollment-proxy.ts)は`GET/POST /api/me/enrollment`だけ、`X-Event-ID`はサーバーの固定`KOKO_EVENT_ID`と一致必須。既存のCookie世代・Origin・CSRF・Access秘密の固定上流転送・本文/時間制限を再利用。未設定は404で、秘密や任意の上流URLをブラウザへ返しません。
+- [controller](src/api/enrollment-controller.ts)は「参加状況を確認する」から開始。未所属かつ受付中だけ名前入力を表示し、明示登録前にセッション準備とfresh GETで本人/event/受付を再確認。POST後もGETで所属を確認してから本人情報・規約画面へ進みます。別タブで先に参加済みなら再登録しません。
+- ID/CSRFを表示snapshot・URL・永続領域へ保存しません。同時1操作、30秒、ログアウト/アカウント更新/pagehide/unmountで取消し・状態破棄。結果不明時は自動再送せず状況の再読取りを案内します。
+- 登録は規約同意ではありません。正式本文未採択時は既存同意画面が閉じ、未同意投稿のAPI拒否を維持します。既存memberの表示名/role/BAN/同意を参加APIで上書きしません。
+
+単体/HTTP試験とChromiumの390/1280px操作を実装。ブラウザ試験は実React＋合成Auth/APIで、製品へ認証回避routeを追加しません。実Google・Cookie/Access・実DB・実機・多接続競合は別受入です。
+
 ## 本人の投稿一覧・状態画面（F2-4/F3-4の一部、既定無効）
 
 2026-10-05、`/account/posts`へ[本人投稿画面](src/app/account/posts/page.tsx)を追加しました。アカウント/送信画面から移動でき、[型付きclient](src/api/client.ts)の`listOwnPosts`/`getPostStatus`と[本人専用API](../api/README.md#本人の投稿状態と一覧b2-6の一部既定無効)を接続します。実環境は未有効化です。

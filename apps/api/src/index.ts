@@ -1,6 +1,7 @@
 import { handleAccount, handleConsent, type AccountEnv } from "./account";
 import { handleUploads, type UploadEnv } from "./uploads";
 import { handleOwnPosts, type OwnPostsEnv } from "./own-posts";
+import { handleEnrollment, type EnrollmentEnv } from "./enrollment";
 import {
   handleMediaDispatchScheduled,
   mediaDispatchCron,
@@ -55,6 +56,8 @@ export default {
     const { pathname } = new URL(request.url);
 
     if (pathname === "/me") return handleAccount(request, env as AccountEnv);
+    if (pathname === "/me/enrollment")
+      return handleEnrollment(request, env as EnrollmentEnv);
     if (pathname === "/me/posts" || /^\/posts\/[^/]+\/status$/.test(pathname))
       return handleOwnPosts(request, env as OwnPostsEnv);
     if (pathname === "/consents")

@@ -107,6 +107,43 @@ paths:
                 $ref: "#/components/schemas/Acknowledgement"
         "401": *unauthorized
         default: *error
+  /me/enrollment:
+    parameters: *eventParameters
+    get:
+      tags: [account]
+      operationId: getEnrollment
+      summary: 固定イベントへの本人の参加状態と初回受付可否を取得
+      description: |
+        Google本人とサーバー設定の固定eventを確認。所属がなくても利用できる専用読取り経路。
+        状態変更や規約同意は行わない。Cookie時だけ同一セッション/eventのCSRFを返す。
+        role・BAN・他人の情報は含めず、既存APIの所属認可を代替しない。private, no-store。
+      x-stage: 1
+      responses:
+        "200":
+          description: 本人専用の初回参加preflight
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentStatus"
+        "401": *unauthorized
+        default: *error
+    post:
+      tags: [account]
+      operationId: enrollEvent
+      summary: 表示名を明示して固定イベントへ初回参加
+      description: |
+        Google本人からIDを決定し、Cookie時はOriginとセッション束縛CSRFが必須。
+        初回はlive・開催期間内・受付有効・公開停止なしを原子的に確認しuser権限で登録。
+        既存所属は表示名・role・BAN・同意を一切変更せず成功。規約同意はPOST /consentsで別途行う。
+        専用flagは既定OFF。一般利用者が任意eventやroleを指定する登録経路ではない。
+      x-stage: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollmentRequest"
+      responses: *ackResponses
   /consents:
     parameters: *eventParameters
     post:
@@ -834,6 +871,30 @@ components:
       properties:
         request_id: { type: string, format: uuid }
         resource_id: { type: string, format: uuid }
+    EnrollmentStatus:
+      type: object
+      additionalProperties: false
+      required: [user_id, event_id, enrolled, registration_open]
+      properties:
+        user_id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        enrolled: { type: boolean }
+        registration_open:
+          {
+            type: boolean,
+            description: 未参加かつ現在の初回受付条件を満たす場合のみtrue。,
+          }
+        csrf_token:
+          {
+            type: string,
+            description: Cookie時だけ。メモリ内限定、ログや永続保存は禁止。,
+          }
+    EnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [display_name]
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 50 }
     Me:
       type: object
       additionalProperties: false
