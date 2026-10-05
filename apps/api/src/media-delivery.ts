@@ -264,6 +264,219 @@ export type AuthorizedMedia = {
   asset: AuthorizedAsset;
   revalidate: () => Promise<boolean>;
 };
+type Capture = {
+  chunk(bytes: Uint8Array): void;
+  complete(): Promise<void>;
+  discard(): void;
+};
+/** Isolate-local bytes only: never stores authorization, cookies, user data, originals or Stream tokens. */
+export class DerivedImageCache {
+  private readonly entries = new Map<
+    string,
+    { bytes: Uint8Array; expires: number; readers: number; removed: boolean }
+  >();
+  private readonly buckets = new WeakMap<object, number>();
+  private nextBucket = 0;
+  private stored = 0;
+  private pending = 0;
+  private pendingCount = 0;
+  private hits = 0;
+  private misses = 0;
+  private evictions = 0;
+  private readonly limit = 4 * 1024 * 1024;
+  private readonly itemLimit = 1024 * 1024;
+  private readonly ttl = 30_000;
+  private readonly count = 16;
+  key(backend: string, bucket: object, a: AuthorizedAsset): string {
+    let namespace = this.buckets.get(bucket);
+    if (namespace === undefined) {
+      namespace = ++this.nextBucket;
+      this.buckets.set(bucket, namespace);
+    }
+    return JSON.stringify([
+      backend,
+      namespace,
+      a.eventId,
+      a.postId,
+      a.postVersion,
+      a.assetId,
+      a.provider,
+      a.purpose,
+      a.key,
+      a.sha256,
+      a.version,
+      a.etag,
+      a.size,
+      a.contentType,
+    ]);
+  }
+  delete(key: string) {
+    const old = this.entries.get(key);
+    if (old) {
+      old.removed = true;
+      if (old.readers === 0) this.stored -= old.bytes.byteLength;
+      this.entries.delete(key);
+    }
+  }
+  private sweep() {
+    for (const [key, entry] of this.entries)
+      if (entry.expires <= Date.now()) this.delete(key);
+  }
+  private room(size: number) {
+    this.sweep();
+    while (
+      this.entries.size &&
+      (this.entries.size + this.pendingCount >= this.count ||
+        this.stored + this.pending + size > this.limit)
+    ) {
+      this.delete(this.entries.keys().next().value!);
+      this.evictions++;
+    }
+    return (
+      this.pendingCount < this.count &&
+      this.stored + this.pending + size <= this.limit
+    );
+  }
+  /** Aggregate diagnostics only; never identity, URLs, object keys or authentication. */
+  metrics() {
+    this.sweep();
+    return {
+      hits: this.hits,
+      misses: this.misses,
+      evictions: this.evictions,
+      entries: this.entries.size,
+      storedBytes: this.stored,
+      pendingBytes: this.pending,
+    };
+  }
+  read(
+    key: string,
+    range: { offset: number; length: number } | null,
+  ): ReadableStream<Uint8Array> | null {
+    this.sweep();
+    const entry = this.entries.get(key);
+    if (!entry) {
+      this.misses++;
+      return null;
+    }
+    this.hits++;
+    entry.readers++;
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    let data: Uint8Array | null = entry.bytes;
+    let held: typeof entry | null = entry;
+    const release = () => {
+      if (held) {
+        data = null;
+        held.readers--;
+        if (held.removed && held.readers === 0)
+          this.stored -= held.bytes.byteLength;
+        held = null;
+      }
+    };
+    let position = range?.offset ?? 0;
+    const end = range ? position + range.length : data.byteLength;
+    return new ReadableStream<Uint8Array>(
+      {
+        pull(out) {
+          if (!data || position >= end) {
+            release();
+            out.close();
+            return;
+          }
+          const next = Math.min(position + 65536, end);
+          out.enqueue(data.slice(position, next));
+          position = next;
+        },
+        cancel() {
+          release();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+  }
+  capture(key: string, size: number, sha256: string): Capture | null {
+    if (
+      !Number.isSafeInteger(size) ||
+      size < 1 ||
+      size > this.itemLimit ||
+      !/^[a-f0-9]{64}$/.test(sha256) ||
+      !this.room(size)
+    )
+      return null;
+    this.pending += size;
+    this.pendingCount++;
+    let bytes: Uint8Array | null = new Uint8Array(size),
+      position = 0;
+    let hashing = false,
+      reserved = true;
+    const release = () => {
+      if (!reserved) return;
+      reserved = false;
+      this.pending -= size;
+      this.pendingCount--;
+    };
+    const discard = () => {
+      if (bytes) {
+        bytes.fill(0);
+        bytes = null;
+      }
+      // A cancelled digest may still hold an internal copy until it settles.
+      if (!hashing) release();
+    };
+    return {
+      chunk(value) {
+        if (bytes && position + value.byteLength <= size) {
+          bytes.set(value, position);
+          position += value.byteLength;
+        } else discard();
+      },
+      complete: async () => {
+        if (hashing) return;
+        if (!bytes || position !== size) {
+          discard();
+          return;
+        }
+        hashing = true;
+        try {
+          const digest = Array.from(
+            new Uint8Array(
+              await crypto.subtle.digest(
+                "SHA-256",
+                bytes as Uint8Array<ArrayBuffer>,
+              ),
+            ),
+            (b) => b.toString(16).padStart(2, "0"),
+          ).join("");
+          if (!bytes || digest !== sha256) {
+            discard();
+            return;
+          }
+          const saved = bytes;
+          bytes = null;
+          release();
+          this.delete(key);
+          if (this.room(size)) {
+            this.entries.set(key, {
+              bytes: saved,
+              expires: Date.now() + this.ttl,
+              readers: 0,
+              removed: false,
+            });
+            this.stored += size;
+          }
+        } catch {
+          discard();
+        } finally {
+          hashing = false;
+          release();
+        }
+      },
+      discard,
+    };
+  }
+}
+const derivedImages = new DerivedImageCache();
 /** verifiedChild is INTERNAL ONLY: the Stream adapter must verify its opaque child signature before calling. */
 export async function authorizeMediaRequest(
   request: Request,
@@ -455,6 +668,8 @@ function guardedObjectBody(
   length: number,
   signal: AbortSignal,
   revalidate: () => Promise<boolean>,
+  capture?: Capture | null,
+  discardCached?: () => void,
 ) {
   const reader = source.getReader();
   let stopped = false,
@@ -472,6 +687,8 @@ function guardedObjectBody(
   const abort = () => {
     if (stopped) return;
     stopped = true;
+    capture?.discard();
+    discardCached?.();
     cleanup();
     void reader.cancel().catch(() => {});
     destination.error(new Error("MEDIA_DELIVERY_FAILED"));
@@ -513,12 +730,15 @@ function guardedObjectBody(
           if (stopped) return;
           if (next.done) {
             if (bytes !== length) return abort();
+            await capture?.complete();
+            if (stopped) return;
             stopped = true;
             cleanup();
             out.close();
           } else {
             bytes += next.value.byteLength;
             if (bytes > length) return abort();
+            capture?.chunk(next.value);
             out.enqueue(next.value);
           }
         } catch {
@@ -528,6 +748,8 @@ function guardedObjectBody(
       cancel() {
         if (stopped) return;
         stopped = true;
+        capture?.discard();
+        discardCached?.();
         cleanup();
         void reader.cancel().catch(() => {});
       },
@@ -540,6 +762,7 @@ export async function handleMediaDelivery(
   request: Request,
   env: MediaReadEnv,
   fetcher: typeof fetch = fetch,
+  cache: DerivedImageCache = derivedImages,
 ): Promise<Response> {
   let child: Awaited<ReturnType<typeof decodeStreamChild>>;
   try {
@@ -563,6 +786,7 @@ export async function handleMediaDelivery(
       : env.DERIVED_BUCKET;
   if (!bucket) return failure("INTERNAL_ERROR");
   let range: ReturnType<typeof rangeOf>, body: ReadableStream | undefined;
+  let capture: Capture | null = null;
   try {
     range = rangeOf(
       request.headers.has("if-range") ? null : request.headers.get("range"),
@@ -576,38 +800,50 @@ export async function handleMediaDelivery(
   }
   try {
     if (!(await gate.revalidate())) return failure("NOT_FOUND");
-    const value = await boundedObjectGet(bucket, asset.key!, {
-      ...(range ? { range } : {}),
-      ...(asset.etag ? { onlyIf: { etagMatches: asset.etag } } : {}),
-    });
-    if (!value || !("body" in value)) throw new MediaReadError("NOT_FOUND");
-    body = value.body;
-    if (
-      value.key !== asset.key ||
-      value.size !== asset.size ||
-      (asset.version && value.version !== asset.version) ||
-      (asset.etag && value.etag !== asset.etag) ||
-      (asset.provider === "r2_delivery" &&
-        value.customMetadata?.sha256 !== asset.sha256) ||
-      (range &&
-        (!value.range ||
-          !("offset" in value.range) ||
-          value.range.offset !== range.offset ||
+    const cacheKey =
+      !gate.original && asset.provider === "r2_delivery"
+        ? cache.key(env.SUPABASE_URL!, bucket, asset)
+        : null;
+    body = cacheKey ? (cache.read(cacheKey, range) ?? undefined) : undefined;
+    if (!body) {
+      const value = await boundedObjectGet(bucket, asset.key!, {
+        ...(range ? { range } : {}),
+        ...(asset.etag ? { onlyIf: { etagMatches: asset.etag } } : {}),
+      });
+      if (!value || !("body" in value)) throw new MediaReadError("NOT_FOUND");
+      body = value.body;
+      if (
+        value.key !== asset.key ||
+        value.size !== asset.size ||
+        (asset.version && value.version !== asset.version) ||
+        (asset.etag && value.etag !== asset.etag) ||
+        (asset.provider === "r2_delivery" &&
+          value.customMetadata?.sha256 !== asset.sha256) ||
+        (range &&
+          (!value.range ||
+            !("offset" in value.range) ||
+            value.range.offset !== range.offset ||
+            !("length" in value.range) ||
+            value.range.length !== range.length))
+      )
+        bad();
+      if (
+        !range &&
+        value.range &&
+        (!("offset" in value.range) ||
+          value.range.offset !== 0 ||
           !("length" in value.range) ||
-          value.range.length !== range.length))
-    )
-      bad();
-    if (
-      !range &&
-      value.range &&
-      (!("offset" in value.range) ||
-        value.range.offset !== 0 ||
-        !("length" in value.range) ||
-        value.range.length !== asset.size)
-    )
-      bad();
-    if (request.signal.aborted || !(await gate.revalidate()))
+          value.range.length !== asset.size)
+      )
+        bad();
+      if (cacheKey && !range)
+        capture = cache.capture(cacheKey, asset.size!, asset.sha256!);
+    }
+    if (request.signal.aborted || !(await gate.revalidate())) {
+      capture?.discard();
+      if (cacheKey) cache.delete(cacheKey);
       throw new MediaReadError("NOT_FOUND");
+    }
     const headers = new Headers({
       "cache-control": "private, no-store",
       "content-type": asset.contentType,
@@ -634,12 +870,15 @@ export async function handleMediaDelivery(
         range?.length ?? asset.size!,
         request.signal,
         gate.revalidate,
+        capture,
+        cacheKey ? () => cache.delete(cacheKey) : undefined,
       ),
       { status: range ? 206 : 200, headers },
     );
     body = undefined;
     return response;
   } catch (error) {
+    capture?.discard();
     if (body) void body.cancel().catch(() => {});
     return mediaFailure(error);
   }

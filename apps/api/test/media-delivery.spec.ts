@@ -2,9 +2,254 @@ import { expect, it, vi } from "vitest";
 import { errors } from "@koko/contract";
 import {
   authorizeMediaRequest,
+  DerivedImageCache,
   handleMediaDelivery,
   type MediaReadEnv,
+  type AuthorizedAsset,
 } from "../src/media-delivery";
+async function sha(bytes: Uint8Array) {
+  return Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>),
+    ),
+    (b) => b.toString(16).padStart(2, "0"),
+  ).join("");
+}
+async function cacheFixture(original = false) {
+  const f = fixture(original),
+    bytes = new TextEncoder().encode("0123456789"),
+    cache = new DerivedImageCache();
+  f.chosen.sha256 = await sha(bytes);
+  f.get.mockImplementation(async (key, options) => {
+    const range = options?.range as
+      { offset: number; length: number } | undefined;
+    return {
+      key,
+      size: 10,
+      version: "version",
+      etag: "b".repeat(32),
+      customMetadata: { sha256: f.chosen.sha256 },
+      range,
+      body: new ReadableStream({
+        start(out) {
+          out.enqueue(
+            range
+              ? bytes.slice(range.offset, range.offset + range.length)
+              : bytes,
+          );
+          out.close();
+        },
+      }),
+    } as unknown as R2ObjectBody;
+  });
+  return {
+    ...f,
+    cache,
+    run: (req = request("webp-600", original)) =>
+      handleMediaDelivery(req, f.env, f.fetcher, cache),
+  };
+}
+
+it("derived cache saves complete hash-verified bytes, yet every hit runs fresh Auth and policy with no-store", async () => {
+  const f = await cacheFixture();
+  expect(await (await f.run()).text()).toBe("0123456789");
+  expect(f.cache.metrics()).toMatchObject({
+    entries: 1,
+    storedBytes: 10,
+    pendingBytes: 0,
+  });
+  const hit = await f.run();
+  expect(await hit.text()).toBe("0123456789");
+  expect(hit.headers.get("cache-control")).toBe("private, no-store");
+  expect(f.get).toHaveBeenCalledTimes(1);
+  expect(f.calls).toHaveLength(6);
+  expect(f.fetcher).toHaveBeenCalledTimes(12);
+  expect(f.cache.metrics().hits).toBe(1);
+  const range = request();
+  range.headers.set("range", "bytes=2-4");
+  expect(await (await f.run(range)).text()).toBe("234");
+  expect(f.get).toHaveBeenCalledTimes(1);
+});
+it.each([
+  "ACCOUNT_BANNED",
+  "NOT_FOUND",
+  "PUBLICATION_STOPPED",
+  "CONSENT_REQUIRED",
+])("cache never bypasses fresh %s denial", async (codeName) => {
+  const f = await cacheFixture();
+  await (await f.run()).arrayBuffer();
+  f.setResult({ code: codeName });
+  await code(await f.run(), codeName as keyof typeof errors);
+  expect(f.get).toHaveBeenCalledTimes(1);
+  expect(f.cache.metrics().hits).toBe(0);
+});
+it("post generation change and bucket replacement miss the old cache", async () => {
+  const f = await cacheFixture();
+  await (await f.run()).arrayBuffer();
+  f.chosen.post_version++;
+  await (await f.run()).arrayBuffer();
+  expect(f.get).toHaveBeenCalledTimes(2);
+  f.env.DERIVED_BUCKET = { get: f.get };
+  await (await f.run()).arrayBuffer();
+  expect(f.get).toHaveBeenCalledTimes(3);
+});
+it("cache namespace excludes user tokens and separates backend/event/post/version/variant/hash", () => {
+  const cache = new DerivedImageCache(),
+    bucket = {};
+  const a: AuthorizedAsset = {
+    eventId,
+    postId,
+    postVersion: 1,
+    assetId,
+    provider: "r2_delivery",
+    purpose: "delivery_600_webp",
+    key: asset.object_key,
+    sha256: asset.sha256,
+    size: 10,
+    contentType: "image/webp",
+    version: null,
+    etag: null,
+    streamUid: null,
+    durationSeconds: null,
+  };
+  const key = cache.key("backend", bucket, a);
+  for (const patch of [
+    { eventId: userId },
+    { postId: userId },
+    { postVersion: 2 },
+    { assetId: userId },
+    { purpose: "delivery_1600_webp" },
+    { sha256: "c".repeat(64) },
+    { size: 11 },
+    { key: "another" },
+  ])
+    expect(cache.key("backend", bucket, { ...a, ...patch })).not.toBe(key);
+  expect(cache.key("other-backend", bucket, a)).not.toBe(key);
+  expect(cache.key("backend", {}, a)).not.toBe(key);
+  expect(key).not.toContain("Bearer");
+});
+it("originals and partial responses never enter derived cache", async () => {
+  const f = await cacheFixture(true);
+  await (await f.run()).arrayBuffer();
+  await (await f.run()).arrayBuffer();
+  expect(f.get).toHaveBeenCalledTimes(2);
+  expect(f.cache.metrics().entries).toBe(0);
+  const partial = await cacheFixture();
+  const req = request();
+  req.headers.set("range", "bytes=0-2");
+  await (await partial.run(req)).arrayBuffer();
+  expect(partial.cache.metrics().entries).toBe(0);
+});
+it("mismatched actual hash, truncated bodies and cancellation are never cached", async () => {
+  const bad = await cacheFixture();
+  bad.chosen.sha256 = "a".repeat(64);
+  await (await bad.run()).arrayBuffer();
+  expect(bad.cache.metrics()).toMatchObject({ entries: 0, pendingBytes: 0 });
+  const partial = await cacheFixture();
+  controlledBody(partial, new Uint8Array(9), true);
+  await expect((await partial.run()).arrayBuffer()).rejects.toThrow(
+    "MEDIA_DELIVERY_FAILED",
+  );
+  expect(partial.cache.metrics().pendingBytes).toBe(0);
+  const cancel = await cacheFixture();
+  const response = await cancel.run();
+  expect(cancel.cache.metrics().pendingBytes).toBe(10);
+  await response.body!.cancel();
+  expect(cancel.cache.metrics()).toMatchObject({ entries: 0, pendingBytes: 0 });
+});
+it.each(["cancel", "revoke"])(
+  "in-flight cache hit drops its reference on %s",
+  async (reason) => {
+    const f = await cacheFixture();
+    await (await f.run()).arrayBuffer();
+    if (reason === "revoke") vi.useFakeTimers();
+    try {
+      const hit = await f.run();
+      expect(f.cache.metrics().hits).toBe(1);
+      if (reason === "cancel") await hit.body!.cancel();
+      else {
+        f.setResult({ code: "NOT_FOUND" });
+        await vi.advanceTimersByTimeAsync(5000);
+        await expect(hit.arrayBuffer()).rejects.toThrow(
+          "MEDIA_DELIVERY_FAILED",
+        );
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(f.cache.metrics()).toMatchObject({
+      entries: 0,
+      storedBytes: 0,
+      pendingBytes: 0,
+    });
+  },
+);
+it("cache TTL is fixed, LRU/count and aggregate pending-plus-stored bytes are bounded", async () => {
+  const cache = new DerivedImageCache(),
+    one = new Uint8Array([1]),
+    hash = await sha(one);
+  for (let n = 0; n < 16; n++) {
+    const c = cache.capture(String(n), 1, hash)!;
+    c.chunk(one);
+    await c.complete();
+  }
+  const active = cache.read("0", null)!;
+  await new Response(active).arrayBuffer();
+  const next = cache.capture("16", 1, hash)!;
+  next.chunk(one);
+  await next.complete();
+  expect(cache.metrics().entries).toBe(16);
+  expect(cache.read("1", null)).toBeNull();
+  const pinned = cache.read("0", null)!;
+  cache.delete("0");
+  expect(cache.metrics().storedBytes).toBe(16);
+  await pinned.cancel();
+  expect(cache.metrics().storedBytes).toBe(15);
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(Date.now() + 30001);
+    expect(cache.read("16", null)).toBeNull();
+    expect(cache.metrics().storedBytes).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+  const big = new Uint8Array(1024 * 1024),
+    bigHash = await sha(big);
+  const captures = Array.from({ length: 4 }, (_, i) =>
+    cache.capture(`pending-${i}`, big.length, bigHash)!,
+  );
+  expect(cache.capture("excess", 1, hash)).toBeNull();
+  expect(cache.capture("too-large", big.length + 1, bigHash)).toBeNull();
+  expect(cache.metrics().pendingBytes).toBe(4 * 1024 * 1024);
+  captures.forEach((c) => c.discard());
+  expect(cache.metrics().pendingBytes).toBe(0);
+});
+it("cancelled hash work keeps its reservation until settlement and cannot populate the cache", async () => {
+  const cache = new DerivedImageCache(),
+    bytes = new Uint8Array([1]);
+  const hash = await sha(bytes);
+  let resolve!: (value: ArrayBuffer) => void;
+  const digest = vi.spyOn(crypto.subtle, "digest").mockImplementationOnce(
+    () =>
+      new Promise<ArrayBuffer>((r) => {
+        resolve = r;
+      }),
+  );
+  try {
+    const capture = cache.capture("cancel-digest", 1, hash)!;
+    capture.chunk(bytes);
+    const pending = capture.complete();
+    capture.discard();
+    expect(cache.metrics().pendingBytes).toBe(1);
+    resolve(
+      new Uint8Array(hash.match(/../g)!.map((v) => parseInt(v, 16))).buffer,
+    );
+    await pending;
+    expect(cache.metrics()).toMatchObject({ entries: 0, pendingBytes: 0 });
+  } finally {
+    digest.mockRestore();
+  }
+});
 const eventId = "11111111-1111-4111-8111-111111111111",
   userId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   postId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -388,7 +633,7 @@ function controlledBody(
     size: 10,
     version: "version",
     etag: "b".repeat(32),
-    customMetadata: { sha256: asset.sha256 },
+    customMetadata: { sha256: f.chosen.sha256 },
     body: new ReadableStream({
       start(out) {
         if (bytes) out.enqueue(bytes);
