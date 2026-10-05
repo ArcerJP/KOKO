@@ -31,7 +31,7 @@ COPY apps/api/supabase/migrations apps/api/supabase/migrations
 USER node
 WORKDIR /app/apps/image
 ENTRYPOINT ["node"]
-CMD ["--test", "test/transform.test.mjs", "test/cli.test.mjs", "test/r2.test.mjs", "test/pipeline.test.mjs", "test/db.test.mjs", "test/runner.test.mjs", "test/service-auth.test.mjs", "test/service.test.mjs", "test/moderation.test.mjs", "test/moderation-db.test.mjs", "test/moderation-runner.test.mjs", "test/moderation-frames.test.mjs"]
+CMD ["--test", "test/transform.test.mjs", "test/cli.test.mjs", "test/r2.test.mjs", "test/pipeline.test.mjs", "test/db.test.mjs", "test/runner.test.mjs", "test/service-auth.test.mjs", "test/service.test.mjs", "test/moderation.test.mjs", "test/moderation-db.test.mjs", "test/moderation-runner.test.mjs", "test/moderation-frames.test.mjs", "test/evaluation.test.mjs"]
 
 # Explicit private HTTP service target; no deployment or IAM is configured here.
 FROM runtime AS service
