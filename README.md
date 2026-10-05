@@ -35,9 +35,10 @@ npm.cmd test
 npm.cmd run build
 npm.cmd exec --workspace @koko/web -- playwright install chromium
 npm.cmd run test:e2e
+npm.cmd run test:image:docker
 ```
 
-OpenAPIやエラー定義を更新した場合は`npm.cmd run contract:generate`で派生物を生成します。CIの検査範囲と未接続部分は[CI規約](docs/ci.md)を参照してください。
+最後の画像コンテナー検査にはDockerのLinux engineが必要です。OpenAPIやエラー定義を更新した場合は`npm.cmd run contract:generate`で派生物を生成します。CIの検査範囲と未接続部分は[CI規約](docs/ci.md)を参照してください。
 
 ## 主要なAI環境
 
@@ -63,6 +64,7 @@ KOKO/
 ├── .agents/skills/        反復可能なCodexワークフロー
 ├── apps/web/              Next.js撮影検証・トークン・Webテスト
 ├── apps/api/              Workers API基盤・初期SQL・APIテスト
+├── apps/image/            画像変換コア・ローカルCLI・Docker検証
 ├── packages/contract/     OpenAPI・生成型・契約・テスト
 ├── docs/                  正式な文書とADR
 ├── knowledge/raw/         原証拠（プライベート優先）
@@ -104,7 +106,7 @@ EditorConfigとPrettierで改行、空白、インデントを統一します。
 
 ## CI
 
-Pull Requestとmerge queueでPrettier、Markdownlint、OpenAPI/生成物、ESLint、TypeScript、契約単体/SQL統合・build、Web単体/統合・ブラウザ試験・production build、API実行環境テスト・dry-run buildを検査します。API配備の安全条件の回帰試験も既存のAPI Testsへ接続しています。Cloud Runのimage buildは未実装です。適用範囲と必須check登録は[CI規約](docs/ci.md)を参照してください。
+Pull Requestとmerge queueでPrettier、Markdownlint、OpenAPI/生成物、ESLint、TypeScript、契約単体/SQL統合・build、Web単体/統合・ブラウザ試験・production build、API実行環境テスト・dry-run buildを検査します。API配備の安全条件の回帰試験も既存のAPI Testsへ接続しています。[画像コア](apps/image/README.md)の型・合成画像/CLI試験・Docker image build/隔離実行も追加しました。Cloud RunのHTTP入口と実配備は未実装です。適用範囲と必須check登録は[CI規約](docs/ci.md)を参照してください。
 
 GitHub ActionsへのAPI配備移行と初回・自動配備は確認済みです。最新の停止状態、障害原因と権限修正の結果は[クラウド準備](docs/product/cloud-setup.md#2026-10-03の配備障害と再発防止)を参照してください。配備・Secret変更・障害復旧・会話中断後の再開では[api-deployment Skill](.agents/skills/api-deployment/SKILL.md)を使用します。
 
