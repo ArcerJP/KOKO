@@ -4,13 +4,15 @@
 
 ## 分担と現在地
 
+B2-1の[認証HTTP入口](../../apps/image/README.md#認証http入口画像段階のみ既定off)をローカル実装しました。Google署名・固定aud・許可サービス主体、本文/header/同時実行の上限、最小応答を自動試験します。実IAM/接続/配備は未実施で、200は画像段階のみ。consumer・画像記録済みからのAI回復・公開の完成ではありません。また初回Google利用者のイベント加入経路の不足を確認し、第1の残実装に含めます。
+
 2026-10-06の今回限定進行：第1〜第3のコード実装を1本のDraft PRへ目的別commitで積み、途中レビュー/merge待ちを省略します。Privateの試験手順・進捗も同様に1本へ集約。通常の小PR運用、独立した最終レビュー、秘密・権限・課金・実配備・mergeの本人ゲートは変更しません。共同研究者の実機/運用試験を待たず独立した実装を進めますが、未実施を成功と記録しません。第3の保存/運営者個別取得と第5の一括exportの境界は[要件](requirements.md#非機能要件測定上の境界)を参照してください。
 
 B1-7/B2-1の[画像変換コア](../../apps/image/README.md)をローカル追加しました。単一HEIC decode、AI用1024 JPEG、閲覧用600/1600 WebP/JPEG、metadata除去と原本不変、期限/同時実行制御、上書きしないCLI、実Dockerfileとimage CIを含みます。試験は自作の合成HEIC等で、実機HEIC/HDR/色再現・Cloud Run HTTP/認証・R2保存・Queue consumer・AI・公開・負荷は未受入です。B1-7/B2-1全体は未完了とします。
 
 続くB2-1の[非公開R2ストレージadapter](../../apps/image/README.md#非公開r2ストレージadapterb2-1の一部既定off)は、既定OFFで固定開発バケットへの原本GET・派生物条件付きPUT/再送照合をローカル実装しました。署名資格情報の用途分離、原本不変、AI縮小物の非保存、本文/期限の上限、内容不一致・曖昧結果の拒否を合成HTTPで検証します。実鍵/権限設定・実R2・consumer/HTTP接続は未実施です。
 
-次のB2-1内部接続として[画像処理pipeline](../../apps/image/README.md#内部画像処理pipelineb2-1の一部既定off)を追加しました。DB確認callbackを必須とし、原本取得→変換→全出力検査→4非公開保存→最終確認を既定OFFで接続。合成HEICと模擬R2で再送・部分失敗・古い処理の停止を検証します。続く[画像処理のDB確定](../../apps/api/README.md#画像処理のdb確定b2-1の一部実環境未接続)ではservice限定のclaim/check/finishを追加し、処理lease・4asset予約・全receiptの原子的記録と再送/停止/BANをローカルSQLで検証しました。[DB clientと内部runner](../../apps/image/README.md#db接続と内部runnerb2-1の一部既定off)も接続し、固定RPC・期限/応答制限・7地点check・保存後finishと曖昧結果の保留を模擬通信/実decoderで検証します。画像段階だけの記録であり、実DB適用/実通信・認証HTTP・consumer・AI/公開は未完了です。B2-1全体の完了ではありません。
+次のB2-1内部接続として[画像処理pipeline](../../apps/image/README.md#内部画像処理pipelineb2-1の一部既定off)を追加しました。DB確認callbackを必須とし、原本取得→変換→全出力検査→4非公開保存→最終確認を既定OFFで接続。合成HEICと模擬R2で再送・部分失敗・古い処理の停止を検証します。続く[画像処理のDB確定](../../apps/api/README.md#画像処理のdb確定b2-1の一部実環境未接続)ではservice限定のclaim/check/finishを追加し、処理lease・4asset予約・全receiptの原子的記録と再送/停止/BANをローカルSQLで検証しました。[DB clientと内部runner](../../apps/image/README.md#db接続と内部runnerb2-1の一部既定off)も接続し、固定RPC・期限/応答制限・7地点check・保存後finishと曖昧結果の保留を模擬通信/実decoderで検証します。画像段階だけの記録であり、実DB適用/実通信・認証HTTPの実受入・consumer・AI/公開は未完了です。B2-1全体の完了ではありません。
 
 規約・実機検証は共同研究者、主なコード修正・自動検証は技術担当が進めます。結果待ちに依存しない実装は並行し、未受入を成功と扱いません。分担・試験依頼MDと結果の管理は[共同検証の手順](../collaborator-setup.md#共同検証の分担と記録)を参照してください。
 

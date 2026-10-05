@@ -43,7 +43,7 @@
 | .github/tests/                     | 配備の安全条件の回帰試験               | CI/CDテスト           | ローカル・PRでの配備境界検証の正本           | npm test・API Tests・配備前検証時                                          | 実資格情報・実配備を使わない                           | 合成fixtureとソースのみ追跡                                        | 対象と同時に保守         |
 | apps/web/                          | Next.js UI・認証・中継・Web試験        | プロダクト            | トークン・FE実装の正本                       | FE変更時                                                                   | K-07と契約を維持                                       | ソースを追跡、build/秘密は対象外                                   | プロダクトライフサイクル |
 | apps/api/                          | BEのSQL・Workers基盤とAPIテスト        | プロダクト            | DB migration・BE実装の正本                   | DB/API変更時                                                               | 適用済みSQLは新migrationで変更                         | ソースを追跡、秘密/データは対象外                                  | プロダクトライフサイクル |
-| apps/image/                        | 画像変換コア・ローカルCLI・Docker検証  | プロダクト            | 画像処理実装の正本                           | 画像処理/CI変更時                                                          | 変換と保存/公開を分離し、合成入力で検証                | ソース/合成fixtureを追跡、実写真/派生物/build/秘密は除外           | プロダクトライフサイクル |
+| apps/image/                        | 画像変換・認証HTTP・CLI・Docker検証    | プロダクト            | 画像処理実装の正本                           | 画像処理/CI変更時                                                          | 変換と保存/公開を分離し、合成入力で検証                | ソース/合成fixtureを追跡、実写真/派生物/build/秘密は除外           | プロダクトライフサイクル |
 | packages/contract/                 | FE/BE共有API・状態・キー・エラー・試験 | 契約                  | コード化した共通契約の正本                   | FE/BEの境界変更時                                                          | OpenAPIから型を生成し双方レビュー                      | 正本と生成型/表を追跡、distは対象外                                | バージョンを管理して更新 |
 | docs/product/                      | 現在の要件・段階別計画・契約承認       | 規範的文書            | 要件/計画/第0日状況の正本                    | プロダクト作業時                                                           | 未実装・未承認と事実を区別                             | 公開可能な要件だけ追跡                                             | 継続更新                 |
 | eslint.config.mjs                  | JS/TSの静的解析                        | 開発設定              | Linter規則の正本                             | ソース変更・CI時                                                           | 生成物は正本の試験で検証                               | 追跡対象                                                           | 永続、更新可能           |
@@ -52,7 +52,7 @@ apps/web内では、`src/api/approved-terms.ts`が採択本文の選択入口（
 
 ## 登録表の保守
 
-`apps/image/src/`に変換・CLI・R2 adapterと既定無効の内部pipeline、`test/`に自作素材と検証を保持し、現仕様は[画像コアREADME](../../apps/image/README.md)に集約します。トップレベルの追加や新しい指示ファイルは不要です。
+`apps/image/src/`に変換・CLI・R2/DB adapter・内部runnerと既定無効の認証HTTP入口、`test/`に自作素材と検証を保持し、現仕様は[画像コアREADME](../../apps/image/README.md)に集約します。HTTPの採用理由は[ADR-0007](../decisions/ADR-0007-private-image-service.md)。実装と合成試験は公開追跡し、実鍵/画像/実行時envは除外します。既存apps/imageの責務拡張なのでトップレベルの追加や新しい指示ファイルは不要です。
 
 `apps/web/src/media/upload-queue*`は端末内送信状態・IndexedDB adapter・再開engine、`src/components/upload-*`はroot常駐実行と投稿UI、`src/app/upload/`は既定無効の認証入口です。実装は公開ソースとして追跡し、Blob/実本人/端末DBはGitへ置きません。`e2e/upload-harness.tsx`は試験時だけbundleする合成UIで、本番route/publicには配置しません。構成変更時に同じ試験と[ADR-0006](../decisions/ADR-0006-durable-browser-upload-queue.md)を照合します。
 

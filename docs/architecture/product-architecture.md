@@ -4,18 +4,18 @@
 
 ## 実行先と責務
 
-| 領域           | 採用する構成                               | 第0日の成果物                       | 後続の実装                                                           |
-| -------------- | ------------------------------------------ | ----------------------------------- | -------------------------------------------------------------------- |
-| FE             | Next.js App Router・TypeScript、Vercel     | `apps/web`のトークン                | UI・OAuth callback/セッション・MSW・実機検証                         |
-| API            | TypeScript、Cloudflare Workers             | `apps/api`のSQL、共有API契約        | 認証/認可、原本PUT署名、状態、管理API、配信ゲート                    |
-| DB/認証        | Supabase Postgres・Auth（Googleのみ）      | 全14テーブル・RLSと適用テスト       | プロジェクト作成、OAuth、migration適用、実JWT統合試験                |
-| 原本/派生物    | Cloudflare R2の別々の非公開バケット        | キー命名、資産/保持/削除メタデータ  | PUT/multipart、lock、変換、内部cache、失効                           |
-| 画像処理       | Google Cloud Run、Node.jsコンテナ          | 実行境界の決定                      | 変換コア/Docker/CIをローカル実装。実機受入・HTTP/IAM・R2接続は未完了 |
-| 動画処理       | Cloudflare Stream                          | 原本/取込UID/clip UID・duration契約 | 取込、clip、署名webhook、HLS/MP4検証                                 |
-| 非同期処理     | Cloudflare Queues＋DB outbox               | outboxのスキーマと原子性契約        | 配送・再試行・重複排除・取りこぼし回収                               |
-| モデレーション | OpenAI・Google Cloud Vision SafeSearch/OCR | 合議・fail-closedの契約             | アダプター、quota/timeout、校正と当日調整                            |
-| 運営           | Discord、管理画面。後日rclone→Google Drive | 監査/通知/保持の契約                | webhook、運用script、会場運営、export                                |
-| 共通           | npm workspaces・TypeScript                 | `packages/contract`、型/テスト/CI   | FE/BEから共通import                                                  |
+| 領域           | 採用する構成                               | 第0日の成果物                       | 後続の実装                                                          |
+| -------------- | ------------------------------------------ | ----------------------------------- | ------------------------------------------------------------------- |
+| FE             | Next.js App Router・TypeScript、Vercel     | `apps/web`のトークン                | UI・OAuth callback/セッション・MSW・実機検証                        |
+| API            | TypeScript、Cloudflare Workers             | `apps/api`のSQL、共有API契約        | 認証/認可、原本PUT署名、状態、管理API、配信ゲート                   |
+| DB/認証        | Supabase Postgres・Auth（Googleのみ）      | 全14テーブル・RLSと適用テスト       | プロジェクト作成、OAuth、migration適用、実JWT統合試験               |
+| 原本/派生物    | Cloudflare R2の別々の非公開バケット        | キー命名、資産/保持/削除メタデータ  | PUT/multipart、lock、変換、内部cache、失効                          |
+| 画像処理       | Google Cloud Run、Node.jsコンテナ          | 実行境界の決定                      | 変換・認証HTTP/Docker/CIをローカル実装。実機・実IAM・R2接続は未受入 |
+| 動画処理       | Cloudflare Stream                          | 原本/取込UID/clip UID・duration契約 | 取込、clip、署名webhook、HLS/MP4検証                                |
+| 非同期処理     | Cloudflare Queues＋DB outbox               | outboxのスキーマと原子性契約        | 配送・再試行・重複排除・取りこぼし回収                              |
+| モデレーション | OpenAI・Google Cloud Vision SafeSearch/OCR | 合議・fail-closedの契約             | アダプター、quota/timeout、校正と当日調整                           |
+| 運営           | Discord、管理画面。後日rclone→Google Drive | 監査/通知/保持の契約                | webhook、運用script、会場運営、export                               |
+| 共通           | npm workspaces・TypeScript                 | `packages/contract`、型/テスト/CI   | FE/BEから共通import                                                 |
 
 第1要件ではNext.jsの撮影検証画面、Mediabunnyの端末内Worker、生成型を使うAPI境界、MSWのHTTP試験、Googleログイン導線、WorkerのBearer本人情報APIを実装しています。2026-10-04に規約同意APIとDB関数、既定無効のCookie認証・CSRF受信境界、Web内部のCookie発行・更新・削除処理と本人情報中継、API Cookieを含む条件付きログアウトをローカル追加しました。Webではcallbackが作るログイン世代と検証済みAuthセッションを結び付け、終了/再ログイン後の旧発行応答を中継で拒否します（[ADR-0004](../decisions/ADR-0004-web-session-generation.md)）。現在の実装・未完了は[開発計画](../product/development-plan.md)、Cookie発行・終了・中継プロトコルは[Web README](../../apps/web/README.md)、受信・同意保存のtransaction・未適用の境界は[API README](../../apps/api/README.md)を正本とします。本人情報・表示名・規約同意画面は操作時Cookie更新・fresh CSRF・状態破棄を条件付き実装しました。採択本文の一覧は空で、本文/現行版が一致する場合だけ明示同意を許可する設計です。正式本文の採択と実環境でのAccess認証は未完了で、アプリ全体の認証ゲートを完成扱いにしません。ローカル試験と実クラウドの受入証拠は[クラウド準備](../product/cloud-setup.md)、撮影処理と実機の制約は[撮影検証](../product/stage-one-capture.md)へ分離し、ここへ進捗の完全な複製を置きません。
 
@@ -25,7 +25,7 @@ TypeScriptは型生成ツールのpeer範囲を優先して5.9.3を固定して�
 
 第6要件からのiOS/Androidは同じAPI/DBを利用する方針です。[クライアント境界・認証・ストア対応](native-readiness.md)を維持し、現Web UIやCookie方式に業務ロジックを閉じ込めません。実装方式は未選定です。動画長と配信方式の選択には[費用方針](../product/cost-policy.md)を適用します。
 
-画像処理の変換コアとローカル受入CLIは[apps/image](../../apps/image/README.md)へ分離します。Workers/Webへnative decoderを混入させず、採用済みCloud Run/Node.js境界を維持。現在のDockerfileはコアのCLIを実行するもので、Cloud Run serviceのHTTP待受・認証・R2接続はまだありません。
+画像処理は[apps/image](../../apps/image/README.md)へ分離し、Workers/Webへnative decoderを混入させません。CLIの既定入口を維持し、[ADR-0007](../decisions/ADR-0007-private-image-service.md)に従う認証HTTPをDockerの明示的なservice targetへ追加しました。Google署名・宛先・許可主体を検証して内部runnerへ渡すローカル実装で、実Cloud Run IAM・token取得・DB/R2接続・配備は未受入です。
 
 ## 信頼境界
 

@@ -17,11 +17,11 @@ sharp既定相当の268,402,689画素制限とdecoder/メモリ/期限の実行�
 
 15秒は停止要求を出す期限です。native処理の終了待ちを含む厳密な応答時間の上限ではなく、停止完了までは次の変換枠を開放しません。
 
-**これはCloud Run向けの変換コアとローカルCLIの段階です。** 固定R2キーの取得/保存adapterは下記の合成試験までで、HTTP待受/サービス間認証、DB/Queue consumerとの接続、判定・公開は未実装。CLIコンテナーをそのままCloud Run serviceへ配備できるとは扱いません。実機HEIC、HDR/広色域/特殊な向き、巨大/破損画像の網羅、30投稿/分・公開中央値60秒も未受入です。特にWASMのRGBA出力に原本ICCを移さないため、実機の色再現を確認するまで本番有効化しません。
+変換コア・ローカルCLIに加え、下記の**既定OFFの認証HTTP入口**をローカル実装しました。固定R2/DBのadapterは合成試験までで、実IAM/DB/R2、Queue consumer、判定・公開は未接続です。CLIコンテナーの既定入口は変更せず、HTTPは明示したDocker targetに分離します。実機HEIC、HDR/広色域/特殊な向き、巨大/破損画像の網羅、30投稿/分・公開中央値60秒も未受入です。特にWASMのRGBA出力に原本ICCを移さないため、実機の色再現を確認するまで本番有効化しません。
 
 ## 非公開R2ストレージadapter（B2-1の一部・既定OFF）
 
-`src/r2.ts`の`createImageR2Store`は内部のprovider adapterです。`KOKO_IMAGE_R2_ENABLED`が小文字`true`に完全一致しない場合はnull。CLI/HTTPから呼び出さず、実行時環境変数も自動で読みません。現段階で設定・tokenを追加する必要はありません。
+`src/r2.ts`の`createImageR2Store`は内部のprovider adapterです。`KOKO_IMAGE_R2_ENABLED`が小文字`true`に完全一致しない場合はnull。単体では実行時環境変数を読まず、CLIからも呼びません。有効化したHTTPサービスのみ下記のサーバー構成を通して接続します。現段階で設定・tokenを追加する必要はありません。
 
 - 固定の開発用`koko-dev-originals`はGETのみ、`koko-dev-derived`はPUTと再送照合用GETのみ。任意URL/バケット/キーを入力にせず、固定R2 hostと`@koko/contract`の`originalKey`/`deliveryKey`から構成。LIST/DELETE/原本PUT・署名URL生成なし。
 - 将来の設定は`R2_ACCOUNT_ID`と、原本読取り専用の`R2_ORIGINAL_READ_ACCESS_KEY_ID`/`R2_ORIGINAL_READ_SECRET_ACCESS_KEY`、派生物読書き専用の`R2_DERIVED_ACCESS_KEY_ID`/`R2_DERIVED_SECRET_ACCESS_KEY`。同じkey IDを両用途へ設定することを拒否。実際のbucket限定権限は外部での本人確認が別途必要で、設定名だけでは最小権限を保証しない。
@@ -50,7 +50,7 @@ sharp既定相当の268,402,689画素制限とdecoder/メモリ/期限の実行�
 
 ## DB接続と内部runner（B2-1の一部・既定OFF）
 
-`src/db.ts`の`createImageDatabase`と`src/runner.ts`の`createImageRunner`で、DB claim→pipelineの7地点check→4保存→DB finishを接続します。いずれも`enabled: true`の明示と正しい依存が必要です。環境変数の自動読取り、HTTP待受、Queue consumer登録、CLIの実DB接続は追加しません。
+`src/db.ts`の`createImageDatabase`と`src/runner.ts`の`createImageRunner`で、DB claim→pipelineの7地点check→4保存→DB finishを接続します。いずれも`enabled: true`の明示と正しい依存が必要です。単体は環境変数やHTTPに依存せず、下記サービス構成が呼び出します。Queue consumer登録、CLIの実DB接続はありません。
 
 - **DB設定**：信頼するサーバー設定の`supabaseUrl`・`secretKey`だけを使う。HTTPSの20文字project ref＋`.supabase.co`のoriginに限定し、user info・port指定・path・query・fragmentを拒否。job/payloadから送信先や鍵を決めない。Secretは`apikey` headerだけで、Bearer/Cookie/ログ/戻り値へ複製しない。キー入力・登録は今回未実施。
 - **RPC**：固定の`/rest/v1/rpc/manage_image_processing`へPOST。redirect・cache・自動retryなし。既定/最大5秒でfetchとbodyをまとめて制限し、応答16KiB、200＋JSON＋厳格UTF-8、既知のcode/shapeだけ受理。エラー本文は返さず`DB_FAILED`、期限は`DB_TIMEOUT`。遅れて到着したbodyも破棄する。
@@ -64,6 +64,23 @@ sharp既定相当の268,402,689画素制限とdecoder/メモリ/期限の実行�
 DB client/runner試験は模擬RPCで通信契約・7地点の停止・曖昧なfinishを検証し、合成HEIC→実decoder→署名付き模擬R2→metadata確定→重複runまで通します。SQL/PGliteは別試験で、実PostgREST/実DBと画像処理を通した試験ではありません。同じ新規試験をDockerにも登録し、実IAM/DB適用/R2/Queue/実機/負荷は別の受入ゲートに残します。
 
 一次資料（2026-10-06確認）：[Supabase API keys](https://supabase.com/docs/guides/getting-started/api-keys)、[PostgREST RPC](https://docs.postgrest.org/en/stable/references/api/functions.html)。新SDK・実行依存・公開API型は追加せず、Workersの実装をNodeへ持ち込みません。
+
+## 認証HTTP入口（画像段階のみ・既定OFF）
+
+`service-auth.ts`でGoogle ID tokenを検証し、`service.ts`の限定HTTP handlerから既存runnerを呼びます。Node transportは`server.ts`、環境変数読取りと待受起動だけは`service-main.ts`。採用理由・比較は[ADR-0007](../../docs/decisions/ADR-0007-private-image-service.md)に記録します。
+
+- Cloud Run IAMで未認証呼出しを禁止する構成が前提。アプリ内でもRS256署名、Google issuer、設定済みservice originとのaud完全一致、許可service accountのemail/数値sub、email_verified、iat/exp・最大1時間を確認。通常のGoogle利用者ログインでは通らない。
+- 検証鍵は固定Google JWKSからのみ取得。JWT内の任意鍵/URLを採用せず、64KiB・5秒・redirect禁止、5分の鍵cacheと30秒のunknown-kid cooldown。JWT/claims/鍵/例外本文をログや応答へ出さない。
+- `Authorization: Bearer`だけを使用。Cookie/Origin/`X-Serverless-Authorization`併用を拒否し、forwarded identity headerを信用しない。Googleが後者の署名を除去する方式へ暗黙fallbackしない。実IAMとの通し試験は未実施。
+- `POST /internal/image`は認証後に最大1KiBのJSONを5秒以内で読み、eventId/postId/jobIdの3 UUIDだけ受理。任意URL/plan/鍵/画像は入力不可。1handlerにつき同時1件、busyは429。Node transportでもheader上限・重複Authorization拒否・読取り期限を設定。
+- 成功応答はstage/outcome/`processComplete:false`だけ。画像bytes・原本キー・DB plan・provider本文を返さない。HTTP 200をQueue ACK、AI完了、公開許可に使わない。画像記録済みからのAI回復と全process consumerは後続。
+- `GET /health`はready/disabledの固定状態だけ。Google/R2/DBへの疎通確認ではない。Cloud Run上ではこれもIAMの背後に置く。
+
+サービスを有効化するには`KOKO_IMAGE_SERVICE_ENABLED=true`に加え、`KOKO_IMAGE_SERVICE_AUDIENCE`（実サービスのHTTPS run.app origin、path/末尾slashなし）、`KOKO_IMAGE_CALLER_EMAIL`、`KOKO_IMAGE_CALLER_SUBJECT`が必要です。さらに既存R2設定と`SUPABASE_URL`/`SUPABASE_SECRET_KEY`をサーバー専用に渡します。不足時は固定構成エラーで起動せず、秘密値を出力しません。既定OFFなら秘密/構成を解決せずhealth以外404です。
+
+Dockerの`--target service`がHTTP専用入口です。importでlistenせず、起動時だけ`PORT`（既定8080）と0.0.0.0を使用。SIGTERMで新規接続を止め、8秒後に終了します。中断した処理は完了扱いにせず、DB leaseと再送照合へ委ねます。CLIのruntime/default targetは従来どおりです。
+
+**今はクラウドへ設定・配備しないでください。** サービス作成、IAM invoker限定、token取得方式、Secret登録、予算/instance上限、実DB migration、実R2権限を本人確認後に準備します。共有の長期サービス鍵を安易に発行せず、短命ID tokenを使う構成を実接続前に確定します。ライブラリは`jose` 6.2.12を直接依存/lockfileで固定し、JWT検証の自作実装を避けています。
 
 ## ローカル検証
 

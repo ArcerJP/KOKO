@@ -106,7 +106,7 @@ EditorConfigとPrettierで改行、空白、インデントを統一します。
 
 ## CI
 
-Pull Requestとmerge queueでPrettier、Markdownlint、OpenAPI/生成物、ESLint、TypeScript、契約単体/SQL統合・build、Web単体/統合・ブラウザ試験・production build、API実行環境テスト・dry-run buildを検査します。API配備の安全条件の回帰試験も既存のAPI Testsへ接続しています。[画像コア](apps/image/README.md)の型・合成画像/CLI試験・Docker image build/隔離実行も追加しました。Cloud RunのHTTP入口と実配備は未実装です。適用範囲と必須check登録は[CI規約](docs/ci.md)を参照してください。
+Pull Requestとmerge queueでPrettier、Markdownlint、OpenAPI/生成物、ESLint、TypeScript、契約単体/SQL統合・build、Web単体/統合・ブラウザ試験・production build、API実行環境テスト・dry-run buildを検査します。API配備の安全条件の回帰試験も既存のAPI Testsへ接続しています。[画像コア](apps/image/README.md)は型・合成画像/CLI・認証HTTP試験・Docker build/隔離実行を含みます。Cloud RunのHTTP入口は既定OFFでローカル実装し、実IAM・実配備は未受入です。適用範囲と必須check登録は[CI規約](docs/ci.md)を参照してください。
 
 GitHub ActionsへのAPI配備移行と初回・自動配備は確認済みです。最新の停止状態、障害原因と権限修正の結果は[クラウド準備](docs/product/cloud-setup.md#2026-10-03の配備障害と再発防止)を参照してください。配備・Secret変更・障害復旧・会話中断後の再開では[api-deployment Skill](.agents/skills/api-deployment/SKILL.md)を使用します。
 

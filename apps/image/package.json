@@ -17,6 +17,7 @@
     "@koko/contract": "0.1.0",
     "aws4fetch": "1.0.20",
     "heic-decode": "2.1.0",
+    "jose": "6.2.12",
     "sharp": "0.35.5"
   },
   "devDependencies": {
