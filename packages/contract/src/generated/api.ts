@@ -418,6 +418,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/admin/posts/{post_id}/original": {
+    parameters: {
+      query: {
+        expected_version: number;
+      };
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description 任意の単一byte range。複数rangeは拒否する。 */
+        Range?: string;
+      };
+      path: {
+        post_id: components["parameters"]["PostId"];
+      };
+      cookie?: never;
+    };
+    /**
+     * moderator以上が保存原本を監査付きで個別取得
+     * @description 現在のGoogle本人・イベント権限・同意・BAN・投稿世代を検査する。
+     *     BLOCK・削除済みは取得不可。R2の原本identityを照合し、公開URLや署名を返さない。
+     *     Content-Dispositionは固定安全名のattachment。private/no-store、nosniff、sandbox。
+     *     第3の個別取得であり、一括exportではない。
+     */
+    get: operations["getAdminOriginal"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/admin/posts/{post_id}/hide": {
     parameters: {
       query?: never;
@@ -460,7 +492,7 @@ export interface paths {
     put?: never;
     /**
      * moderator以上が非表示を解除（BLOCK・BAN・公開停止は解除不可）
-     * @description 保存済み判定と以前の公開状態を使用し、バージョン一致と配信準備を検証する。
+     * @description 保存済み判定と以前の公開状態を使用し、バージョン一致と配信準備を検証する。現在BAN中は復帰不可。BAN解除後も残る非公開ラッチの解除はadminの明示的な個別復帰だけに限る。
      */
     post: operations["restorePost"];
     delete?: never;
@@ -1060,6 +1092,8 @@ export interface components {
       version: number;
       publication_stopped: boolean;
       uploads_enabled: boolean;
+      /** @description 校正の承認状態。通常の設定PUTでは指定不可。閾値変更時はfalseへ戻る。 */
+      readonly thresholds_approved?: boolean;
       moderation_concurrency: number;
       /** @description 各エンジンのアダプターが正規化した0〜1スコア用。flagがblock以下であることを検証し、更新を監査。DBのmoderation_thresholdsへ配列として保存。 */
       thresholds: {
@@ -1752,6 +1786,53 @@ export interface operations {
         };
       };
       401: components["responses"]["Error"];
+      default: components["responses"]["Error"];
+    };
+  };
+  getAdminOriginal: {
+    parameters: {
+      query: {
+        expected_version: number;
+      };
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description 任意の単一byte range。複数rangeは拒否する。 */
+        Range?: string;
+      };
+      path: {
+        post_id: components["parameters"]["PostId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 保存済み原本のバイナリー。原本の再圧縮やmetadataの変更は行わない。 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/octet-stream": string;
+        };
+      };
+      /** @description 単一Rangeの部分応答。Content-Rangeを付与する。 */
+      206: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/octet-stream": string;
+        };
+      };
+      401: components["responses"]["Error"];
+      /** @description 範囲外または非対応のRange。空本文とContent-Range。 */
+      416: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       default: components["responses"]["Error"];
     };
   };
