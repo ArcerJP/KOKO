@@ -167,9 +167,9 @@ DLQ監視/回収、スキャンの滞留・負荷検証、未完了uploadの失�
 
 [SQL試験](../../packages/contract/test/media-dispatch.test.mjs)と[Worker試験](test/media-dispatch.spec.ts)で権限・期限/世代・原子性・有限再送・不正/重複/遅延・最小投影を検査します。PGlite単一接続と模擬Queueの成功を、多接続PostgreSQL競合・実Queue配送・変換完了の証拠にはしません。根拠（2026-10-05確認）：[Queues producer API](https://developers.cloudflare.com/queues/configuration/javascript-apis/)、[配送保証](https://developers.cloudflare.com/queues/reference/delivery-guarantees/)、[PostgreSQL行lock](https://www.postgresql.org/docs/current/sql-select.html#SQL-FOR-UPDATE-SHARE)。
 
-## 画像処理のDB確定（B2-1の一部、未接続）
+## 画像処理のDB確定（B2-1の一部、実環境未接続）
 
-`20261006000000_image_processing.sql`は、[内部画像pipeline](../image/README.md#内部画像処理pipelineb2-1の一部既定off)へ渡す処理計画と、4閲覧派生物の保存結果を管理します。実DBへは未適用で、HTTP/Queue consumerとの接続はありません。公開API契約・既存RLSを変更せず、`service_role`だけが`manage_image_processing(event, post, job, action, input)`を呼べます。`SECURITY INVOKER`・空のsearch_pathで、ブラウザへ公開しません。
+`20261006000000_image_processing.sql`は、[内部画像pipeline](../image/README.md#内部画像処理pipelineb2-1の一部既定off)へ渡す処理計画と、4閲覧派生物の保存結果を管理します。[Node側のDB client/内部runner](../image/README.md#db接続と内部runnerb2-1の一部既定off)は模擬RPCでローカル接続済みですが、実DBへは未適用で、HTTP入口/Queue consumerとの接続はありません。公開API契約・既存RLSを変更せず、`service_role`だけが`manage_image_processing(event, post, job, action, input)`を呼べます。`SECURITY INVOKER`・空のsearch_pathで、ブラウザへ公開しません。
 
 | action   | input                                | 成功時の範囲                                                                                                                                                      |
 | -------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |

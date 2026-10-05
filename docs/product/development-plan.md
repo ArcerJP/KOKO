@@ -1,6 +1,6 @@
 # KOKO 開発計画
 
-更新日：2026-10-06（B2-1の画像処理lease・派生asset予約・原子的DB記録をローカル実装。outbox→Queue配送、本人投稿画面、送信画面/端末キューも既定無効でローカル実装済み。実接続・申立て/削除・公開フィードの受入は未完了）。原開発計画v1.0の担当・タスクID・日程を維持し、追加指示の第6要件を追補します。要求の詳細は[要件](requirements.md)、契約合意は[第0日](day-zero.md)を参照してください。
+更新日：2026-10-06（B2-1の画像処理lease・派生asset予約・原子的DB記録に、DB通信clientと内部runnerを既定無効で接続。outbox→Queue配送、本人投稿画面、送信画面/端末キューもローカル実装済み。実接続・申立て/削除・公開フィードの受入は未完了）。原開発計画v1.0の担当・タスクID・日程を維持し、追加指示の第6要件を追補します。要求の詳細は[要件](requirements.md)、契約合意は[第0日](day-zero.md)を参照してください。
 
 ## 分担と現在地
 
@@ -8,7 +8,7 @@ B1-7/B2-1の[画像変換コア](../../apps/image/README.md)をローカル追�
 
 続くB2-1の[非公開R2ストレージadapter](../../apps/image/README.md#非公開r2ストレージadapterb2-1の一部既定off)は、既定OFFで固定開発バケットへの原本GET・派生物条件付きPUT/再送照合をローカル実装しました。署名資格情報の用途分離、原本不変、AI縮小物の非保存、本文/期限の上限、内容不一致・曖昧結果の拒否を合成HTTPで検証します。実鍵/権限設定・実R2・consumer/HTTP接続は未実施です。
 
-次のB2-1内部接続として[画像処理pipeline](../../apps/image/README.md#内部画像処理pipelineb2-1の一部既定off)を追加しました。DB確認callbackを必須とし、原本取得→変換→全出力検査→4非公開保存→最終確認を既定OFFで接続。合成HEICと模擬R2で再送・部分失敗・古い処理の停止を検証します。続く[画像処理のDB確定](../../apps/api/README.md#画像処理のdb確定b2-1の一部未接続)ではservice限定のclaim/check/finishを追加し、処理lease・4asset予約・全receiptの原子的記録と再送/停止/BANをローカルSQLで検証しました。画像段階だけの記録であり、実DB適用・pipelineからのDB通信・認証HTTP・consumer・AI/公開は未完了です。B2-1全体の完了ではありません。
+次のB2-1内部接続として[画像処理pipeline](../../apps/image/README.md#内部画像処理pipelineb2-1の一部既定off)を追加しました。DB確認callbackを必須とし、原本取得→変換→全出力検査→4非公開保存→最終確認を既定OFFで接続。合成HEICと模擬R2で再送・部分失敗・古い処理の停止を検証します。続く[画像処理のDB確定](../../apps/api/README.md#画像処理のdb確定b2-1の一部実環境未接続)ではservice限定のclaim/check/finishを追加し、処理lease・4asset予約・全receiptの原子的記録と再送/停止/BANをローカルSQLで検証しました。[DB clientと内部runner](../../apps/image/README.md#db接続と内部runnerb2-1の一部既定off)も接続し、固定RPC・期限/応答制限・7地点check・保存後finishと曖昧結果の保留を模擬通信/実decoderで検証します。画像段階だけの記録であり、実DB適用/実通信・認証HTTP・consumer・AI/公開は未完了です。B2-1全体の完了ではありません。
 
 規約・実機検証は共同研究者、主なコード修正・自動検証は技術担当が進めます。結果待ちに依存しない実装は並行し、未受入を成功と扱いません。分担・試験依頼MDと結果の管理は[共同検証の手順](../collaborator-setup.md#共同検証の分担と記録)を参照してください。
 

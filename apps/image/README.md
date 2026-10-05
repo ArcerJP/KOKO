@@ -40,13 +40,30 @@ sharp既定相当の268,402,689画素制限とdecoder/メモリ/期限の実行�
 `src/pipeline.ts`の`createImagePipeline`は、既存のR2 adapterと変換コアを接続します。`enabled: true`、store、信頼できるサーバー実装の`isCurrent(plan)`を明示した場合だけ生成し、それ以外は無効または構成エラー。環境変数の自動読取り・HTTP/Queue登録・新しいSecretはありません。
 
 - planにはDBで照合済みのjob、**画像処理用lease**、post version、期限、原本identity、予約済みの異なる4派生assetを渡す。既存Queueのdispatch leaseを画像処理leaseと流用しない。plan自体は認証情報でも認可の証拠でもなく、外部payloadを直渡ししない。
-- `isCurrent`は最新DBの所有者・job/lease/version・原本/予約asset・停止/BAN/削除等を検査する必須の読取りcallback。原本取得前、変換前、各保存前、全保存後に呼ぶ。strict true以外・例外・既定5秒の期限・plan失効は後続を止める。期限後にcallbackが成功しても再開しない。[DBのclaim/check/finish](../api/README.md#画像処理のdb確定b2-1の一部未接続)はローカルSQLとして追加済みだが、callbackからの実通信は未接続。
+- `isCurrent`は最新DBの所有者・job/lease/version・原本/予約asset・停止/BAN/削除等を検査する必須の読取りcallback。原本取得前、変換前、各保存前、全保存後に呼ぶ。strict true以外・例外・既定5秒の期限・plan失効は後続を止める。期限後にcallbackが成功しても再開しない。[DBのclaim/check/finish](../api/README.md#画像処理のdb確定b2-1の一部実環境未接続)と結ぶ内部runnerは下記に追加済み。実DB適用・実クラウド受入は未完了。
 - planと入力/生成bufferをsnapshotし、await中の呼出元変更から分離。1インスタンス1処理、実変換コアも同一process内1変換。サービス全体の同時実行数の保証ではない。
 - 原本の長さ・SHA-256と変換中の不変を照合し、5生成物すべての名前・形式・寸法・hashを検査してから、4閲覧用だけを条件付き保存。AI用1024 JPEGはメモリ内の戻り値のみ。実AI送信はしない。
 - 成功は`outcome: saved`と原本hash・AI用bytes・4保存receipt。**非公開保存の確認であり、投稿完了・判定通過・公開許可ではない。** 失敗は固定理由だけで、部分成功receipt、provider例外、秘密を返さない。
 - 部分保存、最終確認失敗、処理中のDB変更はあり得る。自動retry・rollback削除をせず、呼出元が同じ予約assetの条件付き再送と最新DBでの原子的確定へ接続する。保存前の確認とPUTの間の状態変更も、後段のDB確定/公開ゲートで拒否する必要がある。
 
-合成HEIC→実decoder→署名付き模擬R2→再送照合の通し試験、全7確認点での中断、部分保存失敗、期限・改変・不正出力を自動検証します。処理lease/asset予約・原子的DB記録のSQLは別途ローカル検証済みですが、実DB適用とpipeline接続、実R2、HTTP/IAM、Queue consumer、AI・公開・実機受入は未完了です。依存するcallback/store/transformは内部実装であり、この部品だけで処理全体の厳密な時間/メモリ上限を保証しません。
+合成HEIC→実decoder→署名付き模擬R2→再送照合の通し試験、全7確認点での中断、部分保存失敗、期限・改変・不正出力を自動検証します。処理lease/asset予約・原子的DB記録のSQLは別途ローカル検証済みですが、実DB適用・実R2・HTTP/IAM・Queue consumer・AI/公開・実機受入は未完了です。依存するcallback/store/transformは内部実装であり、この部品だけで処理全体の厳密な時間/メモリ上限を保証しません。
+
+## DB接続と内部runner（B2-1の一部・既定OFF）
+
+`src/db.ts`の`createImageDatabase`と`src/runner.ts`の`createImageRunner`で、DB claim→pipelineの7地点check→4保存→DB finishを接続します。いずれも`enabled: true`の明示と正しい依存が必要です。環境変数の自動読取り、HTTP待受、Queue consumer登録、CLIの実DB接続は追加しません。
+
+- **DB設定**：信頼するサーバー設定の`supabaseUrl`・`secretKey`だけを使う。HTTPSの20文字project ref＋`.supabase.co`のoriginに限定し、user info・port指定・path・query・fragmentを拒否。job/payloadから送信先や鍵を決めない。Secretは`apikey` headerだけで、Bearer/Cookie/ログ/戻り値へ複製しない。キー入力・登録は今回未実施。
+- **RPC**：固定の`/rest/v1/rpc/manage_image_processing`へPOST。redirect・cache・自動retryなし。既定/最大5秒でfetchとbodyをまとめて制限し、応答16KiB、200＋JSON＋厳格UTF-8、既知のcode/shapeだけ受理。エラー本文は返さず`DB_FAILED`、期限は`DB_TIMEOUT`。遅れて到着したbodyも破棄する。
+- **plan**：pipelineと同じsnapshot検査を共有し、job/event/postの一致、4asset・原本・処理版を照合。claim時に失効済み/異常に遠い期限を拒否（DBの120秒に時計差許容5秒）。JSONの形が正しいことだけを認可とせず、各段階でSQLの最新検査を呼ぶ。
+- **receipt**：finish前に4件すべての所属・一意性・整数/寸法/容量・hashを検査してsnapshot。DBへ送るのはplan・原本hash・4件のmetadataだけ。画像bytes・AI縮小物・任意URLは受け付けない。期限後のfinish再送はSQL側の「同一内容で既に記録済み」照合へ委ねる。
+- **runner**：1インスタンス1件。通常成功はclaim 1回＋check 7回＋finish 1回で、finishの`RECORDED`後だけ`image_recorded`とメモリ内AI用画像を返す。DB/変換/保存失敗・停止/旧leaseでは後続を止め、AI bytesや部分成功を返さない。これはプロセス全体・複数instanceの同時実行上限ではない。
+- **重複/曖昧結果**：`IMAGE_SAVED`は`image_already_recorded`という別の結果で、画像I/Oとfinishを繰り返さず、AI bytesもない。claim/finish応答を失った場合はDB commit済みでも失敗として保留する。自動のlease解放/取消し・再送・削除はせず、次の明示runは最新DBへ照会する。
+
+**どちらの成功結果もQueue ACK、process_media全体の完了、AI判定や公開許可ではありません。** 特に記録済みの再配送やfinish応答喪失後はAI縮小物が戻らず、後続AI段階の回復処理が必要です。その処理と外部consumerはまだ実装していません。入力jobは認証済み内部呼出元が渡す3 UUIDだけであり、このrunnerを認証なしのHTTPへ公開しないでください。
+
+DB client/runner試験は模擬RPCで通信契約・7地点の停止・曖昧なfinishを検証し、合成HEIC→実decoder→署名付き模擬R2→metadata確定→重複runまで通します。SQL/PGliteは別試験で、実PostgREST/実DBと画像処理を通した試験ではありません。同じ新規試験をDockerにも登録し、実IAM/DB適用/R2/Queue/実機/負荷は別の受入ゲートに残します。
+
+一次資料（2026-10-06確認）：[Supabase API keys](https://supabase.com/docs/guides/getting-started/api-keys)、[PostgREST RPC](https://docs.postgrest.org/en/stable/references/api/functions.html)。新SDK・実行依存・公開API型は追加せず、Workersの実装をNodeへ持ち込みません。
 
 ## ローカル検証
 
