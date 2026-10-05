@@ -3,7 +3,10 @@ ENV HUSKY=0
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/image/package.json apps/image/package.json
+COPY packages/contract/package.json packages/contract/package.json
 RUN npm ci --include=dev --strict-peer-deps --ignore-scripts --no-audit --workspace @koko/image
+COPY packages/contract/tsconfig.json packages/contract/tsconfig.json
+COPY packages/contract/src packages/contract/src
 COPY apps/image/tsconfig.json apps/image/tsconfig.json
 COPY apps/image/src apps/image/src
 RUN npm run build --workspace @koko/image
@@ -12,7 +15,9 @@ FROM node:24.16.0-bookworm-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c57
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/image/package.json apps/image/package.json
+COPY packages/contract/package.json packages/contract/package.json
 RUN npm ci --omit=dev --ignore-scripts --strict-peer-deps --no-audit --workspace @koko/image
+COPY --from=build /app/packages/contract/dist packages/contract/dist
 COPY --from=build /app/apps/image/dist apps/image/dist
 USER node
 ENTRYPOINT ["node", "apps/image/dist/cli.js"]
@@ -21,7 +26,7 @@ FROM runtime AS verification
 COPY apps/image/test apps/image/test
 WORKDIR /app/apps/image
 ENTRYPOINT ["node"]
-CMD ["--test", "test/transform.test.mjs", "test/cli.test.mjs"]
+CMD ["--test", "test/transform.test.mjs", "test/cli.test.mjs", "test/r2.test.mjs"]
 
 # Only used to generate our synthetic fixture; never shipped in runtime.
 FROM verification AS fixture-generator

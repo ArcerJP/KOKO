@@ -6,6 +6,8 @@
 
 B1-7/B2-1の[画像変換コア](../../apps/image/README.md)をローカル追加しました。単一HEIC decode、AI用1024 JPEG、閲覧用600/1600 WebP/JPEG、metadata除去と原本不変、期限/同時実行制御、上書きしないCLI、実Dockerfileとimage CIを含みます。試験は自作の合成HEIC等で、実機HEIC/HDR/色再現・Cloud Run HTTP/認証・R2保存・Queue consumer・AI・公開・負荷は未受入です。B1-7/B2-1全体は未完了とします。
 
+続くB2-1の[非公開R2ストレージadapter](../../apps/image/README.md#非公開r2ストレージadapterb2-1の一部既定off)は、既定OFFで固定開発バケットへの原本GET・派生物条件付きPUT/再送照合をローカル実装しました。署名資格情報の用途分離、原本不変、AI縮小物の非保存、本文/期限の上限、内容不一致・曖昧結果の拒否を合成HTTPで検証します。実鍵/権限設定・実R2・DB asset予約/処理版の確定・consumer/HTTP接続は未実施です。
+
 Web中継には[Accessサービス認証](../../apps/web/README.md#accessサービス認証)のローカル処理を追加しました。固定開発APIへのサーバー専用2header・不完全設定の拒否・秘密非公開を合成試験の対象とします。[クラウド準備の適用記録](cloud-setup.md#webからのaccessサービス認証2026-10-04)のとおり、実tokenの本人発行とService Authの個別許可まで確認しました。Web側のSecret登録、Cookie/CSRF設定、追加DB適用・配備/有効化・通し受入は未完了です。F1-4/B1-4全体は未完了で、次の外部適用は本人ゲートへ分離します。
 
 FEはFigma、Next.js UI、OSカメラ、トリム、IndexedDB、一覧/フィード/管理画面を担当。BEはSupabase、Cloudflare、Cloud Run、認証、DB/RLS、API、変換・判定、通知・運用を担当します。FE/BE契約の承認者はともにiijimaです。第0日の承認記録は[チェックリスト](day-zero.md)を参照します。
@@ -124,6 +126,8 @@ FEはBE待ちの間も`packages/contract`の型に合うMSWで進めます。実
 型や状態を変更する場合は、まずOpenAPI/契約/SQLの該当正本とテストを更新し、FE・BE双方（現在はiijima）の承認を得ます。適用済みDBを変更する場合は新しいmigrationにします。別々のアプリ内へAPI型を手書き複製しません。Git運用は[git-workflow](../../.agents/skills/git-workflow/SKILL.md)に従います。
 
 ## 人間の作業と期限
+
+2026-10-05の確認：PR #43のmergeは受入済み。画像3checkはmainの実効ルールで未登録のため本人へ通知（登録手順の正本は[CI規約](../ci.md#必須status-check)）。実機HEIC・iPhone/Android受入、正式規約の採択は未完了。Discord通知先・正常系200枚の完了記録も未確認であり、実施済みなら本人の報告で更新します。期限を過ぎた項目を勝手に完了扱いにせず、秘密/実写真はチャットや公開Gitへ送らないでください。
 
 - 第0日：契約・初期トークンは2026-09-22にiijimaが承認済み。PR #4のmergeと既存checkの必須化も完了。追加Web checkの必須化は[CI規約](../ci.md)を参照。
 - 第1の実クラウド接続前：5社の管理権限、予算通知、ドメイン／検証URL、OAuth公開主体を[準備手順](cloud-setup.md)に従い確認。秘密は各サービスのSecretへ設定し、チャットやGitへ貼らない。
