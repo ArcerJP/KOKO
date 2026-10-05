@@ -6,11 +6,39 @@ ALTER TABLE public.outbox_jobs
   ADD COLUMN image_plan jsonb CHECK (image_plan IS NULL OR jsonb_typeof(image_plan)='object'),
   ADD COLUMN image_completed_at timestamptz,
   ADD COLUMN image_receipt jsonb CHECK (image_receipt IS NULL OR jsonb_typeof(image_receipt)='object'),
+  ADD COLUMN processing_failure_receipt jsonb CHECK (processing_failure_receipt IS NULL OR jsonb_typeof(processing_failure_receipt)='object'),
   ADD CONSTRAINT image_completion_pair CHECK ((image_completed_at IS NULL)=(image_receipt IS NULL));
 ALTER TABLE public.media_assets
   ADD COLUMN pixel_width integer CHECK (pixel_width>0),
   ADD COLUMN pixel_height integer CHECK (pixel_height>0);
 COMMENT ON COLUMN public.outbox_jobs.image_completed_at IS 'Private derivative metadata recorded; NOT AI verdict, process_media completion or publication.';
+COMMENT ON COLUMN public.outbox_jobs.processing_failure_receipt IS 'Service-verified processing failure, separate from AI verdict; original retained, private held, job settled for explicit manual retry.';
+
+-- Internal helper: callers hold policy/member/post/assets/job locks and validate the current lease.
+-- No AI run/verdict, violation count, BAN, original mutation or deletion is manufactured here.
+CREATE FUNCTION koko_private.hold_processing_failure(p_event uuid,p_post uuid,p_job uuid,p_version bigint,p_stage text,p_reason text)
+RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path='' AS $$
+DECLARE t timestamptz:=clock_timestamp(); receipt jsonb;
+BEGIN
+ IF p_stage IS NULL OR p_stage NOT IN ('image','ai_preprocessing') OR p_reason IS NULL
+   OR p_reason NOT IN ('DECODE_FAILED','INVALID_DERIVATIVES','ORIGINAL_MISMATCH','DELIVERY_CONFLICT','RESOURCE_LIMIT','RETRY_EXHAUSTED')
+   OR p_version NOT BETWEEN 1 AND 2147483646 THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.outbox_jobs WHERE event_id=p_event AND post_id=p_post AND id=p_job
+   AND kind='process_media' AND completed_at IS NULL AND processing_failure_receipt IS NULL) THEN RETURN jsonb_build_object('code','STALE'); END IF;
+ UPDATE public.posts SET status='held',processing_error=upper(p_stage)||'_'||p_reason,version=version+1,updated_at=t
+   WHERE event_id=p_event AND id=p_post AND version=p_version AND status IN ('uploaded','processing')
+     AND NOT ban_latched AND deleted_at IS NULL;
+ IF NOT FOUND THEN RETURN jsonb_build_object('code','STALE'); END IF;
+ receipt:=jsonb_build_object('stage',p_stage,'reason',p_reason,'postVersion',p_version,'heldVersion',p_version+1);
+ UPDATE public.outbox_jobs SET processing_failure_receipt=receipt,completed_at=t,locked_until=NULL WHERE event_id=p_event AND id=p_job;
+ INSERT INTO public.outbox_jobs(event_id,post_id,kind,deduplication_key,payload)
+   VALUES(p_event,p_post,'notify','processing-failure:'||p_job::text,
+     jsonb_build_object('category','processing_error','post_version',p_version+1)) ON CONFLICT DO NOTHING;
+ RETURN jsonb_build_object('code','HELD');
+END;
+$$;
+REVOKE ALL ON FUNCTION koko_private.hold_processing_failure(uuid,uuid,uuid,bigint,text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION koko_private.hold_processing_failure(uuid,uuid,uuid,bigint,text,text) TO service_role;
 
 CREATE FUNCTION public.manage_image_processing(
   p_event_id uuid, p_post_id uuid, p_job_id uuid, p_action text, p_input jsonb
@@ -40,13 +68,16 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE='25001', MESSAGE='manage_image_processing requires READ COMMITTED';
   END IF;
   IF p_event_id IS NULL OR p_post_id IS NULL OR p_job_id IS NULL
-    OR p_action IS NULL OR p_action NOT IN ('claim','check','finish')
+    OR p_action IS NULL OR p_action NOT IN ('claim','check','finish','fail')
     OR jsonb_typeof(p_input) IS DISTINCT FROM 'object' THEN
     RETURN jsonb_build_object('code','INVALID_INPUT');
   END IF;
   IF octet_length(p_input::text)>16384
     OR (p_action='claim' AND p_input<>'{}'::jsonb)
     OR (p_action='check' AND (NOT p_input ? 'plan' OR p_input-'plan'<>'{}'::jsonb))
+    OR (p_action='fail' AND (NOT(p_input ?& ARRAY['plan','reason']) OR p_input-ARRAY['plan','reason']<>'{}'::jsonb
+      OR jsonb_typeof(p_input->'reason') IS DISTINCT FROM 'string'
+      OR p_input->>'reason' NOT IN ('DECODE_FAILED','INVALID_DERIVATIVES','ORIGINAL_MISMATCH','DELIVERY_CONFLICT','RESOURCE_LIMIT')))
     OR (p_action='finish' AND (NOT (p_input ?& ARRAY['plan','originalSha256','deliveries'])
       OR p_input-ARRAY['plan','originalSha256','deliveries']<>'{}'::jsonb)) THEN
     RETURN jsonb_build_object('code','INVALID_INPUT');
@@ -67,7 +98,7 @@ BEGIN
   SELECT * INTO p FROM public.posts WHERE event_id=p_event_id AND id=p_post_id FOR UPDATE;
   IF NOT FOUND OR p.user_id<>owner_id OR p.kind<>'photo' OR p.original_scope<>'photo_file'
     OR p.ban_latched OR p.deleted_at IS NOT NULL OR p.status NOT IN ('uploaded','processing')
-    OR p.version NOT BETWEEN 1 AND 2147483647 THEN
+    OR p.version NOT BETWEEN 1 AND 2147483646 THEN
     RETURN jsonb_build_object('code','STALE');
   END IF;
   PERFORM id FROM public.media_assets WHERE event_id=p_event_id AND post_id=p_post_id ORDER BY id FOR UPDATE;
@@ -91,7 +122,6 @@ BEGIN
     OR j.payload->'object_version' IS DISTINCT FROM to_jsonb(a.object_version) THEN
     RETURN jsonb_build_object('code','STALE');
   END IF;
-  IF a.byte_size>67108864 THEN RETURN jsonb_build_object('code','RESOURCE_LIMIT'); END IF;
   original := jsonb_build_object('eventId',p_event_id,'postId',p_post_id,'assetId',a.id,'size',a.byte_size,'etag',a.object_etag);
 
   IF j.image_plan IS NOT NULL THEN
@@ -113,26 +143,53 @@ BEGIN
           OR (j.image_completed_at IS NULL AND (byte_size IS NOT NULL OR sha256 IS NOT NULL OR pixel_width IS NOT NULL OR pixel_height IS NOT NULL)))) THEN
       RETURN jsonb_build_object('code','STALE');
     END IF;
-  ELSIF p.status<>'uploaded' OR j.image_attempt<>0 OR j.image_owner_id IS NOT NULL OR j.image_completed_at IS NOT NULL
-    OR j.payload->'post_version' IS DISTINCT FROM to_jsonb(p.version)
-    OR EXISTS(SELECT 1 FROM public.media_assets WHERE event_id=p_event_id AND post_id=p_post_id AND purpose LIKE 'delivery_%') THEN
-    RETURN jsonb_build_object('code','STALE');
+  ELSE
+    IF j.image_attempt<>0 OR j.image_owner_id IS NOT NULL OR j.image_completed_at IS NOT NULL
+      OR j.payload->'post_version' IS DISTINCT FROM to_jsonb(p.version) THEN RETURN jsonb_build_object('code','STALE'); END IF;
+    SELECT coalesce(jsonb_agg(jsonb_build_object('eventId',event_id,'assetId',id,
+      'variant',split_part(purpose,'_',2),'format',split_part(purpose,'_',3)) ORDER BY purpose),'[]'::jsonb)
+      INTO refs FROM public.media_assets WHERE event_id=p_event_id AND post_id=p_post_id AND purpose LIKE 'delivery_%';
+    IF p.status='uploaded' THEN
+      IF refs<>'[]'::jsonb THEN RETURN jsonb_build_object('code','STALE'); END IF;
+    ELSIF NOT EXISTS(SELECT 1 FROM public.outbox_jobs old WHERE old.event_id=p_event_id AND old.post_id=p_post_id
+      AND old.id<>j.id AND old.kind='process_media' AND old.completed_at IS NOT NULL
+      AND old.processing_failure_receipt->>'stage'='image'
+      AND old.processing_failure_receipt->'heldVersion'=to_jsonb(p.version-1)
+      AND old.payload->'asset_id'=to_jsonb(a.id) AND old.payload->'object_etag'=to_jsonb(a.object_etag)
+      AND old.payload->'object_version'=to_jsonb(a.object_version)
+      AND ((refs='[]'::jsonb AND old.image_plan IS NULL) OR (jsonb_array_length(refs)=4 AND old.image_owner_id=p.user_id
+        AND (old.image_plan->'original')-'sha256'=original AND old.image_plan->'deliveries'=refs)))
+      OR EXISTS(SELECT 1 FROM public.media_assets WHERE event_id=p_event_id AND post_id=p_post_id AND purpose LIKE 'delivery_%'
+        AND (provider<>'r2_delivery' OR deletion_requested_at IS NOT NULL OR physically_deleted_at IS NOT NULL
+          OR byte_size IS NOT NULL OR sha256 IS NOT NULL OR pixel_width IS NOT NULL OR pixel_height IS NOT NULL)) THEN
+      RETURN jsonb_build_object('code','STALE');
+    END IF;
   END IF;
 
   IF p_action='claim' THEN
+    IF a.byte_size>67108864 THEN
+      PERFORM koko_private.hold_processing_failure(p_event_id,p_post_id,p_job_id,p.version,'image','RESOURCE_LIMIT');
+      RETURN jsonb_build_object('code','RESOURCE_LIMIT');
+    END IF;
     IF j.image_completed_at IS NOT NULL THEN RETURN jsonb_build_object('code','IMAGE_SAVED'); END IF;
     IF plan IS NOT NULL AND (plan->>'expiresAt')::numeric>extract(epoch FROM clock_timestamp())*1000 THEN
       RETURN jsonb_build_object('code','BUSY');
     END IF;
-    IF j.image_attempt>=3 THEN RETURN jsonb_build_object('code','EXHAUSTED'); END IF;
+    IF j.image_attempt>=3 THEN
+      PERFORM koko_private.hold_processing_failure(p_event_id,p_post_id,p_job_id,p.version,'image','RETRY_EXHAUSTED');
+      RETURN jsonb_build_object('code','EXHAUSTED');
+    END IF;
     IF plan IS NULL THEN
-      IF p.version=2147483647 THEN RETURN jsonb_build_object('code','STALE'); END IF;
+      -- Leave one increment for the terminal success/held generation.
+      IF p.version>=2147483646 THEN RETURN jsonb_build_object('code','STALE'); END IF;
+      IF refs='[]'::jsonb THEN
       FOREACH purpose_name IN ARRAY ARRAY['delivery_1600_jpg','delivery_1600_webp','delivery_600_jpg','delivery_600_webp'] LOOP
         asset_id := gen_random_uuid();
         INSERT INTO public.media_assets(event_id,id,post_id,purpose,provider,object_key)
           VALUES(p_event_id,asset_id,p_post_id,purpose_name,'r2_delivery',
             'events/'||p_event_id::text||'/delivery/'||asset_id::text||'/'||split_part(purpose_name,'_',2)||'.'||split_part(purpose_name,'_',3));
       END LOOP;
+      END IF;
       SELECT jsonb_agg(jsonb_build_object('eventId',event_id,'assetId',id,
         'variant',split_part(purpose,'_',2),'format',split_part(purpose,'_',3)) ORDER BY purpose)
         INTO refs FROM public.media_assets WHERE event_id=p_event_id AND post_id=p_post_id AND purpose LIKE 'delivery_%';
@@ -151,6 +208,11 @@ BEGIN
   END IF;
 
   IF plan IS NULL OR p_input->'plan' IS DISTINCT FROM plan THEN RETURN jsonb_build_object('code','STALE'); END IF;
+  IF p_action='fail' THEN
+    IF j.image_completed_at IS NOT NULL OR (plan->>'expiresAt')::numeric<=extract(epoch FROM clock_timestamp())*1000 THEN
+      RETURN jsonb_build_object('code','STALE'); END IF;
+    RETURN koko_private.hold_processing_failure(p_event_id,p_post_id,p_job_id,p.version,'image',p_input->>'reason');
+  END IF;
   IF p_action='check' THEN
     IF j.image_completed_at IS NOT NULL OR (plan->>'expiresAt')::numeric<=extract(epoch FROM clock_timestamp())*1000 THEN
       RETURN jsonb_build_object('code','STALE');
@@ -221,6 +283,6 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.manage_image_processing(uuid,uuid,uuid,text,jsonb) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.manage_image_processing(uuid,uuid,uuid,text,jsonb) TO service_role;
-COMMENT ON FUNCTION public.manage_image_processing(uuid,uuid,uuid,text,jsonb) IS 'Internal image claim/check/finish. Reloads DB policy and identity; trusted pipeline receipts only. No public route, external IO, moderation, job completion or publication.';
+COMMENT ON FUNCTION public.manage_image_processing(uuid,uuid,uuid,text,jsonb) IS 'Internal image claim/check/finish/fail. Fresh policy, identity and lease gates; private derivative proof is not AI completion. Processing failures settle privately with retained original, notification and explicit retry.';
 NOTIFY pgrst, 'reload schema';
 COMMIT;

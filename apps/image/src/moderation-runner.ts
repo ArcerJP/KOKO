@@ -142,6 +142,7 @@ export function createModerationRunner(
       database.check,
       database.reserve,
       database.finish,
+      database.fail,
       getOriginal,
       transform,
       openaiToken,
@@ -166,6 +167,7 @@ export function createModerationRunner(
       externalSignal.addEventListener("abort", abort, { once: true });
       if (externalSignal.aborted) abort();
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let activePlan: ModerationPlan | undefined;
       const signal = controller.signal;
       const guard = () => {
         if (signal.aborted) fail("STALE");
@@ -214,6 +216,8 @@ export function createModerationRunner(
         }
         if (found.code === "DONE")
           return { ok: true, outcome: "moderation_already_recorded" };
+        if (found.code === "HELD")
+          return { ok: false, reason: "PROCESSING_FAILED" };
         if (found.code !== "CLAIMED") return { ok: false, reason: found.code };
         const plan = snapshotModerationPlan(found.plan);
         if (
@@ -224,6 +228,7 @@ export function createModerationRunner(
           plan.expiresAt > Date.now() + 125000
         )
           fail("STALE");
+        activePlan = plan;
         clearTimeout(timer);
         timer = setTimeout(
           abort,
@@ -242,7 +247,13 @@ export function createModerationRunner(
         const decode = async (bytes: Buffer): Promise<Derivative> => {
           const originalHash = hash(bytes);
           await check();
-          const converted = await bounded(() => transform(bytes));
+          let converted: Awaited<ReturnType<typeof transform>>;
+          try {
+            converted = await bounded(() => transform(bytes));
+          } catch (e) {
+            if (e instanceof RunError) throw e;
+            fail("DECODE_FAILED");
+          }
           if (hash(bytes) !== originalHash) fail("ORIGINAL_MISMATCH");
           if (!converted.ok || !Array.isArray(converted.derivatives))
             fail("DECODE_FAILED");
@@ -391,6 +402,38 @@ export function createModerationRunner(
           };
         return { ok: false, reason: saved.code };
       } catch (e) {
+        const processingReason =
+          e instanceof RunError
+            ? e.reason
+            : e instanceof ImageStorageError
+              ? e.code
+              : null;
+        if (
+          activePlan &&
+          !signal.aborted &&
+          (processingReason === "DECODE_FAILED" ||
+            processingReason === "ORIGINAL_MISMATCH")
+        ) {
+          try {
+            const saved = await bounded(() =>
+              database.fail(activePlan!, processingReason),
+            );
+            if (saved.code !== "HELD")
+              return {
+                ok: false,
+                reason: saved.code === "DONE" ? "STALE" : saved.code,
+              };
+          } catch (failure) {
+            if (
+              failure instanceof ModerationDatabaseError &&
+              failure.code !== "INVALID_DB_CONFIG"
+            )
+              return { ok: false, reason: failure.code };
+            if (failure instanceof RunError)
+              return { ok: false, reason: failure.reason };
+            return { ok: false, reason: "PROCESSING_FAILED" };
+          }
+        }
         if (e instanceof RunError) return { ok: false, reason: e.reason };
         if (
           e instanceof ModerationDatabaseError &&

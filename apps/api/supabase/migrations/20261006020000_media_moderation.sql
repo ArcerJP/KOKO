@@ -12,6 +12,7 @@ ALTER TABLE public.outbox_jobs
   ADD CONSTRAINT outbox_event_id UNIQUE(event_id,id),
   ADD COLUMN moderation_media jsonb CHECK (moderation_media IS NULL OR jsonb_typeof(moderation_media)='object'),
   ADD COLUMN moderation_owner_id uuid REFERENCES auth.users(id),
+  ADD COLUMN moderation_processing_attempt integer NOT NULL DEFAULT 0 CHECK(moderation_processing_attempt BETWEEN 0 AND 3),
   ADD COLUMN moderation_plan jsonb CHECK (moderation_plan IS NULL OR jsonb_typeof(moderation_plan)='object'),
   ADD COLUMN moderation_completed_at timestamptz,
   ADD COLUMN moderation_receipt jsonb CHECK (moderation_receipt IS NULL OR jsonb_typeof(moderation_receipt)='object'),
@@ -103,11 +104,14 @@ DECLARE
  result_version bigint; score numeric; expires_ms bigint;
 BEGIN
  IF current_setting('transaction_isolation')<>'read committed' THEN RAISE EXCEPTION USING ERRCODE='25001',MESSAGE='manage_media_moderation requires READ COMMITTED'; END IF;
- IF p_event_id IS NULL OR p_post_id IS NULL OR p_job_id IS NULL OR p_action IS NULL OR p_action NOT IN ('claim','check','reserve','finish')
+ IF p_event_id IS NULL OR p_post_id IS NULL OR p_job_id IS NULL OR p_action IS NULL OR p_action NOT IN ('claim','check','reserve','finish','fail')
    OR jsonb_typeof(p_input) IS DISTINCT FROM 'object' OR octet_length(p_input::text)>65536 THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
  expected_keys:=CASE p_action WHEN 'claim' THEN ARRAY[]::text[] WHEN 'check' THEN ARRAY['plan']
+  WHEN 'fail' THEN ARRAY['plan','reason']
   WHEN 'reserve' THEN ARRAY['plan','provider','engine','frame','attempt'] ELSE ARRAY['plan','result'] END;
  IF NOT(p_input ?& expected_keys) OR p_input-expected_keys<>'{}'::jsonb THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
+ IF p_action='fail' AND (jsonb_typeof(p_input->'reason') IS DISTINCT FROM 'string'
+   OR p_input->>'reason' NOT IN ('DECODE_FAILED','ORIGINAL_MISMATCH')) THEN RETURN jsonb_build_object('code','INVALID_INPUT'); END IF;
  -- Event-first exclusive operations interlock with stage_three_operation and image/upload SHARE gates.
  SELECT * INTO e FROM public.events WHERE event_id=p_event_id FOR UPDATE;
  IF NOT FOUND THEN RETURN jsonb_build_object('code','STALE'); END IF;
@@ -161,11 +165,14 @@ BEGIN
  ELSE
   frame_count:=3; media:=j.moderation_media;
   -- Explicit admin retry creates a new job but never a new original. Recover only
-  -- previously completed, same-owner/original evidence; revalidate locked Stream assets below.
+  -- previously completed or durably held, same-owner/original evidence; revalidate locked Stream assets below.
   IF media IS NULL THEN
    SELECT jsonb_set(prior.moderation_media,'{postVersion}',to_jsonb(p.version)) INTO media FROM public.outbox_jobs prior
     WHERE prior.event_id=p_event_id AND prior.post_id=p_post_id AND prior.kind='process_media' AND prior.id<>j.id
-      AND prior.moderation_owner_id=owner_id AND prior.moderation_completed_at IS NOT NULL AND prior.moderation_media->>'kind'='video'
+      AND prior.moderation_owner_id=owner_id AND prior.completed_at IS NOT NULL
+      AND (prior.moderation_completed_at IS NOT NULL OR (prior.processing_failure_receipt->>'stage'='ai_preprocessing'
+        AND prior.processing_failure_receipt->'heldVersion'=to_jsonb(p.version-1)))
+      AND prior.moderation_media->>'kind'='video'
       AND prior.payload->'asset_id'=to_jsonb(a.id) AND prior.payload->'object_etag'=to_jsonb(a.object_etag) AND prior.payload->'object_version'=to_jsonb(a.object_version)
     ORDER BY prior.moderation_completed_at DESC,prior.id DESC LIMIT 1;
   END IF;
@@ -197,6 +204,9 @@ BEGIN
  policy:=jsonb_build_object('approved',true,'version',s.settings_version,'safeSearchScoreVersion','likelihood-ordinal-v1','openaiModel','omni-moderation-2024-09-26','thresholds',s.moderation_thresholds);
  IF p_action='claim' THEN
   IF j.moderation_plan IS NOT NULL AND (j.moderation_plan->>'expiresAt')::numeric>extract(epoch FROM stamp)*1000 THEN RETURN jsonb_build_object('code','BUSY'); END IF;
+  IF j.moderation_processing_attempt>=3 THEN
+   RETURN koko_private.hold_processing_failure(p_event_id,p_post_id,p_job_id,p.version,'ai_preprocessing','RETRY_EXHAUSTED');
+  END IF;
   IF (SELECT count(*) FROM public.outbox_jobs WHERE event_id=p_event_id AND moderation_completed_at IS NULL AND completed_at IS NULL
     AND moderation_plan IS NOT NULL AND (moderation_plan->>'expiresAt')::numeric>extract(epoch FROM stamp)*1000)>=s.moderation_concurrency THEN RETURN jsonb_build_object('code','BUSY'); END IF;
   SELECT jsonb_agg(jsonb_build_object('engine',eng,'frame',f,'nextAttempt',coalesce((SELECT max(attempt)+1 FROM koko_private.moderation_calls c WHERE c.event_id=p_event_id AND c.job_id=p_job_id AND c.engine=eng AND c.frame_index=f),1)) ORDER BY f,eng)
@@ -204,7 +214,8 @@ BEGIN
   expires_ms:=least(floor(extract(epoch FROM stamp)*1000)::bigint+120000,floor(extract(epoch FROM e.private_at)*1000)::bigint);
   plan:=jsonb_build_object('jobId',j.id,'postVersion',p.version,'leaseId',gen_random_uuid(),'expiresAt',expires_ms,'policy',policy,'attemptStarts',starts,'media',media,
     'original',original_ref);
-  UPDATE public.outbox_jobs SET moderation_plan=plan,moderation_owner_id=owner_id WHERE id=j.id;
+  UPDATE public.outbox_jobs SET moderation_plan=plan,moderation_owner_id=owner_id,moderation_processing_attempt=moderation_processing_attempt+1,
+    moderation_media=CASE WHEN p.kind='video' THEN media-ARRAY['streamUid','sourceUid'] ELSE moderation_media END WHERE id=j.id;
   RETURN jsonb_build_object('code','CLAIMED','plan',plan);
  END IF;
  plan:=j.moderation_plan;
@@ -213,6 +224,9 @@ BEGIN
    OR plan->'original' IS DISTINCT FROM original_ref
    OR (plan->>'expiresAt')::numeric<=extract(epoch FROM stamp)*1000 THEN RETURN jsonb_build_object('code','STALE'); END IF;
  IF p_action='check' THEN RETURN jsonb_build_object('code','CURRENT'); END IF;
+ IF p_action='fail' THEN
+  RETURN koko_private.hold_processing_failure(p_event_id,p_post_id,p_job_id,p.version,'ai_preprocessing',p_input->>'reason');
+ END IF;
  IF p_action='reserve' THEN
   engine_name:=p_input->>'engine'; provider_name:=p_input->>'provider';
   IF jsonb_typeof(p_input->'engine') IS DISTINCT FROM 'string' OR engine_name NOT IN ('openai','safesearch','ocr')

@@ -21,6 +21,30 @@ const harness = (response, options = {}) => {
   });
   return { database, calls };
 };
+
+test("preprocessing failure has separate fixed-code lease protocol, without AI scores or secret exception", async () => {
+  const h = harness({ code: "HELD" }),
+    p = moderationPlan();
+  assert.deepEqual(await h.database.fail(p, "DECODE_FAILED"), { code: "HELD" });
+  assert.deepEqual(h.calls[0].parsed.p_input, {
+    plan: p,
+    reason: "DECODE_FAILED",
+  });
+  assert.equal(h.calls[0].parsed.p_action, "fail");
+  for (const reason of ["secret body", "DB_TIMEOUT", null])
+    await assert.rejects(h.database.fail(p, reason), /INVALID_INPUT/);
+  assert.equal(h.calls.length, 1);
+  await assert.rejects(
+    harness({ code: "HELD", message: "secret" }).database.fail(
+      p,
+      "DECODE_FAILED",
+    ),
+    /DB_FAILED/,
+  );
+  assert.deepEqual(await harness({ code: "HELD" }).database.claim(job), {
+    code: "HELD",
+  });
+});
 test("moderation DB default OFF and fixed provider config", () => {
   assert.equal(createModerationDatabase({ secretKey: "secret" }), null);
   for (const supabaseUrl of [

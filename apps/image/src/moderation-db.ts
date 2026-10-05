@@ -49,11 +49,18 @@ type Refusal =
   | "POLICY_UNAPPROVED"
   | "MEDIA_NOT_READY"
   | "INVALID_INPUT";
+type FailureCode = "DECODE_FAILED" | "ORIGINAL_MISMATCH";
 export type ModerationDatabase = {
   claim(
     job: ImageJobReference,
-  ): Promise<{ code: "CLAIMED"; plan: ModerationPlan } | { code: Refusal }>;
+  ): Promise<
+    { code: "CLAIMED"; plan: ModerationPlan } | { code: Refusal | "HELD" }
+  >;
   check(plan: ModerationPlan): Promise<boolean>;
+  fail(
+    plan: ModerationPlan,
+    reason: FailureCode,
+  ): Promise<{ code: "HELD" | Refusal }>;
   reserve(
     plan: ModerationPlan,
     request: {
@@ -584,9 +591,23 @@ export function createModerationDatabase(
           failed();
         return { code: "CLAIMED" as const, plan: p };
       }
-      if (!exact(r, ["code"]) || !refusals.includes(r.code as Refusal))
+      if (
+        !exact(r, ["code"]) ||
+        !(r.code === "HELD" || refusals.includes(r.code as Refusal))
+      )
         failed();
-      return { code: r.code as Refusal };
+      return { code: r.code as Refusal | "HELD" };
+    },
+    async fail(value: ModerationPlan, reason: FailureCode) {
+      const p = snapshotModerationPlan(value);
+      if (!["DECODE_FAILED", "ORIGINAL_MISMATCH"].includes(reason)) invalid();
+      const r = await rpc(refFor(p), "fail", { plan: p, reason });
+      if (
+        !exact(r, ["code"]) ||
+        !(r.code === "HELD" || refusals.includes(r.code as Refusal))
+      )
+        failed();
+      return { code: r.code as "HELD" | Refusal };
     },
     async check(value: ModerationPlan) {
       const p = snapshotModerationPlan(value);

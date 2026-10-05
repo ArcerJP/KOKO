@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { before, beforeEach, after, test } from "node:test";
 import { readFile, readdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { URL } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 
 const db = new PGlite();
@@ -152,6 +153,127 @@ const row = async (table, id = post) =>
     )
   ).rows[0];
 const claim = async (options) => rpc("claim", {}, options);
+
+test("AI preprocessing failure is private held with original/image receipt retained and no violation/AI fiction", async () => {
+  const original = await row("media_assets", asset);
+  const image = (await row("outbox_jobs", job)).image_receipt;
+  const plan = (await claim()).plan;
+  assert.equal(
+    (await rpc("fail", { plan, reason: "DECODE_FAILED" })).code,
+    "HELD",
+  );
+  const p = await row("posts"),
+    j = await row("outbox_jobs", job),
+    member = await row("event_members", owner);
+  assert.equal(p.status, "held");
+  assert.equal(p.processing_error, "AI_PREPROCESSING_DECODE_FAILED");
+  assert.equal(p.moderation_verdict, null);
+  assert.ok(j.completed_at);
+  assert.equal(j.moderation_completed_at, null);
+  assert.equal(j.moderation_receipt, null);
+  assert.deepEqual(j.image_receipt, image);
+  assert.deepEqual(await row("media_assets", asset), original);
+  assert.equal(member.block_count, 0);
+  assert.equal(member.is_banned, false);
+  assert.equal(
+    (await db.query("SELECT count(*)::int n FROM public.moderation_runs"))
+      .rows[0].n,
+    0,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "SELECT count(*)::int n FROM public.outbox_jobs WHERE kind='notify' AND payload->>'category'='processing_error'",
+      )
+    ).rows[0].n,
+    1,
+  );
+  assert.equal(
+    (await rpc("fail", { plan, reason: "DECODE_FAILED" })).code,
+    "STALE",
+  );
+});
+
+for (const change of ["lease", "expired", "ban", "delete", "version", "policy"])
+  test(`preprocessing failure cannot settle ${change}`, async () => {
+    const plan = (await claim()).plan;
+    if (change === "lease") plan.leaseId = randomUUID();
+    if (change === "expired")
+      await db.exec(
+        "UPDATE public.outbox_jobs SET moderation_plan=jsonb_set(moderation_plan,'{expiresAt}','1') WHERE moderation_plan IS NOT NULL",
+      );
+    if (change === "ban")
+      await db.exec(
+        "UPDATE public.event_members SET is_banned=true,banned_at=now()",
+      );
+    if (change === "delete")
+      await db.exec(
+        "UPDATE public.posts SET status='deleted',deleted_at=now()",
+      );
+    if (change === "version")
+      await db.exec("UPDATE public.posts SET version=version+1");
+    if (change === "policy")
+      await db.exec(
+        "UPDATE public.event_settings SET thresholds_approved=false",
+      );
+    assert.equal(
+      (await rpc("fail", { plan, reason: "DECODE_FAILED" })).code,
+      change === "policy" ? "POLICY_UNAPPROVED" : "STALE",
+    );
+    assert.equal(
+      (await row("outbox_jobs", job)).processing_failure_receipt,
+      null,
+    );
+  });
+
+test("three abandoned moderation leases converge on a separate processing hold, never a violation", async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    assert.equal((await claim()).code, "CLAIMED");
+    await db.exec(
+      "UPDATE public.outbox_jobs SET moderation_plan=jsonb_set(moderation_plan,'{expiresAt}','1') WHERE moderation_plan IS NOT NULL",
+    );
+  }
+  assert.equal((await claim()).code, "HELD");
+  assert.equal(
+    (await row("posts")).processing_error,
+    "AI_PREPROCESSING_RETRY_EXHAUSTED",
+  );
+  assert.equal((await row("event_members", owner)).block_count, 0);
+  assert.ok((await row("outbox_jobs", job)).completed_at);
+});
+
+test("manual retry after AI preprocessing failure retains image proof and obtains a new moderation lease", async () => {
+  const old = (await claim()).plan;
+  await rpc("fail", { plan: old, reason: "DECODE_FAILED" });
+  await db.exec("UPDATE public.event_members SET role='admin'");
+  const response = (
+    await db.query(
+      "SELECT public.stage_three_operation($1,$2,'retry',$3,$4,$5) r",
+      [
+        event,
+        owner,
+        post,
+        JSON.stringify({ expected_version: 4, reason: "Synthetic retry" }),
+        randomUUID(),
+      ],
+    )
+  ).rows[0].r;
+  assert.equal(response.code, "ok");
+  const next = (
+    await db.query(
+      "SELECT id FROM public.outbox_jobs WHERE kind='process_media' AND completed_at IS NULL",
+    )
+  ).rows[0].id;
+  const found = await claim({ job: next });
+  assert.equal(found.code, "CLAIMED");
+  assert.equal(found.plan.postVersion, 5);
+  assert.notEqual(found.plan.leaseId, old.leaseId);
+  assert.deepEqual(found.plan.media, old.media);
+  assert.equal(
+    (await rpc("fail", { plan: old, reason: "DECODE_FAILED" })).code,
+    "STALE",
+  );
+});
 const reserve = (
   plan,
   engine,
@@ -796,6 +918,50 @@ async function videoFixture() {
   );
   return { stream, media };
 }
+
+test("video preprocessing hold can be manually retried twice using verified same-original frames", async () => {
+  await videoFixture();
+  await db.exec("UPDATE public.event_members SET role='admin'");
+  let currentJob = job;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const found = await claim({ job: currentJob });
+    assert.equal(found.code, "CLAIMED");
+    assert.equal(
+      (
+        await rpc(
+          "fail",
+          { plan: found.plan, reason: "DECODE_FAILED" },
+          { job: currentJob },
+        )
+      ).code,
+      "HELD",
+    );
+    const version = (await row("posts")).version;
+    const retry = (
+      await db.query(
+        "SELECT public.stage_three_operation($1,$2,'retry',$3,$4,$5) r",
+        [
+          event,
+          owner,
+          post,
+          JSON.stringify({
+            expected_version: version,
+            reason: "Synthetic frame retry",
+          }),
+          randomUUID(),
+        ],
+      )
+    ).rows[0].r;
+    assert.equal(retry.code, "ok");
+    currentJob = (
+      await db.query(
+        "SELECT id FROM public.outbox_jobs WHERE kind='process_media' AND completed_at IS NULL",
+      )
+    ).rows[0].id;
+  }
+  assert.equal((await claim({ job: currentJob })).code, "CLAIMED");
+  assert.equal((await row("event_members", owner)).block_count, 0);
+});
 test("video requires all three frames and mandatory engines before publication", async () => {
   await videoFixture();
   const { plan } = await claim();
@@ -903,14 +1069,17 @@ test("video admin retry reuses same-original verified media under the new genera
   assert.equal(found.code, "CLAIMED");
   assert.equal(found.plan.media.postVersion, version + 1);
   assert.equal(found.plan.media.streamUid, "a".repeat(32));
-  assert.equal(
+  const prepared = { ...found.plan.media };
+  delete prepared.streamUid;
+  delete prepared.sourceUid;
+  assert.deepEqual(
     (
       await db.query(
         "SELECT moderation_media FROM public.outbox_jobs WHERE id=$1",
         [next],
       )
     ).rows[0].moderation_media,
-    null,
+    prepared,
   );
   assert.equal(
     (await finish(found.plan, result(runs, 3), { job: next })).code,
