@@ -48,7 +48,13 @@ node -p "process.platform + '/' + process.arch"
 3. インストール後、PowerShellを開き直します。Windowsでは`npm.ps1`の実行ポリシー回避のためにOS設定を緩めず、以下の`npm.cmd`を使います。
 4. エディターは任意です。VS Code系を使う場合は[フォーマット規約](formatting.md)に従って推奨拡張機能を導入します。
 
-Node/npmの版は`package-lock.json`だけでは導入されません。現状はDocker、クラウドCLI、DBサーバー、システム版ffmpegの導入は不要です。SQL統合試験はnpm依存のPGliteで実行します。
+Node/npmの版は`package-lock.json`だけでは導入されません。画像コアを含む検査はNode.js 24系を使用します。全CI相当の画像コンテナー検査にはDockerのLinux engineも必要になりました。クラウドCLI、DBサーバー、システム版ffmpegは不要で、SQL統合試験はnpm依存のPGliteで実行します。
+
+### Dockerによる画像検査
+
+[Docker公式Windows手順](https://docs.docker.com/desktop/setup/install/windows-install/)に従い、Docker DesktopとWSL 2を本人が導入・起動します。Docker本体のインストールとWSL/engineの準備は別です。WSL 2の初回有効化に必要な管理者操作・規約同意・再起動は本人またはPC管理者が行い、権限を迂回しません。既存環境を再インストールせず、`wsl --version`、`docker version`のClient/Server、`docker info --format '{{.OSType}}'`のlinuxを確認します。
+
+Docker用に利用者のUbuntuを別途導入する必要はありません。未導入時の`wsl --install --no-distribution`はWSLだけを導入する選択です。[Microsoft公式](https://learn.microsoft.com/en-us/windows/wsl/basic-commands#install)、[DockerのWSL境界](https://docs.docker.com/desktop/features/wsl/)。画像検査の実行内容と非公開素材の扱いは[画像コア](../apps/image/README.md)を参照してください。
 
 ## 4. HTTPSでcloneし、受渡し元のコミットを確認する
 
@@ -124,6 +130,7 @@ npm.cmd run typecheck
 npm.cmd test
 npm.cmd run build
 npm.cmd run test:e2e
+npm.cmd run test:image:docker
 git diff --check
 git status --short
 ```

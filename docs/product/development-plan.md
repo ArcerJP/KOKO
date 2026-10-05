@@ -4,6 +4,8 @@
 
 ## 分担と現在地
 
+B1-7/B2-1の[画像変換コア](../../apps/image/README.md)をローカル追加しました。単一HEIC decode、AI用1024 JPEG、閲覧用600/1600 WebP/JPEG、metadata除去と原本不変、期限/同時実行制御、上書きしないCLI、実Dockerfileとimage CIを含みます。試験は自作の合成HEIC等で、実機HEIC/HDR/色再現・Cloud Run HTTP/認証・R2保存・Queue consumer・AI・公開・負荷は未受入です。B1-7/B2-1全体は未完了とします。
+
 Web中継には[Accessサービス認証](../../apps/web/README.md#accessサービス認証)のローカル処理を追加しました。固定開発APIへのサーバー専用2header・不完全設定の拒否・秘密非公開を合成試験の対象とします。[クラウド準備の適用記録](cloud-setup.md#webからのaccessサービス認証2026-10-04)のとおり、実tokenの本人発行とService Authの個別許可まで確認しました。Web側のSecret登録、Cookie/CSRF設定、追加DB適用・配備/有効化・通し受入は未完了です。F1-4/B1-4全体は未完了で、次の外部適用は本人ゲートへ分離します。
 
 FEはFigma、Next.js UI、OSカメラ、トリム、IndexedDB、一覧/フィード/管理画面を担当。BEはSupabase、Cloudflare、Cloud Run、認証、DB/RLS、API、変換・判定、通知・運用を担当します。FE/BE契約の承認者はともにiijimaです。第0日の承認記録は[チェックリスト](day-zero.md)を参照します。

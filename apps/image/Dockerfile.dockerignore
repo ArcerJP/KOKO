@@ -1,0 +1,12 @@
+**
+!package.json
+!package-lock.json
+!apps/
+!apps/image/
+!apps/image/package.json
+!apps/image/tsconfig.json
+!apps/image/src/
+!apps/image/src/**
+!apps/image/test/
+!apps/image/test/**
+!apps/image/Dockerfile
