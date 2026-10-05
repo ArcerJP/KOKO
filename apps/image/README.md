@@ -1,6 +1,6 @@
 # 画像変換コア（B1-7／B2-1の一部）
 
-Node.js 24で、入力bufferからAI用JPEGと閲覧用WebP/JPEGを生成します。`src/index.ts`が呼出し境界、`convert.ts`が変換、`worker.ts`が同期decoderの隔離、`cli.ts`がローカル受入用、`r2.ts`が既定OFFの内部ストレージadapterです。API/Webへはまだ接続しません。
+Node.js 24で、入力bufferからAI用JPEGと閲覧用WebP/JPEGを生成します。`src/index.ts`が呼出し境界、`convert.ts`が変換、`worker.ts`が同期decoderの隔離、`cli.ts`がローカル受入用、`r2.ts`が既定OFFの内部ストレージadapter、`pipeline.ts`が既定OFFの取得・変換・保存の接続です。API/Webへはまだ接続しません。
 
 ## 実装と未実装
 
@@ -34,6 +34,19 @@ sharp既定相当の268,402,689画素制限とdecoder/メモリ/期限の実行�
 認証・最新DB job/lease/post version/所有者・BAN/削除/停止・原本identityの再照合は**呼出元の必須責務**です。adapterはDBを更新せず、公開を許可しません。4件の保存は原子的でなく、途中失敗の部分保存や期限切れ後のPUT完了があり得ます。全件の照合後にDBで最新処理版を原子的に確定し、AI/公開条件を別途確認する必要があります。曖昧な結果を成功扱いせず、原本/派生物を自動削除しません。
 
 既存採用済みaws4fetch 1.0.20と共有契約だけを直接依存に追加しました。[R2 S3互換表](https://developers.cloudflare.com/r2/api/s3/api/)と[公式署名例](https://developers.cloudflare.com/r2/examples/aws/aws4fetch/)を根拠に、模擬fetchで条件付き操作と署名を検証。実R2/IAM/Secret/クラウド料金・実機の受入は未実施です。
+
+## 内部画像処理pipeline（B2-1の一部・既定OFF）
+
+`src/pipeline.ts`の`createImagePipeline`は、既存のR2 adapterと変換コアを接続します。`enabled: true`、store、信頼できるサーバー実装の`isCurrent(plan)`を明示した場合だけ生成し、それ以外は無効または構成エラー。環境変数の自動読取り・HTTP/Queue登録・新しいSecretはありません。
+
+- planにはDBで照合済みのjob、**画像処理用lease**、post version、期限、原本identity、予約済みの異なる4派生assetを渡す。既存Queueのdispatch leaseを画像処理leaseと流用しない。plan自体は認証情報でも認可の証拠でもなく、外部payloadを直渡ししない。
+- `isCurrent`は最新DBの所有者・job/lease/version・原本/予約asset・停止/BAN/削除等を検査する必須の読取りcallback。原本取得前、変換前、各保存前、全保存後に呼ぶ。strict true以外・例外・既定5秒の期限・plan失効は後続を止める。期限後にcallbackが成功しても再開しない。**このDB実装は今回含まない。**
+- planと入力/生成bufferをsnapshotし、await中の呼出元変更から分離。1インスタンス1処理、実変換コアも同一process内1変換。サービス全体の同時実行数の保証ではない。
+- 原本の長さ・SHA-256と変換中の不変を照合し、5生成物すべての名前・形式・寸法・hashを検査してから、4閲覧用だけを条件付き保存。AI用1024 JPEGはメモリ内の戻り値のみ。実AI送信はしない。
+- 成功は`outcome: saved`と原本hash・AI用bytes・4保存receipt。**非公開保存の確認であり、投稿完了・判定通過・公開許可ではない。** 失敗は固定理由だけで、部分成功receipt、provider例外、秘密を返さない。
+- 部分保存、最終確認失敗、処理中のDB変更はあり得る。自動retry・rollback削除をせず、呼出元が同じ予約assetの条件付き再送と最新DBでの原子的確定へ接続する。保存前の確認とPUTの間の状態変更も、後段のDB確定/公開ゲートで拒否する必要がある。
+
+合成HEIC→実decoder→署名付き模擬R2→再送照合の通し試験、全7確認点での中断、部分保存失敗、期限・改変・不正出力を自動検証します。実R2接続、処理lease/asset予約・DB確定、HTTP/IAM、Queue consumer、AI・公開・実機受入は未完了です。依存するcallback/store/transformは内部実装であり、この部品だけで処理全体の厳密な時間/メモリ上限を保証しません。
 
 ## ローカル検証
 
