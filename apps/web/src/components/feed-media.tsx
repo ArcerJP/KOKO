@@ -11,46 +11,133 @@ export function FeedMedia({
   large = false,
   play = true,
   sound = false,
+  onRetry,
+  leaseValid = true,
 }: {
   post: PublicPost;
   active: boolean;
   large?: boolean;
   play?: boolean;
   sound?: boolean;
+  onRetry?: (() => Promise<boolean>) | undefined;
+  leaseValid?: boolean;
 }) {
+  const [generation, setGeneration] = useState(0),
+    [retryState, setRetryState] = useState({ attempts: 0, busy: false });
+  const retry = useRef({ epoch: 0, attempts: 0, busy: false });
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    const state = retry.current;
+    state.epoch++;
+    return () => {
+      state.epoch++;
+    };
+  }, [active, post.id, leaseValid]);
+  const recovery: Recovery | undefined =
+    onRetry && active && leaseValid
+      ? {
+          ...retryState,
+          run: async () => {
+            const state = retry.current;
+            if (state.busy || state.attempts >= 2) return;
+            const epoch = state.epoch;
+            state.busy = true;
+            state.attempts++;
+            setRetryState({ attempts: state.attempts, busy: true });
+            try {
+              // The callback rechecks cookie preparation, same identity/event and the current public post.
+              // No child HLS URL is reused and a successful retry always starts muted.
+              if ((await onRetry()) && state.epoch === epoch)
+                setGeneration((value) => value + 1);
+            } catch {
+              /* Failed confirmation does not reload any bytes. */
+            } finally {
+              state.busy = false;
+              if (mounted.current)
+                setRetryState({ attempts: state.attempts, busy: false });
+            }
+          },
+        }
+      : undefined;
   return post.media.kind === "photo" ? (
     <FeedPhoto
-      key={`${post.id}:${large}`}
+      key={`${post.id}:${large}:${generation}`}
       post={post}
       large={large}
-      active={active}
+      active={active && leaseValid}
+      recovery={recovery}
     />
   ) : (
     <FeedVideo
-      key={post.id}
+      key={`${post.id}:${generation}`}
       post={post}
       active={active}
       play={play}
       sound={sound}
+      recovery={recovery}
+      leaseValid={leaseValid}
     />
+  );
+}
+type Recovery = { attempts: number; busy: boolean; run: () => Promise<void> };
+function MediaFailure({
+  message,
+  recovery,
+}: {
+  message: string;
+  recovery?: Recovery | undefined;
+}) {
+  return (
+    <div>
+      <p role="status">{message}</p>
+      {recovery ? (
+        <>
+          <button
+            type="button"
+            disabled={recovery.busy || recovery.attempts >= 2}
+            onClick={() => void recovery.run()}
+          >
+            {recovery.busy
+              ? "本人と公開状態を再確認中"
+              : "公開状態を再確認して再試行"}
+          </button>
+          <p>
+            {recovery.attempts >= 2
+              ? "この表示での再試行は2回までです。一覧に戻り、通信状態を確認してください。"
+              : "自動再試行はしません。本人と公開状態を確認してから、同じ投稿を読み直します。"}
+          </p>
+        </>
+      ) : null}
+    </div>
   );
 }
 function FeedPhoto({
   post,
   large,
   active,
+  recovery,
 }: {
   post: PublicPost;
   large: boolean;
   active: boolean;
+  recovery?: Recovery | undefined;
 }) {
   const [fallback, setFallback] = useState(false),
     [failed, setFailed] = useState(false);
-  if (!active || failed || post.media.kind !== "photo")
+  if (!active || post.media.kind !== "photo")
+    return <p role="status">公開状態を確認中</p>;
+  if (failed)
     return (
-      <p role="status">
-        {failed ? "画像を取得できませんでした。" : "公開状態を確認中"}
-      </p>
+      <MediaFailure
+        message="画像を取得できませんでした。"
+        recovery={recovery}
+      />
     );
   const media = post.media;
   return (
@@ -80,11 +167,15 @@ function FeedVideo({
   active,
   play,
   sound,
+  recovery,
+  leaseValid,
 }: {
   post: PublicPost;
   active: boolean;
   play: boolean;
   sound: boolean;
+  recovery?: Recovery | undefined;
+  leaseValid: boolean;
 }) {
   const element = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState(false),
@@ -93,7 +184,7 @@ function FeedVideo({
   const hlsUrl = media?.hls_url;
   useEffect(() => {
     const video = element.current;
-    if (!video || !active || !hlsUrl) return;
+    if (!video || !active || !leaseValid || !hlsUrl) return;
     let cancelled = false,
       hls: Hls | undefined;
     const clear = () => {
@@ -178,13 +269,15 @@ function FeedVideo({
       video.removeEventListener("canplay", start);
       clear();
     };
-  }, [active, hlsUrl, play, post.event_id, post.id]);
+  }, [active, leaseValid, hlsUrl, play, post.event_id, post.id]);
   if (!media) return null;
+  if (!leaseValid) return <p role="status">公開状態を確認中</p>;
   if (failed)
     return (
-      <p role="status">
-        動画を再生できませんでした。再読み込みか、対応する端末で確認してください。
-      </p>
+      <MediaFailure
+        message="動画を再生できませんでした。通信状態や対応する端末を確認してください。"
+        recovery={recovery}
+      />
     );
   return (
     <>

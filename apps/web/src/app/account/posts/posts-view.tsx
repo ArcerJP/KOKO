@@ -50,19 +50,21 @@ export function PostsView({
         {state.nextCursor && (
           <button
             className="secondary"
-            disabled={state.phase !== "ready" || state.items.length >= 300}
+            disabled={state.phase !== "ready"}
             onClick={onMore}
           >
-            続きを読み込む
+            {state.items.length >= 300
+              ? "さらに古い投稿へ（表示を入れ替え）"
+              : "続きを読み込む"}
           </button>
         )}
       </div>
       {state.phase === "ready" && state.items.length === 0 && (
         <p>投稿はまだありません。</p>
       )}
-      {state.items.length >= 300 && (
-        <p>表示は300件までです。最新の状態は先頭から読み直してください。</p>
-      )}
+      <p className="caption">
+        最大300件ずつ表示します。さらに古い投稿へ進むと直前の表示分を入れ替えます。最新の投稿へ戻るときは先頭から読み直してください。
+      </p>
       <div className="results">
         {state.items.map((post) => (
           <article

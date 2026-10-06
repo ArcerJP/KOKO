@@ -130,7 +130,12 @@ async function mount(
     route.fulfill({
       json: {
         ...publicPost(
-          Number(new URL(route.request().url()).pathname.split("/").at(-1)),
+          Number(
+            new URL(route.request().url()).pathname
+              .split("/")
+              .at(-1)!
+              .slice(-12),
+          ),
           options.video,
         ),
         theme_id: options.theme ?? null,
@@ -243,6 +248,36 @@ test("poll announces new posts without moving the existing anchor", async ({
   await page.getByRole("button", { name: /新着 2 件/ }).click();
   await expect(first).toHaveAttribute("data-feed-id", id(102));
 });
+test("the explicit older-window action reaches the 301st post without exceeding 300 cards", async ({
+  page,
+}) => {
+  await mount(page);
+  await page.route("**/api/feed?**", (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    const start = Number(query.get("cursor")?.split(".")[0] ?? 1000),
+      limit = Number(query.get("limit"));
+    return route.fulfill({
+      json: feedPage(start, limit, `${start - limit}.${"a".repeat(43)}`),
+    });
+  });
+  await page.getByRole("button", { name: "本人確認・投稿を読み込む" }).click();
+  const cards = page.locator("[data-feed-id]");
+  await expect(cards.first()).toHaveAttribute("data-feed-id", id(1000));
+  for (let n = 1; n < 10; n++) {
+    await page
+      .getByRole("button", { name: "続きを読み込む", exact: true })
+      .click();
+    await expect(cards).toHaveCount((n + 1) * 30);
+  }
+  await expect(page.getByText(/現在の表示分を置き換え/)).toBeVisible();
+  await page
+    .getByRole("button", { name: "さらに古い投稿へ移動", exact: true })
+    .click();
+  await expect(cards).toHaveCount(30);
+  await expect(cards.first()).toHaveAttribute("data-feed-id", id(700));
+  await expect(page.getByText(/直前の表示分は破棄/)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+});
 test("at most six visible grid videos; fullscreen starts muted and sound needs a click", async ({
   page,
 }) => {
@@ -293,6 +328,91 @@ test("browser back and left swipe close fullscreen without loading public video 
   await media.dispatchEvent("pointerdown", { clientX: 250, clientY: 150 });
   await media.dispatchEvent("pointerup", { clientX: 100, clientY: 155 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+test("manual media retry rechecks one post, keeps the selected position, starts muted and stops after two attempts", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    const original = HTMLMediaElement.prototype.canPlayType;
+    HTMLMediaElement.prototype.canPlayType = function (type) {
+      return /mpegurl/i.test(type) ? "" : original.call(this, type);
+    };
+  });
+  let postReads = 0,
+    meReads = 0;
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === `/api/posts/${id(99)}`) postReads++;
+    if (path === "/api/me") meReads++;
+  });
+  await mount(page, { video: true });
+  await page
+    .getByRole("button", { name: "投稿者99さんの投稿を全画面で開く" })
+    .click();
+  const article = page.locator(`[data-full-id="${id(99)}"]`);
+  const retry = article.getByRole("button", {
+    name: "公開状態を再確認して再試行",
+  });
+  await article.getByRole("button", { name: "タップして音を出す" }).click();
+  const before = meReads;
+  for (let n = 0; n < 2; n++) {
+    await article.locator("video").dispatchEvent("error");
+    await expect(retry).toBeVisible();
+    await retry.evaluate((node) => {
+      // Same-turn double activation must reserve only one bounded attempt.
+      (node as HTMLButtonElement).click();
+      (node as HTMLButtonElement).click();
+    });
+    await expect(article.locator("video")).toHaveCount(1);
+    await expect(
+      article.getByRole("button", { name: "タップして音を出す" }),
+    ).toBeVisible();
+    expect(
+      await article
+        .locator("video")
+        .evaluate((node) => (node as HTMLVideoElement).muted),
+    ).toBe(true);
+    await expect(page).toHaveURL(new RegExp(`#post=${id(99)}$`));
+  }
+  expect(postReads).toBe(2);
+  expect(meReads - before).toBe(4);
+  await article.locator("video").dispatchEvent("error");
+  await expect(retry).toBeDisabled();
+  await expect(article.getByText(/この表示での再試行は2回まで/)).toBeVisible();
+  expect(postReads).toBe(2);
+  await page.clock.fastForward(10010);
+  await expect(retry).toBeDisabled();
+  await expect(article.locator("video")).toHaveCount(0);
+  expect(postReads).toBe(2);
+});
+test("manual media retry cannot load bytes after the post has been hidden or deleted", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = HTMLMediaElement.prototype.canPlayType;
+    HTMLMediaElement.prototype.canPlayType = function (type) {
+      return /mpegurl/i.test(type) ? "" : original.call(this, type);
+    };
+  });
+  await mount(page, { video: true });
+  await page
+    .getByRole("button", { name: "投稿者100さんの投稿を全画面で開く" })
+    .click();
+  const article = page.locator(`[data-full-id="${id(100)}"]`);
+  await article.locator("video").dispatchEvent("error");
+  await page.route(`**/api/posts/${id(100)}`, (route) =>
+    route.fulfill({
+      status: 404,
+      json: { error: { code: "NOT_FOUND", message: "Not found" } },
+    }),
+  );
+  await article
+    .getByRole("button", { name: "公開状態を再確認して再試行" })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator("video")).toHaveCount(0);
+  await expect(page.locator("[data-feed-id]")).toHaveCount(0);
 });
 test("authentication switch immediately discards every displayed resource", async ({
   page,

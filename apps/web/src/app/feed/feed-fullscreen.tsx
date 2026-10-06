@@ -144,13 +144,19 @@ export function FeedFullscreen({
               aria-label={`${item.post.display_name}さんの投稿`}
             >
               <div className={styles.fullMedia}>
-                {nearby && item.validUntil > 0 ? (
+                {nearby ? (
                   <FeedMedia
                     post={item.post}
                     active
+                    leaseValid={item.validUntil > 0}
                     large
                     play={current}
                     sound={current}
+                    onRetry={
+                      current
+                        ? () => controller.retryMedia(item.post.id)
+                        : undefined
+                    }
                   />
                 ) : (
                   <p>公開状態を確認中</p>

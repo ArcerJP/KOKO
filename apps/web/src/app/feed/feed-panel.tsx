@@ -155,10 +155,17 @@ export function FeedPanel({
         {state.nextCursor ? (
           <button
             className="secondary"
-            disabled={busy || state.items.length >= 300}
-            onClick={() => void controller.more()}
+            disabled={busy}
+            onClick={() => {
+              const replaceWindow = state.items.length >= 300;
+              void controller.more().then((ok) => {
+                if (ok && replaceWindow) scrollTo(0, 0);
+              });
+            }}
           >
-            続きを読み込む
+            {state.items.length >= 300
+              ? "さらに古い投稿へ移動"
+              : "続きを読み込む"}
           </button>
         ) : null}
       </div>
@@ -178,7 +185,9 @@ export function FeedPanel({
         <p>公開中の投稿はまだありません。</p>
       ) : null}
       {state.items.length >= 300 ? (
-        <p>表示は300件までです。先頭から読み直してください。</p>
+        <p>
+          一度に表示するのは最大300件です。「さらに古い投稿へ移動」で現在の表示分を置き換え、続きから閲覧できます。
+        </p>
       ) : null}
       {active ? (
         <FeedFullscreen
@@ -263,18 +272,15 @@ function FeedGrid({
             aria-label={`${item.post.display_name}さんの投稿を全画面で開く`}
           >
             <div className={styles.media}>
-              {item.validUntil > 0 ? (
-                <FeedMedia
-                  post={item.post}
-                  active={
-                    item.post.kind === "photo"
-                      ? visible.includes(item.post.id)
-                      : activeVideos.has(item.post.id)
-                  }
-                />
-              ) : (
-                <p>公開状態を確認中</p>
-              )}
+              <FeedMedia
+                post={item.post}
+                leaseValid={item.validUntil > 0}
+                active={
+                  item.post.kind === "photo"
+                    ? visible.includes(item.post.id)
+                    : activeVideos.has(item.post.id)
+                }
+              />
             </div>
           </button>
           <p className={styles.caption}>

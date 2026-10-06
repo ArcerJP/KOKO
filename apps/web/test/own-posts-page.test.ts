@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { postStates } from "@koko/contract";
 import { PostsView } from "../src/app/account/posts/posts-view";
 import { ownPostsEventId } from "../src/api/own-posts-config";
-import { eventId, me, post } from "./own-posts-fixture";
+import { eventId, me, page, post } from "./own-posts-fixture";
 
 const { createClient, redirect } = vi.hoisted(() => ({
   createClient: vi.fn(),
@@ -126,4 +126,29 @@ it("renders all contract states with no fake appeal/delete/media controls or raw
   expect(html).toContain("原本削除完了を示すものではありません");
   expect(html).not.toMatch(/PRIVATE_RAW|<script>|<img|<video|<form/);
   expect(html).toContain("&lt;script&gt;");
+});
+it("offers enabled continuation at the window boundary and keeps deletion controls for older posts", () => {
+  const render = (start: number, count: number) =>
+    renderToStaticMarkup(
+      createElement(PostsView, {
+        state: {
+          phase: "ready",
+          items: page(start, count).items,
+          nextCursor: "synthetic-cursor",
+          message: "",
+        },
+        operationsEnabled: true,
+        onReload() {},
+        onMore() {},
+        onRefresh() {},
+      }),
+    );
+  const boundary = render(1, 300);
+  expect(boundary).toContain("さらに古い投稿へ（表示を入れ替え）");
+  expect(boundary).not.toMatch(/<button[^>]*disabled[^>]*>さらに古い投稿/);
+  expect(boundary).not.toContain("表示は300件までです");
+  const older = render(301, 30);
+  expect(older).toContain(post(301).id);
+  expect(older).toContain("続きを読み込む");
+  expect(older).toContain("自分の投稿を削除");
 });

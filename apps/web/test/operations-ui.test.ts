@@ -19,6 +19,8 @@ import { ThemeForm } from "../src/app/manage/themes-editor";
 import { PostActions, PostActionForm } from "../src/components/post-actions";
 import { AppealForm } from "../src/app/appeal/appeal-panel";
 import { mockEventId, mockMe } from "../src/mocks/handlers";
+import { PostReview } from "../src/app/manage/manage-panel";
+import type { AdminPost } from "../src/api/operations-contract";
 
 const claims = {
   sub: mockMe.user_id,
@@ -26,6 +28,37 @@ const claims = {
   is_anonymous: false,
   app_metadata: { provider: "google", providers: ["google"] },
 };
+it.each([
+  "uploading",
+  "uploaded",
+  "processing",
+  "published",
+  "held",
+  "blocked",
+  "deleted",
+] as const)("theme action is offered only after processing: %s", (status) => {
+  const item: AdminPost = {
+    post: {
+      id: mockMe.user_id,
+      event_id: mockEventId,
+      status,
+      version: 1,
+      created_at: "2026-10-06T00:00:00Z",
+    },
+    user_id: mockMe.user_id,
+    is_banned: false,
+    report_count: 0,
+  };
+  const html = renderToStaticMarkup(
+    createElement(PostReview, { item, isAdmin: true, mutate: vi.fn() }),
+  );
+  expect(html.includes('value="reassignTheme"')).toBe(
+    ["published", "held", "blocked"].includes(status),
+  );
+  expect(html.includes("処理結果を確認してから変更")).toBe(
+    ["uploading", "uploaded", "processing"].includes(status),
+  );
+});
 beforeEach(() => {
   for (const flag of [
     "KOKO_STAGE_THREE_ENABLED",

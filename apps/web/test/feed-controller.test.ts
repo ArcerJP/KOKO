@@ -218,3 +218,156 @@ it("does not run competing refreshes or more without cursor", async () => {
   pending.resolve(feedPage());
   await result;
 });
+
+it("reaches 1500 posts in bounded explicit windows without dropping a cursor item", async () => {
+  const { c, client } = setup();
+  let next = 1500;
+  client.list.mockImplementation(async (query) => {
+    const count = Math.min(query.limit ?? 30, next);
+    const page = feedPage(
+      next,
+      count,
+      next > count ? `cursor-${next - count}` : null,
+    );
+    next -= count;
+    return page;
+  });
+  expect(await c.reload()).toBe(true);
+  const seen = new Set<string>();
+  while (true) {
+    const snapshot = c.getSnapshot();
+    expect(snapshot.items.length).toBeLessThanOrEqual(300);
+    snapshot.items.forEach((item) => seen.add(item.post.id));
+    if (!snapshot.nextCursor) break;
+    const replace = snapshot.items.length === 300;
+    expect(await c.more()).toBe(true);
+    if (replace) {
+      expect(c.getSnapshot().items).toHaveLength(30);
+      expect(
+        c
+          .getSnapshot()
+          .items.some((item) => item.post.id === snapshot.items[0]!.post.id),
+      ).toBe(false);
+      expect(c.getSnapshot().message).toContain("直前の表示分は破棄");
+    }
+  }
+  expect(seen.size).toBe(1500);
+  expect(seen.has(id(1))).toBe(true);
+});
+it("caps the final append after a removed post and rejects an oversized response", async () => {
+  const { c, client } = setup();
+  let next = 1000;
+  client.list.mockImplementation(async (query) => {
+    const limit = query.limit ?? 30;
+    const page = feedPage(next, limit, `cursor-${next - limit}`);
+    next -= limit;
+    return page;
+  });
+  await c.reload();
+  for (let n = 0; n < 9; n++) await c.more();
+  c.remove(id(1000));
+  await c.more();
+  expect(client.list.mock.lastCall?.[0].limit).toBe(1);
+  expect(c.getSnapshot().items).toHaveLength(300);
+  c.remove(id(999));
+  client.list.mockResolvedValue(feedPage(next, 2, "other-cursor"));
+  expect(await c.more()).toBe(false);
+  expect(c.getSnapshot().items).toEqual([]);
+});
+it("media retry fresh-checks one post and identity on both sides without moving the list", async () => {
+  const { c, client, prepare, advance } = setup();
+  await c.reload();
+  const before = c.getSnapshot();
+  advance(500);
+  expect(await c.retryMedia(id(99))).toBe(true);
+  expect(prepare).toHaveBeenCalledTimes(2);
+  expect(client.getMe).toHaveBeenCalledTimes(4);
+  expect(client.post).toHaveBeenCalledWith(id(99), expect.any(AbortSignal));
+  expect(client.list).toHaveBeenCalledOnce();
+  expect(c.getSnapshot().items.map((item) => item.post.id)).toEqual(
+    before.items.map((item) => item.post.id),
+  );
+  expect(
+    c.getSnapshot().items.find((item) => item.post.id === id(99))?.validUntil,
+  ).toBe(11500);
+  expect(c.getSnapshot().items[0]?.validUntil).toBe(11000);
+  expect(c.getSnapshot().nextCursor).toBe(before.nextCursor);
+});
+it.each(["owner", "event", "banned", "consent", "role"] as const)(
+  "media retry stops on %s revocation after reading",
+  async (kind) => {
+    const { c, client } = setup();
+    await c.reload();
+    const next = {
+      ...me,
+      ...(kind === "owner"
+        ? { user_id: id(999) }
+        : kind === "event"
+          ? { event_id: id(999) }
+          : kind === "banned"
+            ? { is_banned: true }
+            : kind === "consent"
+              ? { consent_required: true }
+              : { role: "moderator" as const }),
+    };
+    client.getMe.mockResolvedValueOnce(me).mockResolvedValueOnce(next);
+    expect(await c.retryMedia(id(100))).toBe(false);
+    expect(c.getSnapshot().items).toEqual([]);
+  },
+);
+it("media retry cannot resurrect a removed/reported post with a late result", async () => {
+  const { c, client } = setup();
+  await c.reload();
+  const pending = deferred<ReturnType<typeof publicPost>>();
+  client.post.mockReturnValue(pending.promise);
+  const result = c.retryMedia(id(100));
+  await vi.waitFor(() => expect(client.post).toHaveBeenCalledOnce());
+  expect(await c.retryMedia(id(100))).toBe(false);
+  c.remove(id(100));
+  pending.resolve(publicPost(100));
+  expect(await result).toBe(false);
+  expect(c.getSnapshot().items.some((item) => item.post.id === id(100))).toBe(
+    false,
+  );
+  expect(await c.retryMedia(id(100))).toBe(false);
+});
+it.each(["not-found", "wrong-post", "wrong-event"])(
+  "media retry rejects %s",
+  async (kind) => {
+    const { c, client } = setup();
+    await c.reload();
+    if (kind === "not-found")
+      client.post.mockRejectedValue(new ApiFailure("NOT_FOUND"));
+    else
+      client.post.mockResolvedValue({
+        ...publicPost(kind === "wrong-post" ? 99 : 100),
+        event_id: kind === "wrong-event" ? id(999) : eventId,
+      });
+    expect(await c.retryMedia(id(100))).toBe(false);
+    expect(c.getSnapshot().items).toEqual([]);
+  },
+);
+it("a late media retry after sign-out cannot restore metadata", async () => {
+  const { c, client } = setup();
+  await c.reload();
+  const pending = deferred<ReturnType<typeof publicPost>>();
+  client.post.mockReturnValue(pending.promise);
+  const result = c.retryMedia(id(100));
+  await vi.waitFor(() => expect(client.post).toHaveBeenCalledOnce());
+  c.close();
+  pending.resolve(publicPost());
+  expect(await result).toBe(false);
+  expect(c.getSnapshot().items).toEqual([]);
+  expect(c.getSnapshot().phase).toBe("closed");
+});
+it("media confirmation is finite even when the transport ignores abort", async () => {
+  vi.useFakeTimers();
+  const { c, client } = setup();
+  await c.reload();
+  client.post.mockImplementation(() => new Promise(() => {}));
+  const result = c.retryMedia(id(100));
+  await vi.advanceTimersByTimeAsync(10001);
+  expect(await result).toBe(false);
+  expect(client.post).toHaveBeenCalledOnce();
+  expect(c.getSnapshot().items).toEqual([]);
+});

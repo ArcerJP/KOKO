@@ -62,11 +62,21 @@ export function createFeedController(
         : "表示を破棄しました。本人確認して読み直してください。",
     });
   };
-  async function run(kind: "reload" | "more" | "poll"): Promise<boolean> {
+  async function run(
+    kind: "reload" | "more" | "poll" | "media",
+    mediaId?: string,
+  ): Promise<boolean> {
     if (active || state.phase === "closed") return false;
     if (kind !== "reload" && state.phase !== "ready") return false;
-    if (kind === "more" && (!state.nextCursor || state.items.length >= 300))
+    if (kind === "more" && !state.nextCursor) return false;
+    if (
+      kind === "media" &&
+      (!mediaId ||
+        !validId(mediaId) ||
+        !state.items.some((item) => item.post.id === mediaId))
+    )
       return false;
+    const replaceWindow = kind === "more" && state.items.length >= 300;
     const previous = state,
       current = ++revision,
       abort = new AbortController(),
@@ -102,7 +112,10 @@ export function createFeedController(
       role = me.role;
     };
     const query: FeedQuery = {
-      limit: 30,
+      limit:
+        kind === "more" && !replaceWindow
+          ? Math.min(30, 300 - previous.items.length)
+          : 30,
       ...(theme ? { theme } : {}),
       ...(kind === "more" ? { cursor: previous.nextCursor! } : {}),
     };
@@ -119,8 +132,16 @@ export function createFeedController(
             throw new ApiFailure("AUTH_REQUIRED");
           check();
           await verify();
-          const page = await client.list(query, abort.signal);
+          const page =
+            kind === "media"
+              ? {
+                  items: [await client.post(mediaId!, abort.signal)],
+                  next_cursor: previous.nextCursor,
+                }
+              : await client.list(query, abort.signal);
           check();
+          if (page.items.length > query.limit!)
+            throw new ApiFailure("INVALID_CURSOR");
           let items: FeedItem[],
             nextCursor = previous.nextCursor,
             newCount = 0;
@@ -128,7 +149,19 @@ export function createFeedController(
             post,
             validUntil: started + 10000,
           });
-          if (kind === "reload") {
+          if (kind === "media") {
+            const post = page.items[0]!;
+            if (
+              post.id !== mediaId ||
+              post.event_id !== eventId ||
+              (theme && post.theme_id !== theme)
+            )
+              throw new ApiFailure("NOT_FOUND");
+            items = previous.items.map((item) =>
+              item.post.id === mediaId ? leased(post) : item,
+            );
+            newCount = previous.newCount;
+          } else if (kind === "reload") {
             items = page.items.map(leased);
             nextCursor = page.next_cursor;
           } else if (kind === "more") {
@@ -145,7 +178,9 @@ export function createFeedController(
               )
             )
               throw new ApiFailure("INVALID_CURSOR");
-            items = [...previous.items, ...page.items.map(leased)];
+            items = replaceWindow
+              ? page.items.map(leased)
+              : [...previous.items, ...page.items.map(leased)];
             nextCursor = page.next_cursor;
             newCount = previous.newCount;
           } else {
@@ -188,9 +223,11 @@ export function createFeedController(
             items,
             nextCursor,
             newCount,
-            message: newCount
-              ? "新しい投稿があります。表示位置はそのままです。"
-              : "取得時点の公開投稿です。",
+            message: replaceWindow
+              ? "さらに古い投稿へ移動しました。直前の表示分は破棄し、最大300件ずつ表示します。"
+              : newCount
+                ? "新しい投稿があります。表示位置はそのままです。"
+                : "取得時点の公開投稿です。",
           });
           return true;
         })(),
@@ -233,6 +270,7 @@ export function createFeedController(
     reload: () => run("reload"),
     more: () => run("more"),
     poll: () => run("poll"),
+    retryMedia: (id: string) => run("media", id),
     visible(ids: readonly string[]) {
       const next = [...new Set(ids.filter(validId))].slice(0, 30).sort();
       if (JSON.stringify(next) === JSON.stringify(visible)) return;
