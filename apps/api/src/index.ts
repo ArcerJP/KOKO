@@ -40,6 +40,11 @@ import {
   handleUploadRecoveryScheduled,
   type RecoveryEnv,
 } from "./upload-recovery";
+import {
+  handlePhysicalDeletionScheduled,
+  type PhysicalDeletionEnv,
+} from "./physical-deletion";
+import { handleCleanupOrphansScheduled } from "./cleanup-orphans";
 
 const JSON_HEADERS = {
   "cache-control": "no-store",
@@ -81,14 +86,25 @@ export default {
   },
   async scheduled(controller, env) {
     if (controller.cron === mediaDispatchCron) {
-      const [counts, operations, capacity] = await Promise.all([
-        handleMediaDispatchScheduled(controller, env as MediaDispatchEnv),
-        handleStageThreeOutboxScheduled(controller, env as StageThreeOutboxEnv),
-        handleCapacityMonitorScheduled(controller, env as CapacityMonitorEnv),
-      ]);
+      const [counts, operations, capacity, deletion, orphans] =
+        await Promise.all([
+          handleMediaDispatchScheduled(controller, env as MediaDispatchEnv),
+          handleStageThreeOutboxScheduled(
+            controller,
+            env as StageThreeOutboxEnv,
+          ),
+          handleCapacityMonitorScheduled(controller, env as CapacityMonitorEnv),
+          handlePhysicalDeletionScheduled(
+            controller,
+            env as PhysicalDeletionEnv,
+          ),
+          handleCleanupOrphansScheduled(controller, env as PhysicalDeletionEnv),
+        ]);
       if (counts) console.info("media_outbox_dispatch", counts);
       if (operations) console.info("operational_outbox_dispatch", operations);
       if (capacity) console.info("capacity_monitor", capacity);
+      if (deletion) console.info("physical_deletion", deletion);
+      if (orphans) console.info("cleanup_orphan_observations", orphans);
       return;
     }
     const counts = await handleUploadRecoveryScheduled(

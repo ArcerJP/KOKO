@@ -5,6 +5,8 @@ export type InternalRpcName =
   | "media_processing_status"
   | "stage_three_outbox"
   | "resolve_stream_webhook"
+  | "manage_physical_deletion"
+  | "reconcile_cleanup_orphans"
   | "manage_capacity_monitor";
 export type InternalRpc = (
   name: InternalRpcName,
@@ -25,6 +27,8 @@ export function createInternalRpc(
         "media_processing_status",
         "stage_three_outbox",
         "resolve_stream_webhook",
+        "manage_physical_deletion",
+        "reconcile_cleanup_orphans",
         "manage_capacity_monitor",
       ].includes(name)
     )
