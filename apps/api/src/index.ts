@@ -68,7 +68,7 @@ export default {
       console.info(
         "media_processing_queue",
         await handleMediaProcessingQueue(batch, processingEnv, {
-          // The trusted external OIDC assertion source is an explicit deployment gate, not an HTTP/Queue input.
+          // Fixed HMAC-authenticated Vercel relay supplies runtime OIDC; secrets/activation remain deployment gates.
           prepareVideo: (job) => runStreamPreparation(job, processingEnv),
         }),
       );

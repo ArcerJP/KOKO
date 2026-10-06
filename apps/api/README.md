@@ -246,16 +246,16 @@ Web側中継/運営画面は[Web README](../web/README.md)を参照。PGlite・W
 - copy/clipのoperation IDを外部呼出し前に永続予約し、応答喪失・クラッシュ時にcreateを重ねません。有限のpollとメタデータ照合で既存操作を回復し、未知の結果は保留。旧世代の再利用も同じ原本asset/etag/version・event/postの証拠が必須です。
 - 全長fallbackは別UIDのclip、通常の短縮原本はsourceを使います。duration実測4秒以下、ready・処理完了・署名必須・許可origin・原本/親clipの一致なしでは判定へ渡しません。3.8/3.5/3.0秒の短縮候補も無制限に生成しません。
 - `media-consumer.ts`は固定Queue名・eventと厳密な7項目hintを照合し、DBの現状態→必要なら動画準備→private Cloud Run `/internal/process`→DB再照合。HTTP200だけでACKせず、永続した完了/保留/世代交代の証拠が必要です。Queue名の衝突・未設定は暗黙ACKを避けて拒否します。
-- サーバーの認証準備はブラウザログインと別です。`cloud-run-client.ts`は外部OIDC→固定Google STS→IAM Credentialsの短命ID token取得をローカル検証していますが、Workerでのassertion取得は未接続です。[ADR-0007](../../docs/decisions/ADR-0007-private-image-service.md#呼出元の方式選定2026-10-06)でVercel OIDC/WIFの固定中継を選定しましたが、その中継とconsumerのコード接続は未実装です。`index.ts`は架空のassertionを注入しません。**設定だけでCloud Runまで動く完成品とは扱わず、consumer有効化前のゲートです。**
+- サーバーの認証準備はブラウザログインと別です。`index.ts`→consumerは専用HMACの固定Vercel中継へ接続します。Google tokenはWorkerへ返さず、[Web中継](../web/README.md#cloud-run固定中継既定off)がnative production OIDC→STS/IAM→private Cloud Runを実行します。共有コアは`packages/processing`、旧`cloud-run-client.ts`は互換exportのみです。ローカル試験済みでも実WIF/IAM/秘密/配備/受入は未完了で、consumer有効化前のゲートです。
 
-| 設定群                                                                                                                               | 用途・実登録の境界                                                           |
-| ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| `KOKO_STREAM_PROCESSING_ENABLED`                                                                                                     | 既定OFF。DB側の処理flag/実受入と併せて有効化                                 |
-| `R2_ACCOUNT_ID`、`KOKO_STREAM_API_TOKEN`、`KOKO_STREAM_CUSTOMER_HOST`、`KOKO_STREAM_PLAYBACK_ORIGIN`                                 | 固定account・Stream管理・配信先。API tokenは秘密                             |
-| `KOKO_STREAM_R2_READ_ACCESS_KEY_ID`、`KOKO_STREAM_R2_READ_SECRET_ACCESS_KEY`                                                         | 原本読取り専用。アップロード用鍵と分離し、実発行/入力は本人                  |
-| `KOKO_MEDIA_CONSUMER_ENABLED`、`KOKO_MEDIA_PROCESSING_QUEUE`、`KOKO_EVENT_ID`                                                        | 既定OFFのconsumerと固定Queue/event。実Queue binding/consumer登録は未実施     |
-| `KOKO_IMAGE_SERVICE_URL`、`KOKO_IMAGE_CALLER_EMAIL`、`KOKO_IMAGE_CALLER_SUBJECT`                                                     | private Cloud Run origin・許可サービス主体。利用者Googleログインを代用しない |
-| `KOKO_GOOGLE_WIF_PROVIDER_AUDIENCE`、`KOKO_GOOGLE_WIF_SUBJECT_ISSUER`、`KOKO_GOOGLE_WIF_SUBJECT_AUDIENCE`、`KOKO_GOOGLE_WIF_SUBJECT` | WIFを選ぶ場合の固定照合値。信頼するassertion供給元が別途必要                 |
+| 設定群                                                                                               | 用途・実登録の境界                                                                                                           |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `KOKO_STREAM_PROCESSING_ENABLED`                                                                     | 既定OFF。DB側の処理flag/実受入と併せて有効化                                                                                 |
+| `R2_ACCOUNT_ID`、`KOKO_STREAM_API_TOKEN`、`KOKO_STREAM_CUSTOMER_HOST`、`KOKO_STREAM_PLAYBACK_ORIGIN` | 固定account・Stream管理・配信先。API tokenは秘密                                                                             |
+| `KOKO_STREAM_R2_READ_ACCESS_KEY_ID`、`KOKO_STREAM_R2_READ_SECRET_ACCESS_KEY`                         | 原本読取り専用。アップロード用鍵と分離し、実発行/入力は本人                                                                  |
+| `KOKO_MEDIA_CONSUMER_ENABLED`、`KOKO_MEDIA_PROCESSING_QUEUE`、`KOKO_EVENT_ID`                        | 既定OFFのconsumerと固定Queue/event。実Queue binding/consumer登録は未実施                                                     |
+| `KOKO_PROCESSING_RELAY_ENABLED`、`KOKO_PROCESSING_RELAY_ORIGIN`、`KOKO_PROCESSING_RELAY_SECRET`      | 既定OFFの固定production中継・専用32bytes HMAC秘密。本人登録・実受入前は無効                                                  |
+| `KOKO_PROCESSING_RELAY_PROTECTION_BYPASS`                                                            | 保護付きVercelへの機械アクセスに必要な場合だけ。project全体の保護を通る秘密のため別途本人ゲート。Google WIF設定はWeb側へ置く |
 
 `wrangler.jsonc`へQueue/Cron/秘密の実設定は追加していません。1分Cronは既存media dispatchと運営outboxへ分岐し、5分Cronは原本回復に使用します。登録・有効化、最大配送回数/DLQ・Cloud Runのinstance/並列上限は実配備前に確定します。
 

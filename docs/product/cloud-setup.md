@@ -4,6 +4,8 @@
 
 ## 2026-10-06の認証準備とPreview停止確認
 
+追加の本人依頼により、既存の未保存WIF作成フォームへ指定値を入力しました。対象はKOKO / `koko-510318`、プールID `koko-cloud-run`（有効なプールOFF）、OIDC provider `koko-vercel`、Team issuer・単一audience・subject mappingとproduction/project限定条件です。最後の保存は押さず本人へ引き渡しました。これは未保存の入力準備であり、プール/provider作成済み・条件のサーバー側受理・実認証成功ではありません。鍵・サービスアカウント・IAM・課金・配備は操作していません。
+
 本人提供の画像は`arcer2/koko-web`のPreview環境でBranch TrackingがOFFの状態です。管理画面を再読込みしてOFFが維持され、Saveが無効であることを確認しました。これは以後のGit連携によるPreview追従を止める設定で、既存Previewの削除を意味しません。既存配備の保護・Production・Cloudflare Accessを変更していません。追加pushではAPI自動配備OFFと他の配備経路も再確認します。
 
 VercelのSecurity画面ではOIDCのTeam方式が選択済み、issuerは`https://oidc.vercel.com/arcer2`、audは`https://vercel.com/arcer2`、production subjectは`owner:arcer2:project:koko-web:environment:production`です。これは非秘密の設定値の読取りで、実runtime tokenの取得・Google WIFの成功ではありません。セキュリティを優先した方式選定は[ADR-0007](../decisions/ADR-0007-private-image-service.md#呼出元の方式選定2026-10-06)、本人が今行う無効プールの準備は[Cloud Run認証手順](cloud-run-auth-setup.md)に分離します。

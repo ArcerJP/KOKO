@@ -6,6 +6,7 @@ import {
   type ProcessingJob,
 } from "./cloud-run-client";
 import type { MediaProcessingMessage } from "./media-dispatch";
+import { createProcessingRelayClient } from "@koko/processing/relay";
 
 export type MediaConsumerEnv = AccountEnv & {
   KOKO_MEDIA_CONSUMER_ENABLED?: string;
@@ -18,6 +19,10 @@ export type MediaConsumerEnv = AccountEnv & {
   KOKO_GOOGLE_WIF_SUBJECT_ISSUER?: string;
   KOKO_GOOGLE_WIF_SUBJECT_AUDIENCE?: string;
   KOKO_GOOGLE_WIF_SUBJECT?: string;
+  KOKO_PROCESSING_RELAY_ENABLED?: string;
+  KOKO_PROCESSING_RELAY_ORIGIN?: string;
+  KOKO_PROCESSING_RELAY_SECRET?: string;
+  KOKO_PROCESSING_RELAY_PROTECTION_BYPASS?: string;
 };
 export type MediaConsumerDependencies = {
   /** Trusted configured source. No deployment source is invented or read from a Queue message. */
@@ -209,6 +214,23 @@ export async function handleMediaProcessingQueue(
   let client = dependencies.cloudRun;
   const configuredClient = () => {
     if (client) return client;
+    // Production has no ambient Google identity. Only the fixed HMAC relay is wired.
+    if (!dependencies.subjectToken) {
+      client =
+        createProcessingRelayClient({
+          enabled: env.KOKO_PROCESSING_RELAY_ENABLED === "true",
+          origin: env.KOKO_PROCESSING_RELAY_ORIGIN ?? "",
+          secret: env.KOKO_PROCESSING_RELAY_SECRET ?? "",
+          eventId: env.KOKO_EVENT_ID ?? "",
+          ...(env.KOKO_PROCESSING_RELAY_PROTECTION_BYPASS
+            ? { protectionBypass: env.KOKO_PROCESSING_RELAY_PROTECTION_BYPASS }
+            : {}),
+          fetcher,
+        }) ?? undefined;
+      if (!client) throw failure();
+      return client;
+    }
+    // Explicit test/adapter injection only; index never injects an external assertion.
     const token = createWorkloadIdentityToken({
       enabled: true,
       serviceUrl: env.KOKO_IMAGE_SERVICE_URL ?? "",

@@ -17,9 +17,9 @@
 | B3-7/B3-8             | [オフライン校正集計](../../apps/image/README.md#校正結果のオフライン集計b3-7の準備)と共同検証手順                                                                   | 正常系200枚・適法な否定系・30投稿/分・閲覧同時数・quota/p95/費用・閾値承認  |
 | F3-5                  | ヘルプ、採択catalog限定の規約/privacy画面                                                                                                                           | 本文未採択のため準備中。草案の自動公開や同意受付なし                        |
 
-**実装を止めず先行して準備すべき外部条件**：private Cloud Run呼出しは[ADR-0007](../decisions/ADR-0007-private-image-service.md#呼出元の方式選定2026-10-06)でVercel OIDC＋Google WIFを選定しましたが、中継コードと実IAMは未完成です。[本人の認証準備](cloud-run-auth-setup.md)、Stream webhook専用受信口と既存Accessの両立、privacy本文、保持/容量閾値を分離して進めます。サイトへログイン済みでもAPI権限・鍵・サービス間認証の完成ではありません。保護解除や架空の鍵で穴埋めしません。
+**実装を止めず先行して準備すべき外部条件**：private Cloud Run呼出しは[ADR-0007](../decisions/ADR-0007-private-image-service.md#呼出元の方式選定2026-10-06)のVercel OIDC＋Google WIFを使います。固定中継とconsumerのコード接続は追加済みですが、実IAM/秘密/配備は未受入です。[本人の認証準備](cloud-run-auth-setup.md)、Stream webhook専用受信口と既存Accessの両立、privacy本文、保持/容量閾値を分離して進めます。サイトへのログインや模擬成功から実サービス間認証の完成を推定しません。
 
-**設定だけでは解消しない残件**：選定したVercel/WIF中継とQueue consumerのコード接続が必要です。既存ready multipartがprovider側で失効/中止された後の自動的なsession再作成と、孤児の能動削除は未実装。原本の物理削除adapterも未実装であり、第3の論理停止・削除予約・保持待ち表示と区別します。保持日数を設定しただけで物理削除が始まるものではありません。
+**設定だけでは解消しない残件**：既存ready multipartがprovider側で失効/中止された後の安全なsession再作成と、孤児の能動削除は未実装。再作成にはDB/端末の世代照合が必要で、complete準備後の結果不明を原本上書きで解消しません。原本の物理削除adapterも未実装であり、第3の論理停止・削除予約・保持待ち表示と区別します。保持日数を設定しただけで物理削除が始まるものではありません。
 
 ### 基盤の段階別記録
 

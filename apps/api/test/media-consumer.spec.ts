@@ -4,6 +4,7 @@ import {
   type MediaConsumerDependencies,
   type MediaConsumerEnv,
 } from "../src/media-consumer";
+import { relayPath, verifyRelay } from "@koko/processing/relay";
 
 const envelope = {
   version: 1,
@@ -77,6 +78,49 @@ function fixture(
 }
 const run = (f: ReturnType<typeof fixture>) =>
   handleMediaProcessingQueue(f.batch, f.env, f.dependencies, f.fetcher);
+
+it.each(["TERMINAL", "DEFERRED", "READY"])(
+  "production relay wiring independently reloads DB %s before ACK",
+  async (after) => {
+    const f = fixture([
+      { code: "READY", kind: "photo" },
+      { code: after, ...(after === "READY" ? { kind: "photo" } : {}) },
+    ]);
+    f.env.KOKO_PROCESSING_RELAY_ENABLED = "true";
+    f.env.KOKO_PROCESSING_RELAY_ORIGIN =
+      "https://koko-relay-fixture.vercel.app";
+    f.env.KOKO_PROCESSING_RELAY_SECRET = "ab".repeat(32);
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url).endsWith(relayPath)) {
+        const req = new Request(String(url), init);
+        const text = String(init?.body);
+        expect(
+          await verifyRelay(
+            req,
+            f.env.KOKO_PROCESSING_RELAY_ORIGIN!,
+            f.env.KOKO_PROCESSING_RELAY_SECRET!,
+            text,
+          ),
+        ).toBe(true);
+        expect(JSON.parse(text)).toEqual(job);
+        expect(req.headers.has("authorization")).toBe(false);
+        expect(req.headers.has("apikey")).toBe(false);
+        return Response.json({ stage: "moderation", processComplete: true });
+      }
+      return f.fetcher(url, init);
+    });
+    const result = await handleMediaProcessingQueue(
+      f.batch,
+      f.env,
+      { prepareVideo: f.prepareVideo },
+      fetcher,
+    );
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(f.queued.ack).toHaveBeenCalledTimes(after === "TERMINAL" ? 1 : 0);
+    expect(f.queued.retry).toHaveBeenCalledTimes(after === "TERMINAL" ? 0 : 1);
+    expect(result.processed).toBe(1);
+  },
+);
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();

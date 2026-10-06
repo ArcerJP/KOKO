@@ -46,7 +46,7 @@ nativeへの設計境界は[native対応準備](native-readiness.md)、予算判
 
 ## 重複の境界
 
-Cloud Runへの呼出元認証は[ADR-0007](../decisions/ADR-0007-private-image-service.md)の方式選定、[認証準備](../product/cloud-run-auth-setup.md)の本人手順、cloud-setupの実適用記録を区別します。Vercel OIDC/WIFを選定したことは、中継コードの実装・プール有効化・IAM授権・実接続の成功を意味しません。
+Cloud Runへの呼出元認証は[ADR-0007](../decisions/ADR-0007-private-image-service.md)の方式選定、[Web README](../../apps/web/README.md#cloud-run固定中継既定off)の実装/設定、[認証準備](../product/cloud-run-auth-setup.md)の本人手順、cloud-setupの実適用記録を区別します。共有HTTP/HMAC/WIFコアの正本は`packages/processing`で、公開API契約へprovider通信を混在させません。中継のローカル実装・模擬成功はプール有効化・IAM授権・実接続の成功ではありません。
 
 第1〜第3の機能は実装・模擬試験・実クラウド受入を区別します。APIのQueue/Stream/認証配信/運営outboxは`apps/api`、画面と専用中継は`apps/web`、AI前処理/合議/記録は`apps/image`に保持します。設定と安全境界は各app READMEへ集約し、private Realtimeの変化通知やHTTP成功をDBの認可・公開・job完了の正本として扱いません。外部API/端末の測定や本人操作を、テストfixture・ログイン済み画面から推定しません。
 

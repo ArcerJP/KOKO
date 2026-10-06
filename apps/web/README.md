@@ -307,3 +307,31 @@ SupabaseのEmail providerは無効化済みです。表示名/規約同意画面
 実Google/Access/同意、実R2/CORS、iPhone/Androidの保存速度（3秒目標）・実動画送信/復帰・容量/eviction・OS終了中挙動は未受入です。ブラウザ終了中の常時送信は保証せず、元ファイルを保持してください。新flagを実環境へ登録・有効化する操作も、実配備・追加DB適用とともに本人ゲートです。
 
 採用理由・比較・公式根拠は[ADR-0006](../../docs/decisions/ADR-0006-durable-browser-upload-queue.md)を参照してください。
+
+## Cloud Run固定中継（既定OFF）
+
+`POST /api/internal/media/process`はWorker Queue専用のserver-only機械認証入口です。ブラウザの利用者Cookie/Authorization/Originを受け付けず、固定production origin・event・3 UUIDだけを扱います。既存のWeb→Worker Accessサービス認証とは逆方向で、秘密を再利用しません。
+
+- `KOKO_PROCESSING_RELAY_ENABLED=true`とVercel native production環境が必要。Preview/development、ローカル環境、設定不足は失敗側に閉じます。配備は未実施です。
+- 固定originはHTTPSの単一`*.vercel.app`（path/末尾slashなし）。query・任意URL・aud・service account・入力token・画像本文は受けません。本文512 bytes・読取り5秒、厳格UTF-8/JSONと余分な属性を拒否します。
+- 専用32bytes乱数を64桁lowercase hexで表すHMAC-SHA256秘密。origin/path/method・時刻・nonce・本文を署名し、±60秒の窓を検査。nonceを永続したワンタイム保証はなく、短期再送の副作用はCloud Run/DBのlease/version/冪等処理で防御します。
+- 固定版`@vercel/oidc`からnative invocation contextだけを取得。手動token・環境/ファイル/CLI資格情報へのfallback・refreshはしません。固定issuer/aud/subjectに加えproject ID/production claimを検査し、Google STSが署名を検証。固定IAMで専用callerのID tokenを取得して固定Cloud Run `/internal/process`へ転送します。
+- tokenは返さず、成功は`{stage:"moderation",processComplete:true}`だけ、失敗は固定codeだけ。HTTP成功後もQueueはDB完了証拠を再照合してからACKします。
+- 共有HTTP/HMAC/WIFコアは`packages/processing`へ一元化。Google交換10秒・Cloud Runクライアント全体145秒、Worker中継全体150秒、Web route上限180秒。全ネットワークでredirect禁止/no-store/abort/本文上限。DB120秒leaseはCloud Run側のclaim時点からで、期限切れcommitを許しません。
+
+### サーバー専用設定と本人ゲート
+
+`apps/web/.env.example`に名前と既定OFFだけを置きます。次は実登録値の入力ではなく設定責務です。
+
+| 設定                                                                                            | 用途                                                                        |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `KOKO_PROCESSING_RELAY_ORIGIN`、`KOKO_EVENT_ID`                                                 | Workerと一致する固定production origin/event                                 |
+| `KOKO_PROCESSING_RELAY_SECRET`                                                                  | WorkerとWebだけの専用HMAC秘密。`NEXT_PUBLIC_`禁止                           |
+| `KOKO_VERCEL_PROJECT_ID`                                                                        | 固定project IDの追加照合                                                    |
+| `KOKO_IMAGE_SERVICE_URL`、`KOKO_IMAGE_CALLER_EMAIL`、`KOKO_IMAGE_CALLER_SUBJECT`                | private Cloud Run originとcaller専用email/数値ID                            |
+| `KOKO_GOOGLE_WIF_PROVIDER_AUDIENCE`                                                             | 固定Google pool/providerのSTS宛先                                           |
+| `KOKO_GOOGLE_WIF_SUBJECT_ISSUER`、`KOKO_GOOGLE_WIF_SUBJECT_AUDIENCE`、`KOKO_GOOGLE_WIF_SUBJECT` | Team issuer/audience/production主体。Google条件も同じ固定project/環境へ限定 |
+
+All Deployments保護を維持します。機械アクセス用automation bypassを使う場合はWorkerだけに`KOKO_PROCESSING_RELAY_PROTECTION_BYPASS`を登録しますが、これはproject全体の保護を通れる秘密で、route専用の限定tokenではありません。発行/登録/権限変更/有効化/配備は[本人の認証準備](../../docs/product/cloud-run-auth-setup.md)の個別ゲートです。HMAC/WIF/DB認可をbypassで代替しません。
+
+自動試験は署名改ざん・期限・別origin/event/project/environment、未設定/Preview拒否、native context不足、秘密非出力・redirect・未知応答・body上限・中断と、Worker→Web→mock Google/Cloud Run経路を検証します。実native OIDC・Google IAM/WIF・Cloud Run・Function上限/遅延・保護付きproduction originは未受入です。モックで成功しても有効化しません。採用理由は[ADR-0007](../../docs/decisions/ADR-0007-private-image-service.md)、実適用記録はcloud-setupへ分離します。

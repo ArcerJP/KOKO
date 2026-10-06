@@ -63,7 +63,9 @@ API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type 
 
 本人投稿の状態・一覧は既存`Contract Tests`でread-only SQLの所有権/権限・状態・精度を、`API Tests`で実Web Cryptoの署名cursor・改ざん/期限・最小応答・認証/異常通信を検査します。追加のjobや秘密は不要です。合成Auth/RPCとPGliteの成功は実Supabase適用・Web画面・メディア配信の受入ではありません。[本人投稿APIの実装境界](../apps/api/README.md#本人の投稿状態と一覧b2-6の一部既定無効)を参照してください。
 
-APIが共有契約の生成済み`dist/`を参照するため、rootの`typecheck:api`・`test:api`・`build:api`は、それぞれ`build:contract`の成功後にworkspaceの処理を実行します。別jobや以前のローカルbuildの生成物には依存しません。APIだけを検証する場合もroot commandを使用し、workspaceの下位commandを直接実行する場合は共有契約buildを先に行います。2026-10-03のPR #15で判明した準備漏れへの対応です。再現検査ではlockfileどおり依存を導入し、各commandの前に共有契約の生成物がないことを確認します。親ディレクトリに別の`node_modules`があるコピーだけでは依存解決の独立性を保証できないため、GitHub CIの新規checkoutでも結果を照合します。
+API/Webが共有契約と処理通信コアの生成済み`dist/`を参照するため、rootのAPI/Web向け型・test・buildは`build:shared`（`build:contract`→`build:processing`）の成功後にworkspaceの処理を実行します。API Deployの検証jobも同じ準備を行います。契約専用jobは従来どおり`build:contract`だけを使用します。別jobや以前のローカルbuildの生成物には依存しません。API/Webだけを検証する場合もroot commandを使用し、workspaceの下位commandを直接実行する場合は共有buildを先に行います。2026-10-03のPR #15で判明した準備漏れへの対応を、新しい共有コアにも適用します。再現検査ではlockfileどおり依存を導入し、共有生成物のない新規コピーで検査します。親ディレクトリに別の`node_modules`があるコピーだけでは依存解決の独立性を保証できないため、GitHub CIの新規checkoutでも結果を照合します。
+
+Cloud Run固定中継は既存Web/API Testsで合成HMAC・native OIDC fixture・STS/IAM/Cloud Run模擬通信・Queueの独立DB再照会を検査します。productionだけの実行、固定宛先、秘密を返さない応答、有限body/timeout/abort、Preview/default OFF、HTTP成功だけではACKしない境界を含みます。実OIDC署名/IAM・Vercel runtime・保護bypass・実媒体の受入は別工程です。設定の正本は[Web README](../apps/web/README.md#cloud-run固定中継既定off)です。
 
 [メディア処理予約の配送](../apps/api/README.md#メディア処理予約のqueue配送b1-6の後段既定無効)は既存`Contract Tests`でservice限定RPC・lease/世代・有限retry・処理状態不変を、`API Tests`で模擬Queueの遅延/失敗・曖昧結果・最小message・RPC期限/サイズ・既定OFFを検査します。新job・秘密・実bindingは追加しません。PGlite単一接続と模擬producerは実PostgreSQLの多接続競合・実Queue/DLQ・変換consumerを検証しません。
 

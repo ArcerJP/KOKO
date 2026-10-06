@@ -67,7 +67,7 @@ jobs:
           node-version: "24"
           package-manager-cache: false
       - run: npm ci --include=dev --strict-peer-deps
-      - run: npm run build:contract
+      - run: npm run build:shared
       - name: Guard and deploy the verified commit
         run: node .github/scripts/api-deploy.mjs deploy
         env:

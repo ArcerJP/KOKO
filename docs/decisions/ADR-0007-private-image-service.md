@@ -31,13 +31,13 @@ HTTPは固定route・3 UUIDだけ。認証後に本文を有限読取りし、�
 
 同日の後続実装で、画像専用routeを維持したまま、画像/動画3フレームからAI合議とDB完了記録まで進める固定`/internal/process`を追加しました。Queue consumerはHTTP成功とは別にDBの現行job/投稿版・完了証拠を再取得してACKを判断します。処理失敗の保留もAI違反や公開成功に置き換えません。
 
-Cloudflare側にはWIFのSTS交換とサービスアカウントID token取得を行う限定クライアントを追加していますが、信頼できる外部署名assertionの発行源は未接続です。WorkerがambientなGoogle認証を持つと仮定せず、未構成なら呼出しを拒否します。
+WIFのSTS交換・サービスアカウントID token取得・固定Cloud Run呼出しを、Worker/Web共用の`packages/processing`へ移しました。Worker自身がambientなGoogle認証を持つとは仮定せず、実runtimeは固定Vercel中継だけを呼び、未構成なら拒否します。API内の旧moduleは互換exportだけで、実装を複製しません。
 
 ### 呼出元の方式選定（2026-10-06）
 
 本人から速度・長期利用・セキュリティを比較して選定する依頼を受け、セキュリティを優先して**既存VercelのTeam OIDCをGoogle WIFへ交換する方式**を選定します。GoogleのサービスアカウントJSON秘密鍵は発行しません。Cloudflare AccessのサービスJWTを通常利用者JWTと同一視せず、空のsub・aud配列・strict service authenticationのCookie非発行を無視して発行源にしません。
 
-Cloudflare Queue consumer → 認証必須の固定Vercel中継 → Google STS/IAM → private Cloud Runの順とします。中継は既存`apps/web`のserver-only領域に実装予定で、任意URL・任意aud・任意サービスアカウント・画像本文を受け付けず、固定処理routeと3 UUIDだけを転送します。Vercel/Google tokenをWorker・ブラウザ・応答・ログへ返さず、Cloud RunとDBの認可・lease・完了証拠の検査を維持します。今回この中継コードを実装・配備したという意味ではありません。
+Cloudflare Queue consumer → 専用HMAC認証の固定Vercel中継 → Google STS/IAM → private Cloud Runの順です。既存`apps/web`のserver-only routeをローカル実装し、任意URL・任意aud・任意サービスアカウント・画像本文を受け付けず、固定処理routeと3 UUIDだけを転送します。Vercel/Google tokenをWorker・ブラウザ・応答・ログへ返さず、Cloud RunとDBの認可・lease・完了証拠を維持します。実IAM/配備/サービス間受入は未完了です。
 
 Googleはissuer・audに加えてVercelの固有project IDとproduction subjectを照合します。Preview/developmentやプール全体への権限を許可せず、専用callerに対象Cloud Run 1サービスのinvokerだけを付与する方針です。callerとVision等の処理用runtimeアカウントを分離します。
 
