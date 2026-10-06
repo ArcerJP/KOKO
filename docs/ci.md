@@ -162,6 +162,12 @@ ESLint 9は2026-08-06にEOLとなっています。[公式サポート表](https
 
 ## 依存関係のセキュリティ更新
 
+### 2026-10-06の固定中継追加時監査
+
+公式`@vercel/oidc@4.0.0`を固定導入し、既存Next.js/PostCSS経由の`source-map-js@1.2.1`に[GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)を検出しました。同じ互換範囲内の修正版`1.2.2`へlockfileを更新し、本番実行依存の監査は0件になりました。開発用の既知High 7件は残り、検査無効化・`audit fix --force`・認証SDKのローカル資格情報fallbackによる回避は行いません。監査値は確認時点の既知指摘であり、安全保証ではありません。
+
+新規検証コピーの`npm audit --include=dev --json`は計11パッケージ（High 7、Moderate 1、Low 3）。追加の低/中指摘は既存Markdown検査経路の[KaTeX](https://github.com/advisories/GHSA-238p-pmpm-9mq7)と[smol-toml](https://github.com/advisories/GHSA-r4xh-jqrq-34v2)、および間接依存への波及です。OIDC SDKの実行依存ではありません。npmの候補はMarkdown検査ツールのdowngradeを伴うため、今回の認証実装へ混在させず互換性調査を残します。任意の外部TOML設定や信頼できないHTML出力を実行せず、未修正を全依存0件と報告しません。
+
 ### 2026-10-03の追加監査：開発用依存のHigh 7件
 
 `npm audit --json`はHigh 7パッケージ、`npm audit --omit=dev --json`は0件でした。7件は`braces@3.0.3`の[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)から間接依存へ波及した数であり、7個の独立した脆弱性ではありません。`npm ls`とlockfileで、次の開発用依存経路を確認しています。
