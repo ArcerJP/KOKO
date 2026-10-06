@@ -138,6 +138,186 @@ async function row(id) {
   return (await db.query("SELECT * FROM public.posts WHERE id=$1", [id]))
     .rows[0];
 }
+// 110000: do not strand an in-flight upload/processor by advancing its post generation.
+for (const status of ["uploading", "uploaded", "processing"]) {
+  test(`theme reassignment rejects ${status} without changing post, assets, jobs or audit`, async () => {
+    const id = await post(status);
+    await assets(id);
+    await db.query(
+      `INSERT INTO public.outbox_jobs(event_id,post_id,kind,deduplication_key,payload)
+      VALUES($1,$2,'process_media','synthetic-active',jsonb_build_object('post_version',1))`,
+      [event, id],
+    );
+    const before = await row(id);
+    const jobs = (
+      await db.query("SELECT * FROM public.outbox_jobs WHERE post_id=$1", [id])
+    ).rows;
+    const media = (
+      await db.query(
+        "SELECT * FROM public.media_assets WHERE post_id=$1 ORDER BY id",
+        [id],
+      )
+    ).rows;
+    const audit = await count("audit_logs");
+    assert.equal(
+      (await call("reassign_theme", id, { ...action, theme_id: null })).code,
+      "STATE_CONFLICT",
+    );
+    assert.deepEqual(await row(id), before);
+    assert.deepEqual(
+      (
+        await db.query("SELECT * FROM public.outbox_jobs WHERE post_id=$1", [
+          id,
+        ])
+      ).rows,
+      jobs,
+    );
+    assert.deepEqual(
+      (
+        await db.query(
+          "SELECT * FROM public.media_assets WHERE post_id=$1 ORDER BY id",
+          [id],
+        )
+      ).rows,
+      media,
+    );
+    assert.equal(await count("audit_logs"), audit);
+  });
+}
+for (const status of [
+  "published",
+  "published_flagged",
+  "hidden",
+  "held",
+  "blocked",
+]) {
+  test(`completed-state theme reassignment remains available for ${status}`, async () => {
+    const id = await post(status);
+    assert.equal(
+      (await call("reassign_theme", id, { ...action, theme_id: null })).code,
+      "ok",
+    );
+    assert.equal((await row(id)).status, status);
+    assert.equal((await row(id)).version, 2);
+  });
+}
+
+// 120000: unban is not publication; an admin must explicitly schedule each blocked/held retry.
+for (const status of ["blocked", "held"]) {
+  test(`admin retry after unban clears only the selected ${status} latch and never publishes`, async () => {
+    const target = await post(status),
+      sibling = await post("blocked");
+    await assets(target);
+    await call("ban", owner, { reason: "Synthetic BAN" });
+    assert.equal(
+      (await call("retry", target, { ...action, expected_version: 2 })).code,
+      "ACCOUNT_BANNED",
+    );
+    await call("unban", owner, { reason: "Synthetic review complete" });
+    assert.equal((await row(target)).ban_latched, true);
+    assert.equal(
+      (
+        await call(
+          "retry",
+          target,
+          { ...action, expected_version: 2 },
+          { user: moderator },
+        )
+      ).code,
+      "FORBIDDEN",
+    );
+    const beforeAssets = (
+      await db.query(
+        "SELECT * FROM public.media_assets WHERE post_id=$1 ORDER BY id",
+        [target],
+      )
+    ).rows;
+    assert.equal(
+      (await call("retry", target, { ...action, expected_version: 2 })).code,
+      "ok",
+    );
+    const current = await row(target);
+    assert.equal(current.status, "processing");
+    assert.equal(current.ban_latched, false);
+    assert.equal(current.version, 3);
+    assert.equal(current.moderation_verdict, null);
+    assert.equal((await row(sibling)).ban_latched, true);
+    assert.equal((await row(sibling)).status, "blocked");
+    assert.deepEqual(
+      (
+        await db.query(
+          "SELECT * FROM public.media_assets WHERE post_id=$1 ORDER BY id",
+          [target],
+        )
+      ).rows,
+      beforeAssets,
+    );
+    const jobs = (
+      await db.query(
+        "SELECT * FROM public.outbox_jobs WHERE post_id=$1 AND kind='process_media' AND completed_at IS NULL",
+        [target],
+      )
+    ).rows;
+    assert.equal(jobs.length, 1);
+    assert.equal(jobs[0].payload.post_version, 3);
+    assert.equal(
+      (await call("retry", target, { ...action, expected_version: 2 })).code,
+      "STATE_CONFLICT",
+    );
+    assert.equal(
+      await count("outbox_jobs", "post_id=$1 AND kind='process_media'", [
+        target,
+      ]),
+      1,
+    );
+    assert.equal(
+      (
+        await db.query(
+          "SELECT published_post_count FROM public.event_members WHERE event_id=$1 AND user_id=$2",
+          [event, owner],
+        )
+      ).rows[0].published_post_count,
+      0,
+    );
+  });
+}
+for (const guard of ["stop", "consent", "original", "event"]) {
+  test(`latched admin retry preserves ${guard} gate without clearing the latch`, async () => {
+    const id = await post("blocked");
+    await assets(id);
+    await db.query("UPDATE public.posts SET ban_latched=true WHERE id=$1", [
+      id,
+    ]);
+    if (guard === "stop")
+      await db.query(
+        "UPDATE public.event_settings SET publication_stopped=true WHERE event_id=$1",
+        [event],
+      );
+    if (guard === "consent")
+      await db.query(
+        "DELETE FROM public.consents WHERE event_id=$1 AND user_id=$2",
+        [event, owner],
+      );
+    if (guard === "original")
+      await db.query(
+        "UPDATE public.media_assets SET deletion_requested_at=now() WHERE post_id=$1 AND purpose='original'",
+        [id],
+      );
+    if (guard === "event")
+      await db.query(
+        "UPDATE public.events SET status='archive' WHERE event_id=$1",
+        [event],
+      );
+    assert.notEqual((await call("retry", id, action)).code, "ok");
+    assert.equal((await row(id)).ban_latched, true);
+    assert.equal((await row(id)).status, "blocked");
+    assert.equal(
+      await count("outbox_jobs", "post_id=$1 AND kind='process_media'", [id]),
+      0,
+    );
+  });
+}
+
 test("operator state details share safe owner projection and deletion is never a completion claim", async () => {
   const id = await post("blocked");
   await db.query(

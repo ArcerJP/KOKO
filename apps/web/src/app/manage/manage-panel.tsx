@@ -205,7 +205,7 @@ export function ManagePanel({
   );
 }
 
-function PostReview({
+export function PostReview({
   item,
   isAdmin,
   mutate,
@@ -226,7 +226,10 @@ function PostReview({
     actions.push(["deletePost", "削除を受け付ける"]);
   if (isAdmin && ["held", "blocked"].includes(post.status) && !item.is_banned)
     actions.push(["retry", "AI再処理を予約"]);
-  if (isAdmin && post.status !== "deleted")
+  const processing = ["uploading", "uploaded", "processing"].includes(
+    post.status,
+  );
+  if (isAdmin && !processing && post.status !== "deleted")
     actions.push(["reassignTheme", "お題を付け替える・解除"]);
   const selected = actions.some(([name]) => name === action)
     ? action
@@ -247,6 +250,11 @@ function PostReview({
       </p>
       <p>投稿日時：{timeLabel(post.created_at)}（日本時間）</p>
       <PostStateDetails post={post} />
+      {isAdmin && processing ? (
+        <p>
+          アップロード・判定処理中のお題変更はできません。処理結果を確認してから変更してください。
+        </p>
+      ) : null}
       {safeMedia && item.preview_url ? (
         <p>
           <a href={item.preview_url} target="_blank" rel="noopener noreferrer">
