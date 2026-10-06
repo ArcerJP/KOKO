@@ -118,7 +118,7 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 - [追加migration](supabase/migrations/20261005010000_upload_sessions.sql)の内部`manage_upload_session`は`open/refresh/parts/attach`を扱います。`reserve_upload`のlock順序の後でsessionをlockし、`UNIQUE(event_id, post_id)`で1投稿1sessionを保証します。既存に重複行があればmigrationは失敗させ、データを自動削除しません。単発送信は同じtransactionでreadyになります。
 - multipartはwinnerだけが`provisioning`となり、Worker生成attempt UUIDと最大120秒のleaseでR2作成権を束縛します。R2開始後に`attach`がguardと世代/期限を再照合してprovider IDを保存し、readyへ変更します。ready後の同じattempt/providerのattachは冪等で、別値への変更は拒否します。内部provider ID・原本キー・lease・申告snapshotをAPI本文へ丸ごと返さず、既存`UploadTicket`だけを組み立てます（part署名URL内のopaque provider IDはプロトコル上必要です）。
 - ready後の再送とrefreshは同じ投稿/session/providerを使い、新しいmultipartを作りません。期限はDB時刻から15分以内かつイベント/お題終了以下、秒単位切下げです。partsでは期限を延長せず、期限切れは`UPLOAD_EXPIRED`。refreshは期限切れでも未完了・本人・guardを再確認して更新します。完了session、削除/BANラッチ済み投稿へは再発行しません。
-- DB予約の応答喪失・R2作成結果不明・作成後crashではprovisioningが残ることがあります。期限後の新attemptによるopenだけに再作成権を渡し、初回を含む最大3回で止めます。古い/期限切れ結果はattachせず、provider待機もleaseで打ち切ります。attachがDBに保存済みなら後のopenでreadyを再利用。旧provider作成が遅れて成功した孤児は残り得るため、結果不明のproviderを盲目的にabortしません。**上限到達、未知lease、ready providerの失効/中止後の自動再開、孤児の能動削除は未解消**です。元ファイルを残し、権限者がDB/providerを照合してから対象限定の修復を判断します。新しい投稿IDでの再投稿・DB reset・abortを自動実行しません。未完了multipartの7日破棄は別途本人設定が必要で、下記の保存済み原本の回復とは別です。
+- DB予約の応答喪失・R2作成結果不明・作成後crashではprovisioningが残ることがあります。期限後の新attemptによるopenだけに再作成権を渡し、初回を含む最大3回で止めます。古い/期限切れ結果はattachせず、provider待機もleaseで打ち切ります。attachがDBに保存済みなら後のopenでreadyを再利用。旧provider作成が遅れて成功した孤児は残り得るため、結果不明のproviderを盲目的にabortしません。ready provider失効時は[有限再開](#multipart原本の有限再開実環境未受入)を利用します。**上限到達、未知lease、結果不明の孤児**は保留です。元ファイルを残し、権限者がDB/providerを照合してから対象限定の修復を判断します。新しい投稿IDでの再投稿・DB reset・abortを自動実行しません。未完了multipartの7日破棄は別途本人設定が必要で、下記の保存済み原本の回復とは別です。
 - DB/R2応答の不正・redirect・不明エラーを閉じ、秘密や生応答を返しません。成功・失敗とも`private, no-store`。DBの期限検査と署名を経ても、すでに発行したURLの即時失効は保証しません。単発の実サイズ・multipartの実在/最終サイズは下記のcomplete/HEADが判定します。
 
 [session SQL試験](../../packages/contract/test/upload-sessions.test.mjs)は全migrationをメモリDBへ適用して権限・所有者・単一winner・期限・guard更新・保存失敗の取消しを検証します。[HTTP試験](test/uploads.spec.ts)はWorkers上の実署名と模擬Auth/RPC/provider応答で受付・再発行・part・CSRF・応答不明を検証します。実PostgreSQLの多接続競合、実PostgRESTからR2までの通し試験、実配備は未実施です。
@@ -222,6 +222,8 @@ finishのreceiptは内部pipelineが得た`eventId / assetId / variant / format 
 
 ## 第3の運営操作と認証付き閲覧（ローカル実装、実接続未受入）
 
+追加migration `20261006110000` はアップロード/処理中のお題付替えを拒否し、処理jobと投稿版の不一致を防ぎます。`20261006120000` はBAN解除後も自動再公開せず、adminが明示retryしたblocked/held投稿だけを再審査へ進めます。最新同意/停止/原本等の条件を満たす必要があり、他投稿のBAN履歴を一括解除しません。
+
 `stage-three-operations.ts`と`20261006030000_stage_three_operations.sql`は、`KOKO_STAGE_THREE_ENABLED=true`の明示設定時だけ、お題・通報・申立て・本人削除・運営操作を受け付けます。公開済み設定変更、Cloudflare等の保護変更、運用上の閾値承認を自動実行するものではありません。
 
 - service限定RPC、空search_path、event→settings→member→postのロック順、Google認証・最新所属/役割・Cookie/CSRF。moderatorは監視/非表示/復帰/削除/原本取得、adminは追加でBAN/解除・お題/閾値/申立て対応。本人削除/申立てはBAN中も可能。
@@ -279,6 +281,26 @@ Realtimeの認可はjoin/JWT更新時にcacheされるため即時サーバー�
 - 1Cron最大10件・同時2件、HTTP10秒、DB lease5分、最大5試行/24時間。明確な429だけ有限backoff。タイムアウトや送信済みか不明な結果は`ambiguous`で止め、成功にも自動再送にも変えません。送信意図を記録後のクラッシュも同じです。
 - `revoke_delivery`完了は最新DBのアプリ配信拒否確認であり、取得済みbytesや発行済みprovider tokenの回収を意味しません。
 - `delete_assets`は原本の保持/lock情報を検査し、不明・保持中・物理削除adapter未有効を`held`で可視化します。`completed_at`を埋めず、物理削除済みと誤表示しません。原本消去、Bucket Lock/Lifecycle設定は未実施で、本人ゲートを維持します。
+
+## Multipart原本の有限再開（実環境未受入）
+
+`20261006130000_multipart_restart.sql` と `POST /uploads/:upload_id/recover` は、所有者・event・現行同意・BAN・受付状態を再確認し、ready providerが失われた場合だけ再開します。固定R2へのListPartsが正確な `NoSuchUpload` を返し、直接HEADで原本不存在を確認し、DBのcomplete準備前であることをロック内で再確認する必要があります。403・一般404・タイムアウト・原本存在・準備済み結果不明は再作成しません。
+
+新世代ではapplication upload UUIDだけを変更し、投稿/原本/requestは維持。旧UUIDはrecoverの照合専用（直近2世代）で、署名parts・refresh・completeの別名にはなりません。初期provisioningを含めprovider作成は合計3回まで。旧ETagを混ぜず、応答喪失後も同じ世代を返します。端末は新UUIDとcheckpoint/manifest破棄を同時に永続化してから再送します。DB prepare後は完了照合だけとし、元ファイルを捨てません。
+
+新規の外部権限・配備は行っていません。実R2のListParts応答・CORS・通知競合・複数DB接続の受入は別です。上限到達・未知のprovider作成結果は保留し、利用者へ新投稿を作らせて回避しません。
+
+## 保持後の物理削除と孤児照合（既定OFF、実環境未受入）
+
+`physical-deletion.ts`・`deletion-provider.ts` と `20261006140000_physical_deletion.sql` は既存 `delete_assets` を使います。Workerの `KOKO_PHYSICAL_DELETION_ENABLED` とDBの同名用途flag、期限・版付きの人間承認済み保持方針、固定event/account、専用 `KOKO_DELETION_API_TOKEN` が必要です。既定はOFF。資格情報登録・保持採択・Lock変更・実削除は行っていません。
+
+- service-only claim→prepare→begin→provider→settleで対象・世代・保持・leaseを再照合。1件をclaimして処理する方式を最大5回、最大5試行/24時間、120秒lease、provider操作60秒上限。開始前から複数件のleaseを消費しません。
+- R2は固定2バケット/導出keyだけ。直接HEADの同一性、実Bucket Lock、直前HEAD、不在の事後確認が必要です。HEAD→deleteは原子的な条件付き削除ではないため、未収束の書込みがあり得る資産は対象外。原本の単一PUT、世代変更済みmultipart、準備済みcompleteの結果不明は保留し、期限経過だけで解除しません。既知の第1世代multipart等、コードで収束を確認できる限定ケースのみ処理します。
+- Streamは固定UIDと完全metadataを照合。DELETEの成功statusだけで完了にせず、直接GETと限定検索の不在を確認します。終端HELDのjobを含め、UID未記録・画像書込み未完了があれば削除を保留します。
+- 不在確認・DBの同じ計画/leaseの照合がそろって初めて `physically_deleted_at` と監査を確定。曖昧な結果は成功にしません。本人/管理画面の既存表示は保守的な「削除未確認」を維持し、最終receiptはservice側で確認します。
+- `cleanup-orphans.ts` と `20261006140100_cleanup_orphan_observations.sql` は同じ既定OFF境界で、Streamの失われた作成予約を最大3件・各10秒・最大2候補までGET照合します。0件も作成不能の証明にせず、候補発見から削除許可へ昇格しません。未知のmultipart IDの自動発見/abortと、未知書込みの自動解除は含みません。
+
+単一PUT・失われた世代等は、本人が対象を限定してprovider側の収束・現在参照・保持を確認する別の保護操作です。DB値の手動改変やLock解除で自動処理の条件を偽装しないでください。実設定・実応答・多接続競合・削除受入は残っています。
 
 ## R2容量監視（B3-6、既定OFF）
 
