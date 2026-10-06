@@ -246,7 +246,7 @@ Web側中継/運営画面は[Web README](../web/README.md)を参照。PGlite・W
 - copy/clipのoperation IDを外部呼出し前に永続予約し、応答喪失・クラッシュ時にcreateを重ねません。有限のpollとメタデータ照合で既存操作を回復し、未知の結果は保留。旧世代の再利用も同じ原本asset/etag/version・event/postの証拠が必須です。
 - 全長fallbackは別UIDのclip、通常の短縮原本はsourceを使います。duration実測4秒以下、ready・処理完了・署名必須・許可origin・原本/親clipの一致なしでは判定へ渡しません。3.8/3.5/3.0秒の短縮候補も無制限に生成しません。
 - `media-consumer.ts`は固定Queue名・eventと厳密な7項目hintを照合し、DBの現状態→必要なら動画準備→private Cloud Run `/internal/process`→DB再照合。HTTP200だけでACKせず、永続した完了/保留/世代交代の証拠が必要です。Queue名の衝突・未設定は暗黙ACKを避けて拒否します。
-- サーバーの認証準備はブラウザログインと別です。`cloud-run-client.ts`は外部OIDC→固定Google STS→IAM Credentialsの短命ID token取得をローカル検証していますが、Workerで信頼するOIDC発行元/取得元は未確定です。`index.ts`は架空のassertionを注入しません。**現在の設定だけでCloud Runまで動く完成品とは扱わず、consumer有効化前のゲートです。**
+- サーバーの認証準備はブラウザログインと別です。`cloud-run-client.ts`は外部OIDC→固定Google STS→IAM Credentialsの短命ID token取得をローカル検証していますが、Workerでのassertion取得は未接続です。[ADR-0007](../../docs/decisions/ADR-0007-private-image-service.md#呼出元の方式選定2026-10-06)でVercel OIDC/WIFの固定中継を選定しましたが、その中継とconsumerのコード接続は未実装です。`index.ts`は架空のassertionを注入しません。**設定だけでCloud Runまで動く完成品とは扱わず、consumer有効化前のゲートです。**
 
 | 設定群                                                                                                                               | 用途・実登録の境界                                                           |
 | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |

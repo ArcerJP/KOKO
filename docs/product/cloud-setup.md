@@ -1,6 +1,14 @@
 # クラウドの役割と準備ガイド
 
-**配備作業の最新記録は[2026-10-03の障害・権限修正・停止状態](#2026-10-03の配備障害と再発防止)です。** 以下の日付付き履歴を現在の設定と混同せず、再開時は[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)に従って現物を再確認します。
+**認証準備とVercelの最新確認は[2026-10-06の記録](#2026-10-06の認証準備とpreview停止確認)、API配備障害の経緯は[2026-10-03の記録](#2026-10-03の配備障害と再発防止)です。** 以下の日付付き履歴を現在の設定と混同せず、再開時は[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)に従って現物を再確認します。
+
+## 2026-10-06の認証準備とPreview停止確認
+
+本人提供の画像は`arcer2/koko-web`のPreview環境でBranch TrackingがOFFの状態です。管理画面を再読込みしてOFFが維持され、Saveが無効であることを確認しました。これは以後のGit連携によるPreview追従を止める設定で、既存Previewの削除を意味しません。既存配備の保護・Production・Cloudflare Accessを変更していません。追加pushではAPI自動配備OFFと他の配備経路も再確認します。
+
+VercelのSecurity画面ではOIDCのTeam方式が選択済み、issuerは`https://oidc.vercel.com/arcer2`、audは`https://vercel.com/arcer2`、production subjectは`owner:arcer2:project:koko-web:environment:production`です。これは非秘密の設定値の読取りで、実runtime tokenの取得・Google WIFの成功ではありません。セキュリティを優先した方式選定は[ADR-0007](../decisions/ADR-0007-private-image-service.md#呼出元の方式選定2026-10-06)、本人が今行う無効プールの準備は[Cloud Run認証手順](cloud-run-auth-setup.md)に分離します。
+
+Google CloudはKOKO / `koko-510318`の管理画面へログイン済み、Cloud Run概要にはリソース作成案内が表示されました。WIFの「開始」リンクから作成フォームへ進む際、コンソールが`cloudresourcemanager.googleapis.com`、`sts.googleapis.com`、`iam.googleapis.com`、`iamcredentials.googleapis.com`を自動有効化し、4件の完了通知を確認しました。読取り準備のリンクにこの副作用があることを事前確認できなかった操作上の逸脱として、直ちに本人へ報告しました。API無効化による復旧も外部変更なので無断では実行しません。プール/providerの保存、サービスアカウント作成、IAM授権、鍵/Secretの発行・登録、請求設定・Cloud Run配備は行っていません。これを「外部変更なし」と記録しません。有効化の通知だけから料金ゼロやサービス接続成功も推定しません。
 
 確認日：GitHub Actionsの初回手動配備・通常main更新による自動配備と配備後の応答・保護確認は2026-10-01〜02、Cloudflare Workerの初回build・deploy成功と未認証アクセスの転送確認は2026-09-29、保存済みAccess設定の閲覧確認は2026-09-28〜29、専用トークンの作成・保存とBuilds登録成功のユーザー報告、Zero Trust Free有効化とWorker作成フォームの画面確認は2026-09-28、Vercelの初回配備・保護設定とCloudflareアカウント・R2の初期準備は2026-09-23、その他の準備・料金情報は2026-09-22。対象はB1-1〜B1-3の準備です。採用構成の正本は[プロダクト構成](../architecture/product-architecture.md)、費用判断の方針は[費用方針](cost-policy.md)です。確認済みの範囲は各節に記載し、全サービスの契約・課金・実連携や本番受け入れの完了とは区別します。
 

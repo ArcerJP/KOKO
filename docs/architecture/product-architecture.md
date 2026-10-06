@@ -4,6 +4,8 @@
 
 ## 実行先と責務
 
+Cloud Run呼出元認証は[ADR-0007](../decisions/ADR-0007-private-image-service.md#呼出元の方式選定2026-10-06)でVercel Team OIDC＋Google WIFを選定しました。既存Web内の固定server-only中継を追加する計画で、まだ中継は未実装・実IAMは未受入です。Workerの既存WIF試験クライアントから、実runtimeで信頼するassertionを取得できるとは扱いません。本人の準備と停止点は[Cloud Run認証準備](../product/cloud-run-auth-setup.md)を参照します。
+
 | 領域           | 採用する構成                               | 第0日の成果物                       | 後続の実装                                                          |
 | -------------- | ------------------------------------------ | ----------------------------------- | ------------------------------------------------------------------- |
 | FE             | Next.js App Router・TypeScript、Vercel     | `apps/web`のトークン                | UI・OAuth callback/セッション・MSW・実機検証                        |

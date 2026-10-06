@@ -52,6 +52,8 @@ apps/web内では、`src/api/approved-terms.ts`が採択本文の選択入口（
 
 ## 登録表の保守
 
+`docs/product/cloud-run-auth-setup.md`はCloud RunのWIF準備・本人操作の停止点を扱う規範的手順です。認証準備時に読み、方式/設定/公式仕様とともに保守し、公開可能な手順のみ追跡します。画像サービス認証の更新/廃止と同じライフサイクルを持ちます。採用理由はADR-0007、適用済み状態はcloud-setupへ分離し、鍵・JWT・生ログを置きません。予定するVercel中継は既存apps/webの責務内で、新しいトップレベル領域/Skillを追加しません。
+
 第1〜第3の追加責務は既存領域に保持します。`apps/api/src/`はfeed/メディア認可、Stream/Queue/Webhook、運営操作・通知/削除予約・容量監視、`apps/web/src/`は同一originのJSON/メディア中継、feed/運営/本人操作とprivate Realtime、`apps/image/src/`は画像/動画フレームからのAI判定・DB記録と匿名化済み試験集計を担います。実装と合成試験は公開追跡し、実メディア・実鍵・測定原資料は除外します。現仕様は各app README、共通DTOはOpenAPI、DB動作はmigrationを正本とし、同じ機能の変更/廃止時にまとめて保守します。
 
 `apps/image/src/`に変換・CLI・R2/DB adapter・内部runnerと既定無効の認証HTTP入口、`test/`に自作素材と検証を保持し、現仕様は[画像コアREADME](../../apps/image/README.md)に集約します。HTTPの採用理由は[ADR-0007](../decisions/ADR-0007-private-image-service.md)。実装と合成試験は公開追跡し、実鍵/画像/実行時envは除外します。既存apps/imageの責務拡張なのでトップレベルの追加や新しい指示ファイルは不要です。

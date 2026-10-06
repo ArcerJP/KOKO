@@ -31,7 +31,19 @@ HTTPは固定route・3 UUIDだけ。認証後に本文を有限読取りし、�
 
 同日の後続実装で、画像専用routeを維持したまま、画像/動画3フレームからAI合議とDB完了記録まで進める固定`/internal/process`を追加しました。Queue consumerはHTTP成功とは別にDBの現行job/投稿版・完了証拠を再取得してACKを判断します。処理失敗の保留もAI違反や公開成功に置き換えません。
 
-Cloudflare側にはWIFのSTS交換とサービスアカウントID token取得を行う限定クライアントを追加していますが、信頼できる外部署名assertionの発行源は未構成です。WorkerがambientなGoogle認証を持つと仮定せず、未構成なら呼出しを拒否します。鍵を使う代案の採用、issuer/broker、IAM、実token入力は本人判断・保護操作として残します。
+Cloudflare側にはWIFのSTS交換とサービスアカウントID token取得を行う限定クライアントを追加していますが、信頼できる外部署名assertionの発行源は未接続です。WorkerがambientなGoogle認証を持つと仮定せず、未構成なら呼出しを拒否します。
+
+### 呼出元の方式選定（2026-10-06）
+
+本人から速度・長期利用・セキュリティを比較して選定する依頼を受け、セキュリティを優先して**既存VercelのTeam OIDCをGoogle WIFへ交換する方式**を選定します。GoogleのサービスアカウントJSON秘密鍵は発行しません。Cloudflare AccessのサービスJWTを通常利用者JWTと同一視せず、空のsub・aud配列・strict service authenticationのCookie非発行を無視して発行源にしません。
+
+Cloudflare Queue consumer → 認証必須の固定Vercel中継 → Google STS/IAM → private Cloud Runの順とします。中継は既存`apps/web`のserver-only領域に実装予定で、任意URL・任意aud・任意サービスアカウント・画像本文を受け付けず、固定処理routeと3 UUIDだけを転送します。Vercel/Google tokenをWorker・ブラウザ・応答・ログへ返さず、Cloud RunとDBの認可・lease・完了証拠の検査を維持します。今回この中継コードを実装・配備したという意味ではありません。
+
+Googleはissuer・audに加えてVercelの固有project IDとproduction subjectを照合します。Preview/developmentやプール全体への権限を許可せず、専用callerに対象Cloud Run 1サービスのinvokerだけを付与する方針です。callerとVision等の処理用runtimeアカウントを分離します。
+
+代案のGoogle秘密鍵は直結が簡単な反面、長期署名鍵の配布・漏洩時の失効・定期更新が必要です。WIFはその鍵を持たない利点がありますが、中継の可用性・有限timeout・追加Function利用量と、Worker→中継の別用途認証秘密の管理が増えます。完全な秘密情報ゼロ、無料、直結と同じ速度とは主張しません。
+
+既存のAll Deployments保護を外しません。中継への機械アクセスには別の本人ゲートが必要で、Vercelのautomation bypass secretは単一routeだけの権限ではありません。保護付き接続・秘密の登録・プール有効化/IAM授権・実配備は、範囲とリスクを示して本人へ渡します。準備手順と停止点は[Cloud Run認証の準備](../product/cloud-run-auth-setup.md)を正本とします。
 
 サービス作成/課金/権限/鍵/Secret/配備をこのADRのAccepted状態から実行しません。実接続前に許可主体とIAM設定、短命tokenの取得方式を確認し、必要な本人操作を分離します。
 
@@ -40,3 +52,7 @@ Cloudflare側にはWIFのSTS交換とサービスアカウントID token取得�
 - [Cloud Runのサービス間認証](https://cloud.google.com/run/docs/authenticating/service-to-service)：ID tokenのaudとAuthorization、X-Serverless-Authorizationの違い。
 - [Cloud Run service URL](https://docs.cloud.google.com/run/docs/triggering/https-request)：run.appの現行/非決定的形式。識別子を固定形式と決めつけない。
 - [joseのJWKS検証](https://github.com/panva/jose/blob/main/docs/jwks/remote/functions/createRemoteJWKSet.md)：固定JWKS・cache/cooldownと署名鍵の選択。
+- [VercelとGoogle WIF](https://vercel.com/docs/oidc/gcp)、[OIDCのclaim](https://vercel.com/docs/oidc/reference)：既存署名主体と固定issuer/aud/project/environment。
+- [Google WIFの他provider設定](https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-other-providers)：限定主体のmapping/conditionとservice account impersonation。
+- [Cloudflare service token](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)、[service JWT](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/)：通常利用者JWTとの違い。
+- [Vercel automation bypass](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation)：保護と機械アクセスの境界。
