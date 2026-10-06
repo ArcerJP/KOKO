@@ -32,7 +32,7 @@ export default async function AccountPage() {
   return (
     <main className="shell auth-shell">
       <p className="eyebrow">第49回技科大祭 · KOKO</p>
-      <h1>ログイン状態の確認</h1>
+      <h1>アカウント</h1>
       <section className="panel">
         <p role="status">Googleアカウントでログインしています。</p>
         {eventId ? (
@@ -49,18 +49,21 @@ export default async function AccountPage() {
         )}
       </section>
       <p>
+        <Link href="/feed">みんなの投稿へ</Link> ·{" "}
+        <Link href="/themes">お題へ</Link> · <Link href="/help">ヘルプ</Link>
+      </p>
+      <p>
         <Link href="/upload">写真・動画の送信と端末の保存状況へ</Link>
       </p>
       <p>
         <Link href="/account/posts">自分の投稿状況へ</Link>
       </p>
       <p>
-        <Link href="/">端末内の撮影・トリム検証へ</Link>
+        <Link href="/capture-lab">端末内の撮影・トリム検証へ</Link>
       </p>
       <p className="caption">
         送信画面は設定と規約の条件を満たす場合のみ利用できます。
-        写真／動画の閲覧と実環境での通し受入は未完了です。
-        正式な規約本文の採択と実環境での同意受付は未完了です。
+        規約とプライバシーポリシーを確認し、表示名と同意を登録してください。
         {!eventId && "表示名の確認・変更も現在は無効です。"}
       </p>
     </main>

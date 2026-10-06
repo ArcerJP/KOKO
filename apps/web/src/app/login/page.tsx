@@ -47,7 +47,7 @@ export default async function LoginPage({
         )}
       </section>
       <p>
-        <Link href="/">端末内の撮影・トリム検証へ戻る</Link>
+        <Link href="/capture-lab">端末内の撮影・トリム検証へ戻る</Link>
       </p>
       <p className="caption">
         このログインだけでは、利用規約への同意・表示名登録・投稿は完了しません。
