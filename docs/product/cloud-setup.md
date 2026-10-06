@@ -1,6 +1,14 @@
 # クラウドの役割と準備ガイド
 
-**認証準備とVercelの最新確認は[2026-10-06の記録](#2026-10-06の認証準備とpreview停止確認)、API配備障害の経緯は[2026-10-03の記録](#2026-10-03の配備障害と再発防止)です。** 以下の日付付き履歴を現在の設定と混同せず、再開時は[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)に従って現物を再確認します。
+**認証準備の最新確認は[2026-10-07の記録](#2026-10-07のwif保存条件と次の本人操作)、Vercel停止の経緯は[2026-10-06の記録](#2026-10-06の認証準備とpreview停止確認)、API配備障害の経緯は[2026-10-03の記録](#2026-10-03の配備障害と再発防止)です。** 以下の日付付き履歴を現在の設定と混同せず、再開時は[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)に従って現物を再確認します。
+
+## 2026-10-07のWIF保存条件と次の本人操作
+
+本人の作成完了報告後の読取りで、KOKO / `koko-510318` のプール `koko-cloud-run` はOFF、provider `koko-vercel` は存在を確認しました。さらにprovider編集画面の保存済み値を読み、[認証手順第1節](cloud-run-auth-setup.md#1-google-cloudでプールを作成完了参照用)のissuer・単一audience・subject mapping・固定project ID/production条件との完全一致を確認しました。入力・保存・有効化は行っていません。providerのON表示と、上位プールOFFを区別します。
+
+一度編集画面の内容領域が空欄になりましたが、再読込み後にConsole内のprovider詳細リンクから設定を表示できました。表示不良を設定消失と推定して再作成していません。サービスアカウント一覧はフィルタなしで「表示する行がありません」。次の本人操作は[認証手順第2節](cloud-run-auth-setup.md#2-今本人が行うこと専用アカウントを2つ作成)のcaller/runtime 2件の作成だけです。鍵・ロール追加なしとし、作成後の非秘密IDと権限照合はCodexが担当します。
+
+GitHubのコードcheckpoint `d2db030d70c1d84770005eb471678934bfeda832` の必須16check成功、API自動配備変数false、両PR DraftとGit/PR主体一致を再確認しました。これはコードのCI/保存設定確認であり、WIF token交換・Cloud Run IAM・実DB/実媒体・本番受入の成功ではありません。未承認の実配備・課金・IAM・Secret登録を行わず、既存の保護を変更しません。
 
 ## 2026-10-06の認証準備とPreview停止確認
 
