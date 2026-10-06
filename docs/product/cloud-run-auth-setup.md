@@ -4,7 +4,7 @@
 
 ## 今の目的と影響
 
-Googleの長期秘密鍵を作らず、既存Vercelの署名IDから短命のGoogle ID tokenを取得する準備です。**第1節のプールと第2節の専用アカウント2件は本人作成済み。やり直し不要です。** 次はCodexが実IDと権限を照合し、限定したIAM手順を準備します。Cloud Runの公開化、IAM権限付与、Secret登録、課金、配備は別の本人ゲートです。アカウント作成だけで画像処理が動くわけではありません。
+Googleの長期秘密鍵を作らず、既存Vercelの署名IDから短命のGoogle ID tokenを取得する準備です。**第1節のプールと第2節の専用アカウント2件は本人作成済み。やり直し不要です。今する作業は第3節だけです。** Codexは実ID・既存アクセス一覧・プロジェクトIAMを読取り確認し、callerへの限定した権限1件を具体化しました。保存は本人が行います。Cloud Runの公開化、Secret登録、課金、配備は含みません。アカウント作成だけで画像処理が動くわけではありません。
 
 APIの初期化時に有効化されたサービスはcloud-setupを参照してください。カード・請求・有料契約の画面が出たら、その先へ進まず画面の名称だけ知らせてください。秘密は送らないでください。
 
@@ -58,18 +58,55 @@ APIの初期化時に有効化されたサービスはcloud-setupを参照して
 | 説明                 | `KOKO Vercel WIF caller only; no keys`                         | `KOKO private image service runtime; no keys`            |
 | 一覧の表示           | 有効・キーがありません                                         | 有効・キーがありません                                   |
 
-確認先：[KOKOのサービスアカウント一覧](https://console.cloud.google.com/iam-admin/serviceaccounts?project=koko-510318)。追加ロールなしは本人報告であり、継承・既存ポリシーまで無権限と確認済みではありません。鍵の発行・IAM変更・課金・配備は行っていません。
+確認先：[KOKOのサービスアカウント一覧](https://console.cloud.google.com/iam-admin/serviceaccounts?project=koko-510318)。続く10/7の読取りで、両アカウントのアクセス一覧はプロジェクトから継承する本人のOwnerのみでした。callerとプロジェクトIAMは「Google提供のロール付与を含める」でも確認し、caller/runtimeへのプロジェクトロールやWIF principalの追加を認めませんでした。これは表示したIAM一覧の確認で、組織・別リソース・グループ経由を含む全実効権限の監査ではありません。鍵の発行・IAM変更・課金・配備は行っていません。
 
 `KOKO_IMAGE_CALLER_EMAIL` は呼出し役のメール、`KOKO_IMAGE_CALLER_SUBJECT` は呼出し役の一意の数値IDを使います。runtimeのメール/ID、表示名、プロジェクト番号で代用しません。まだ実環境へ値を登録していません。WIFプールはOFFを維持し、Owner/Editor等の広いロールや長期JSON鍵を追加しません。
 
 [Google公式のサービスアカウント作成手順](https://docs.cloud.google.com/iam/docs/service-accounts-create)に基づき、作成と省略可能な権限設定を分離しています（2026-10-07確認）。
 
-## 3. 今は操作しない後続工程
+## 3. 今すること：callerへの限定WIF権限1件
+
+**目的**：後でプールを有効にしたとき、KOKOのVercel productionだけが「呼出し役」を使えるよう準備します。今回はcallerへの委任権限1件だけで、プールはOFFのままです。既存権限を消したり、プロジェクト全体へロールを付けたりしません。
+
+### 保存前に知っておくこと
+
+- 対象は `KOKO / koko-510318` 内の**呼出し役1件**。`koko-image-runtime` には付けません。
+- `roles/iam.workloadIdentityUser` はGoogleのWIF標準手順のロールです。**ID tokenだけでなくaccess token発行も許可**するため、無害な名前登録ではなく権限の追加です。callerへ将来付ける資源権限も、特定Cloud Runの呼出しに限定します。
+- プールOFFを維持し、この手順ではtoken交換・鍵作成・API有効化・Cloud Run作成・実配備をしません。課金/契約操作は含みません。準備予算8,000円は支出上限の自動設定ではありません。
+- 同一principal・同一ロールが既にあれば重複追加せず、画面の状態だけ知らせてください。違う対象・広い権限が出たら保存せず止めます。
+
+### 本人が操作する手順
+
+1. [呼出し役のアクセス一覧](https://console.cloud.google.com/iam-admin/serviceaccounts/details/112882822082848355348/access?project=koko-510318)を開きます。見出しは `koko-cloud-run-caller`、対象メールは第2節の `id-` 付きのものです。**プロジェクトの「IAM」一覧ではありません。**
+2. 「アクセス権を持つプリンシパル」タブで「アクセスを許可」を押します。
+3. 「新しいプリンシパル / New principals」へ次の1行をそのまま貼ります。コロンを変更・URLエンコードせず、空白や改行を加えません。
+
+   ```text
+   principal://iam.googleapis.com/projects/468956212777/locations/global/workloadIdentityPools/koko-cloud-run/subject/owner:arcer2:project:koko-web:environment:production
+   ```
+
+4. 「ロールを選択」で **Workload Identity ユーザー / Workload Identity User** を検索し、ロールIDが `roles/iam.workloadIdentityUser` のものを1件だけ選びます。「サービス アカウント ユーザー」「サービス アカウント トークン作成者」「オーナー」「編集者」は選びません。追加のIAM条件は設定せず、保存済みproviderのproject/production条件を変更しません。
+5. 対象がcaller、principal末尾が `environment:production`、ロールが上記1件だけであることを本人が確認して「保存」を押します。pool全体の `principalSet`、`allUsers`、`allAuthenticatedUsers` は使用しません。
+6. 一覧に追加したprincipalとロールが表示されることを確認します。[プール詳細](https://console.cloud.google.com/iam-admin/workload-identity-pools/pool/koko-cloud-run?project=koko-510318)のスイッチは**OFFのまま**にし、切り替えません。10/7の直前読取りでは `aria-checked=false` でした。横の「有効」という文字だけでONと判断しません。
+7. 次の2行だけ返信してください。秘密やtokenは不要です。
+
+   ```text
+   callerのWIF権限追加済み
+   プールOFFのまま
+   ```
+
+入力拒否・異なる画面・想定外の確認が出たら、権限や条件を広げて解決せず、秘密を含まないエラー文だけ知らせてください。Codexは現在の一覧と公式手順を照合しましたが、このフォームへの実入力・保存・token交換は未実施です。上記は包括承認ではなく、この1件の本人操作を依頼する手順です。
+
+取消しが必要なら、このcaller上の**今回追加したprincipalとロールの組だけ**を外す案を確認します。既存Owner、サービスアカウント、プール自体を削除しません。既発行tokenまで即時失効する保証とは別なので、運用開始後の取消しは停止・有効期限の確認も必要です。
+
+根拠（2026-10-07確認）：[GoogleのWIF委任手順](https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-other-providers)、[サービスアカウントへのアクセス管理](https://docs.cloud.google.com/iam/docs/manage-access-service-accounts)、[ロールの権限定義](https://docs.cloud.google.com/iam/docs/roles-permissions/iam#iam.workloadIdentityUser)。本コードは委任チェーンなしで `generateIdToken` を呼びます。より狭いID token専用ロールの案もありますが、今回は既定のWIF標準ロールとcallerの資源権限分離を維持し、Token Creatorを追加しません。独立レビューでも実ID・コードとの不整合はありませんでした。
+
+## 4. 今は操作しない後続工程
 
 コードと実際の対象が確定してから、別途本人へ案内します。今の作成作業と混ぜません。
 
-1. 第2節の2アカウントのメール・固有の数値ID・キーなし・IAMを読取り照合。callerとruntimeの取り違えを防ぎます。数値IDはメールやプロジェクト番号とは別です。
-2. **そのcaller上だけ**で、productionの完全なsubjectを持つprincipalに`roles/iam.workloadIdentityUser`を付与。プール全体の`principalSet/*`は使いません。授権直前にプロジェクト番号と対象を再確認します。
+1. 第3節の本人操作後、caller上の保存済みprincipal・ロールとプールOFFをCodexが再読取りします。画面保存と実token交換の成功を区別します。
+2. caller/runtimeのメール・数値IDを環境別設定へ反映する準備をします。runtimeやプロジェクト番号をcaller subjectとして代用しません。登録先・費用・停止方法を提示し、実保存は別ゲートにします。
 3. 画像Cloud Run **1サービス上だけ**で、callerに`roles/run.invoker`を付与。全利用者・全認証利用者は許可しません。別のruntimeアカウントがVision等の処理権限を持ちます。
 4. Worker→固定Vercel中継の専用認証を本人が登録。既存Access/Supabase/CSRFの秘密を再利用せず、期限/更新/漏洩時の停止方法を確認します。
 5. VercelのAll Deployments保護を維持して機械アクセスを構成。automation bypass secretを使う場合、**koko-webの保護付き配備へアクセスできる秘密で、画像routeだけに限定された資格情報ではない**ことを説明し、別途本人確認します。今は発行・入力・保護解除しません。
