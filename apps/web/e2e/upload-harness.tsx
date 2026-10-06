@@ -32,6 +32,9 @@ const queue = createUploadQueue({
   lock: withUploadLock,
   authorize: async () => csrf,
   client: {
+    recover: async () => {
+      throw new Error("multipart not used");
+    },
     open: async (request) => {
       accepted = request;
       if (offline) throw new ApiFailure("NETWORK_UNAVAILABLE");

@@ -39,7 +39,9 @@ function request(
       "content-type": "application/json",
       ...headers,
     },
-    ...(body === undefined || route.endsWith("refresh")
+    ...(body === undefined ||
+    route.endsWith("refresh") ||
+    route.endsWith("recover")
       ? {}
       : { body: JSON.stringify(body) }),
   });
@@ -79,6 +81,7 @@ function fixture(results: unknown[] = [session()]) {
     R2_ACCESS_KEY_ID: "b".repeat(32),
     R2_SECRET_ACCESS_KEY: "c".repeat(64),
     ORIGINALS_BUCKET: {
+      head: vi.fn(async () => null),
       createMultipartUpload: create,
       resumeMultipartUpload: resume,
     },
@@ -109,7 +112,10 @@ function fixture(results: unknown[] = [session()]) {
           id: userId,
           app_metadata: { provider: "google", providers: ["google"] },
         });
-      expect(url.pathname).toBe("/rest/v1/rpc/manage_upload_session");
+      expect([
+        "/rest/v1/rpc/manage_upload_session",
+        "/rest/v1/rpc/recover_upload_session",
+      ]).toContain(url.pathname);
       expect(new Headers(init?.headers).get("apikey")).toBe(
         env.SUPABASE_SECRET_KEY,
       );
@@ -139,6 +145,142 @@ function fixture(results: unknown[] = [session()]) {
   return { env, fetcher, calls, create, abort, resume };
 }
 afterEach(() => vi.useRealTimers());
+
+describe("authenticated finite multipart recovery", () => {
+  const nextId = "99999999-9999-4999-8999-999999999999";
+  const current = (override: Record<string, unknown> = {}) =>
+    session({
+      mode: "multipart",
+      provider_upload_id: "old-provider",
+      request: { ...multipart, theme_id: null },
+      restartable: true,
+      previous_upload_id: uploadId,
+      ...override,
+    });
+  const intercept = (
+    s: ReturnType<typeof fixture>,
+    response: () => Response,
+  ) => {
+    const probe = vi.fn(response);
+    const forward: typeof fetch = async (target, init) => {
+      const url = new URL(
+        target instanceof Request ? target.url : String(target),
+      );
+      return url.hostname.endsWith(".r2.cloudflarestorage.com")
+        ? probe()
+        : s.fetcher(target, init);
+    };
+    return { probe, forward };
+  };
+  const missing = () =>
+    new Response("<Error><Code>NoSuchUpload</Code></Error>", {
+      status: 404,
+      headers: { "content-type": "application/xml" },
+    });
+  it("proves absence, claims one generation, attaches it and returns only bound ticket", async () => {
+    const s = fixture([
+      current(),
+      current({
+        code: "provision",
+        upload_id: nextId,
+        provider_upload_id: null,
+      }),
+      current({
+        upload_id: nextId,
+        provider_upload_id: "synthetic-provider-id",
+      }),
+    ]);
+    const f = intercept(s, missing);
+    const response = await handleUploads(
+      request(path("recover")),
+      s.env,
+      f.forward,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      previous_upload_id: uploadId,
+      ticket: {
+        post_id: postId,
+        upload_id: nextId,
+        mode: "multipart",
+        expires_at: expect.any(String),
+        part_size_bytes: 8388608,
+      },
+    });
+    expect(f.probe).toHaveBeenCalledTimes(1);
+    expect(s.env.ORIGINALS_BUCKET.head).toHaveBeenCalledTimes(1);
+    expect(s.create).toHaveBeenCalledTimes(1);
+    expect(s.calls.filter((c) => c.body).map((c) => c.body?.p_action)).toEqual([
+      "inspect",
+      "restart",
+      "attach",
+    ]);
+    expect(s.abort).not.toHaveBeenCalled();
+  });
+  it.each(["existing-object", "provider-403", "ambiguous-404", "prepare-race"])(
+    "does not recreate for %s",
+    async (kind) => {
+      const s = fixture([current(), { code: "STATE_CONFLICT" }]);
+      if (kind === "existing-object")
+        vi.mocked(s.env.ORIGINALS_BUCKET.head).mockResolvedValue({
+          key: "exists",
+        } as R2Object);
+      const f = intercept(s, () =>
+        kind === "provider-403"
+          ? new Response("", { status: 403 })
+          : kind === "ambiguous-404"
+            ? new Response("<Error><Code>NoSuchKey</Code></Error>", {
+                status: 404,
+                headers: { "content-type": "application/xml" },
+              })
+            : missing(),
+      );
+      const response = await handleUploads(
+        request(path("recover")),
+        s.env,
+        f.forward,
+      );
+      expect(response.ok).toBe(false);
+      expect(s.create).not.toHaveBeenCalled();
+      expect(s.abort).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["same-provider", "prepared", "lost-response"])(
+    "reuses %s without provider creation",
+    async (kind) => {
+      const s = fixture([
+        current({
+          restartable: kind !== "prepared",
+          ...(kind === "lost-response" ? { upload_id: nextId } : {}),
+        }),
+      ]);
+      const f = intercept(s, () => new Response("<ListPartsResult/>"));
+      const response = await handleUploads(
+        request(path("recover")),
+        s.env,
+        f.forward,
+      );
+      expect(response.status).toBe(200);
+      expect(f.probe).toHaveBeenCalledTimes(kind === "same-provider" ? 1 : 0);
+      expect(s.env.ORIGINALS_BUCKET.head).not.toHaveBeenCalled();
+      expect(s.create).not.toHaveBeenCalled();
+    },
+  );
+  it("unknown old-generation binding and BAN fail before provider access", async () => {
+    for (const result of [
+      current({ previous_upload_id: nextId }),
+      { code: "ACCOUNT_BANNED" },
+    ]) {
+      const s = fixture([result]),
+        f = intercept(s, missing);
+      expect(
+        (await handleUploads(request(path("recover")), s.env, f.forward)).ok,
+      ).toBe(false);
+      expect(f.probe).not.toHaveBeenCalled();
+      expect(s.create).not.toHaveBeenCalled();
+    }
+  });
+});
 async function code(response: Response, expected: keyof typeof errors) {
   expect(response.status).toBe(errors[expected].status);
   expect(response.headers.get("cache-control")).toBe("private, no-store");

@@ -30,6 +30,75 @@ const adapter = (clock = () => now) =>
 
 afterEach(() => vi.restoreAllMocks());
 
+describe("server multipart existence probe", () => {
+  it("signs a fixed GET and accepts only exact missing-upload XML", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (target, init) => {
+      const req = target as Request,
+        url = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(url.origin).toBe(
+        `https://${credentials.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      );
+      expect(url.pathname).toBe(
+        `/koko-dev-originals/${originalKey(identity.eventId, identity.postId, identity.assetId)}`,
+      );
+      expect(url.searchParams.get("uploadId")).toBe("opaque+/?id");
+      expect(url.searchParams.get("max-parts")).toBe("1");
+      expect(req.headers.get("authorization")).toMatch(/^AWS4-HMAC-SHA256 /);
+      expect(init?.redirect).toBe("manual");
+      return new Response(
+        "<Error><Code>NoSuchUpload</Code><Message>missing</Message></Error>",
+        { status: 404, headers: { "content-type": "application/xml" } },
+      );
+    });
+    expect(
+      await adapter().inspectMultipart(identity, "opaque+/?id", fetcher),
+    ).toBe("missing");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    [403, "<Error><Code>NoSuchUpload</Code></Error>"],
+    [404, "<Error><Code>NoSuchKey</Code></Error>"],
+    [404, "<Error><Code>NoSuchUpload</Code><Code>Other</Code></Error>"],
+    [404, "<!DOCTYPE Error><Error><Code>NoSuchUpload</Code></Error>"],
+    [404, "<Error><Code>NoSuchUpload</Code>"],
+    [404, "x".repeat(8193)],
+    [500, "<Error><Code>NoSuchUpload</Code></Error>"],
+    [302, ""],
+  ])("rejects ambiguous provider %s", async (status, body) => {
+    await expect(
+      adapter().inspectMultipart(
+        identity,
+        "provider",
+        async () =>
+          new Response(body, {
+            status,
+            headers: { "content-type": "application/xml" },
+          }),
+      ),
+    ).rejects.toMatchObject({ code: "INTERNAL_ERROR" });
+  });
+  it("200 proves presence, and an already aborted request performs no fetch", async () => {
+    expect(
+      await adapter().inspectMultipart(
+        identity,
+        "provider",
+        async () => new Response("<ListPartsResult/>"),
+      ),
+    ).toBe("present");
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(
+      adapter().inspectMultipart(
+        identity,
+        "provider",
+        fetcher,
+        AbortSignal.abort(),
+      ),
+    ).rejects.toMatchObject({ code: "INTERNAL_ERROR" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
 // Independent SigV4 verification: this does not call aws4fetch or production helpers.
 const encode = (value: string) =>
   encodeURIComponent(value).replace(

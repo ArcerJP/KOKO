@@ -113,6 +113,128 @@ const expireProvision = async (session) =>
     [session.upload_id],
   );
 
+async function recover(session, action = "inspect", extra = {}, actor = user) {
+  await db.exec("SET ROLE service_role");
+  try {
+    return (
+      await db.query(
+        "SELECT public.recover_upload_session($1,$2,$3,$4,$5::jsonb) AS result",
+        [
+          event,
+          actor,
+          session.upload_id,
+          action,
+          JSON.stringify({ attempt_id: randomUUID(), ...extra }),
+        ],
+      )
+    ).rows[0].result;
+  } finally {
+    await db.exec("RESET ROLE");
+  }
+}
+test("missing multipart restart rotates only upload UUID, old normal endpoints stay fenced", async () => {
+  const old = await attach(await open(multipart));
+  assert.equal((await recover(old)).restartable, true);
+  const next = await recover(old, "restart", {
+    provider_upload_id: old.provider_upload_id,
+  });
+  assert.equal(next.code, "provision");
+  assert.notEqual(next.upload_id, old.upload_id);
+  for (const field of ["post_id", "asset_id", "object_key"])
+    assert.equal(next[field], old[field]);
+  assert.equal(
+    (await rpc("parts", { upload_id: old.upload_id })).code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (await rpc("refresh", { upload_id: old.upload_id })).code,
+    "NOT_FOUND",
+  );
+  assert.equal((await attach(old)).code, "NOT_FOUND");
+  assert.equal((await recover(old)).code, "UPLOAD_INCOMPLETE");
+  const attached = await attach(
+    next,
+    "new-provider",
+    next.provisioning_attempt,
+  );
+  assert.equal(attached.code, "ready");
+  assert.equal((await recover(old)).upload_id, next.upload_id);
+  assert.equal(
+    (
+      await recover(old, "restart", {
+        provider_upload_id: old.provider_upload_id,
+      })
+    ).code,
+    "STATE_CONFLICT",
+  );
+  assert.equal((await storedSession(next)).provisioning_attempts, 2);
+});
+test("frozen completion and stale provider are never restarted", async () => {
+  const old = await attach(await open(multipart));
+  assert.equal(
+    (await recover(old, "restart", { provider_upload_id: "other" })).code,
+    "STATE_CONFLICT",
+  );
+  await db.query(
+    "UPDATE public.upload_sessions SET completion_parts='[]'::jsonb WHERE id=$1",
+    [old.upload_id],
+  );
+  assert.equal((await recover(old)).restartable, false);
+  assert.equal(
+    (
+      await recover(old, "restart", {
+        provider_upload_id: old.provider_upload_id,
+      })
+    ).code,
+    "STATE_CONFLICT",
+  );
+  assert.equal(
+    (await storedSession(old)).provider_upload_id,
+    old.provider_upload_id,
+  );
+});
+test("restart total create budget includes provisioning retries and never resets", async () => {
+  let old = await attach(await open(multipart));
+  const firstId = old.upload_id;
+  for (let i = 0; i < 2; i++) {
+    const next = await recover(old, "restart", {
+      provider_upload_id: old.provider_upload_id,
+    });
+    assert.equal(next.code, "provision");
+    old = await attach(next, `provider-${i}`, next.provisioning_attempt);
+  }
+  assert.equal(
+    (
+      await recover(old, "restart", {
+        provider_upload_id: old.provider_upload_id,
+      })
+    ).code,
+    "STATE_CONFLICT",
+  );
+  assert.equal(
+    (await recover({ upload_id: firstId })).upload_id,
+    old.upload_id,
+  );
+  assert.equal((await storedSession(old)).previous_upload_ids.length, 2);
+});
+test("restart rechecks current owner, consent and BAN before mutation", async () => {
+  const old = await attach(await open(multipart));
+  assert.equal((await recover(old, "inspect", {}, other)).code, "NOT_FOUND");
+  await db.query(
+    "UPDATE public.event_members SET is_banned=true,banned_at=clock_timestamp() WHERE event_id=$1 AND user_id=$2",
+    [event, user],
+  );
+  assert.equal(
+    (
+      await recover(old, "restart", {
+        provider_upload_id: old.provider_upload_id,
+      })
+    ).code,
+    "ACCOUNT_BANNED",
+  );
+  assert.equal((await storedSession(old)).provisioning_attempts, 1);
+});
+
 test("service-only invoker RPC preserves RLS and empty search path", async () => {
   for (const role of ["anon", "authenticated"])
     await assert.rejects(

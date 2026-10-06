@@ -158,6 +158,85 @@ export function createR2UploadAdapter(
   }
 
   return {
+    /** Fixed-target server read. Neither browser errors nor resume() prove absence. */
+    async inspectMultipart(
+      identity: OriginalIdentity,
+      uploadId: string,
+      fetcher: typeof fetch = fetch,
+      signal?: AbortSignal,
+    ): Promise<"present" | "missing"> {
+      const url = new URL(
+        `/${originalsBucketName}/${keyFor(identity)}`,
+        origin,
+      );
+      url.searchParams.set("uploadId", providerId(uploadId));
+      url.searchParams.set("max-parts", "1");
+      const deadline = AbortSignal.timeout(8000);
+      const bounded = signal ? AbortSignal.any([signal, deadline]) : deadline;
+      let response: Response | undefined;
+      try {
+        bounded.throwIfAborted();
+        const signed = await signer.sign(url, {
+          method: "GET",
+          redirect: "manual",
+          signal: bounded,
+        });
+        response = await fetcher(signed, {
+          redirect: "manual",
+          signal: bounded,
+          cache: "no-store",
+        });
+        if (response.redirected) throw new Error();
+        if (response.status === 200) return "present";
+        if (
+          response.status !== 404 ||
+          !/^(?:application|text)\/xml(?:;|$)/i.test(
+            response.headers.get("content-type") ?? "",
+          )
+        )
+          throw new Error();
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error();
+        const cancel = () => void reader.cancel().catch(() => {});
+        bounded.addEventListener("abort", cancel, { once: true });
+        let text = "",
+          size = 0;
+        const decoder = new TextDecoder("utf-8", {
+          fatal: true,
+          ignoreBOM: true,
+        });
+        try {
+          for (;;) {
+            bounded.throwIfAborted();
+            const chunk = await reader.read();
+            bounded.throwIfAborted();
+            if (chunk.done) break;
+            size += chunk.value.length;
+            if (size > 8192) throw new Error();
+            text += decoder.decode(chunk.value, { stream: true });
+          }
+          text += decoder.decode();
+        } finally {
+          cancel();
+          bounded.removeEventListener("abort", cancel);
+          reader.releaseLock();
+        }
+        // Strict known S3 error shape: no DTD, nested/duplicate Code, HTML, or
+        // permissive substring matching. Unknown XML fails closed.
+        if (
+          !/^(?:<\?xml\s+version="1\.0"(?:\s+encoding="UTF-8")?\s*\?>\s*)?<Error>\s*<Code>NoSuchUpload<\/Code>\s*(?:<(Message|RequestId|HostId|Resource)>[^<>]*<\/\1>\s*)*<\/Error>\s*$/.test(
+            text,
+          )
+        )
+          throw new Error();
+        return "missing";
+      } catch {
+        throw new R2UploadError("INTERNAL_ERROR");
+      } finally {
+        void response?.body?.cancel().catch(() => {});
+      }
+    },
+
     async singlePut(
       identity: OriginalIdentity,
       sizeBytes: number,

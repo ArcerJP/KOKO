@@ -204,6 +204,32 @@ paths:
         "200": *uploadResponse
         "401": *unauthorized
         default: *error
+  /uploads/{upload_id}/recover:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/UploadId"
+      - $ref: "#/components/parameters/CsrfToken"
+    post:
+      tags: [posts]
+      operationId: recoverUpload
+      summary: サーバー照合による未確定multipartの有限再開
+      description: upload_idが送信世代を表す。正確なprovider不存在・原本なし・complete未準備の場合だけ新世代へ変更する。旧IDはparts/refresh/completeでは使用不可。原本結果不明を自動再作成しない。
+      x-stage: 1
+      responses:
+        "200":
+          description: 依頼した旧世代に結び付く現行ticket。no-store。世代変更は端末checkpoint破棄と原子的に保存する。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [previous_upload_id, ticket]
+                properties:
+                  previous_upload_id: { type: string, format: uuid }
+                  ticket:
+                    $ref: "#/components/schemas/UploadTicket"
+        "401": *unauthorized
+        default: *error
   /uploads/{upload_id}/parts:
     parameters:
       - $ref: "#/components/parameters/EventId"

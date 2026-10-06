@@ -163,6 +163,33 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/uploads/{upload_id}/recover": {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。 */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        upload_id: components["parameters"]["UploadId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * サーバー照合による未確定multipartの有限再開
+     * @description upload_idが送信世代を表す。正確なprovider不存在・原本なし・complete未準備の場合だけ新世代へ変更する。旧IDはparts/refresh/completeでは使用不可。原本結果不明を自動再作成しない。
+     */
+    post: operations["recoverUpload"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/uploads/{upload_id}/parts": {
     parameters: {
       query?: never;
@@ -1447,6 +1474,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["UploadTicket"];
+        };
+      };
+      401: components["responses"]["Error"];
+      default: components["responses"]["Error"];
+    };
+  };
+  recoverUpload: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。 */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        upload_id: components["parameters"]["UploadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 依頼した旧世代に結び付く現行ticket。no-store。世代変更は端末checkpoint破棄と原子的に保存する。 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** Format: uuid */
+            previous_upload_id: string;
+            ticket: components["schemas"]["UploadTicket"];
+          };
         };
       };
       401: components["responses"]["Error"];

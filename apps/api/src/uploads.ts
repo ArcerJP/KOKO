@@ -23,7 +23,7 @@ export type UploadEnv = AccountEnv &
     KOKO_UPLOADS_ENABLED?: string;
     ORIGINALS_BUCKET: Pick<
       R2Bucket,
-      "createMultipartUpload" | "resumeMultipartUpload"
+      "createMultipartUpload" | "resumeMultipartUpload" | "head"
     >;
   };
 type UploadRequest = components["schemas"]["UploadRequest"];
@@ -37,6 +37,7 @@ type Session = {
   provider_upload_id: string | null;
   provisioning_locked_until: string | null;
   request: UploadRequest;
+  restartable?: boolean;
 };
 const admissionErrors: readonly ApiErrorCode[] = [
   "FORBIDDEN",
@@ -154,6 +155,9 @@ function sessionResult(
         ? (value.provisioning_locked_until as string)
         : null,
     request,
+    ...(typeof value.restartable === "boolean"
+      ? { restartable: value.restartable }
+      : {}),
   };
 }
 
@@ -171,7 +175,7 @@ export async function handleUploads(
       { status: 405, headers: { ...privateHeaders, allow: "POST" } },
     );
   const path = new URL(request.url).pathname;
-  const match = /^\/uploads\/([^/]+)\/(refresh|parts)$/.exec(path);
+  const match = /^\/uploads\/([^/]+)\/(refresh|parts|recover)$/.exec(path);
   const action = path === "/uploads" ? "open" : match?.[2];
   const uploadId = match?.[1];
   if (!action || (uploadId !== undefined && !uuid.test(uploadId)))
@@ -182,7 +186,7 @@ export async function handleUploads(
     const { settings, eventId, userId } = context;
     let input: UploadRequest | undefined;
     let partNumbers: number[] = [];
-    if (action === "refresh") {
+    if (action === "refresh" || action === "recover") {
       if (request.body !== null && (await limitedBody(request, 1)) !== "")
         return failure("INVALID_INPUT");
     } else {
@@ -234,9 +238,13 @@ export async function handleUploads(
     async function rpc(
       operation: string,
       payload: object,
+      recovery = false,
     ): Promise<Session | Response> {
       const response = await fetcher(
-        new URL("/rest/v1/rpc/manage_upload_session", settings.url),
+        new URL(
+          `/rest/v1/rpc/${recovery ? "recover_upload_session" : "manage_upload_session"}`,
+          settings.url,
+        ),
         {
           method: "POST",
           headers: {
@@ -249,6 +257,7 @@ export async function handleUploads(
             p_user_id: userId,
             p_action: operation,
             p_input: payload,
+            ...(recovery ? { p_upload_id: uploadId } : {}),
           }),
           redirect: "manual",
           cache: "no-store",
@@ -275,6 +284,12 @@ export async function handleUploads(
       }
       // Invalid upstream values must never become caller-facing input errors or URLs.
       try {
+        if (
+          recovery &&
+          (!object(result) ||
+            result.previous_upload_id !== uploadId?.toLowerCase())
+        )
+          return failure("INTERNAL_ERROR");
         return (
           sessionResult(result, eventId, Date.now(), attemptId) ??
           failure("INTERNAL_ERROR")
@@ -284,20 +299,87 @@ export async function handleUploads(
       }
     }
     let session = await rpc(
-      action,
+      action === "recover" ? "inspect" : action,
       action === "open"
         ? { request: input, attempt_id: attemptId }
-        : { upload_id: uploadId },
+        : action === "recover"
+          ? { attempt_id: attemptId }
+          : { upload_id: uploadId },
+      action === "recover",
     );
     if (session instanceof Response) return session;
     if (
       (uploadId &&
+        action !== "recover" &&
         session.upload_id.toLowerCase() !== uploadId.toLowerCase()) ||
       (input && JSON.stringify(input) !== JSON.stringify(session.request))
     )
       return failure("INTERNAL_ERROR");
+    if (action === "recover") {
+      if (
+        session.mode !== "multipart" ||
+        typeof session.restartable !== "boolean"
+      )
+        return failure("INTERNAL_ERROR");
+      // A lost restart response is resolved through the bounded lineage; never
+      // probe/restart that newer generation on behalf of a stale browser ID.
+      if (
+        session.code === "ready" &&
+        session.upload_id === uploadId?.toLowerCase() &&
+        session.restartable
+      ) {
+        const identity = {
+          eventId: eventId.toLowerCase(),
+          postId: session.post_id,
+          assetId: session.asset_id,
+        };
+        if (
+          (await r2.inspectMultipart(
+            identity,
+            session.provider_upload_id!,
+            fetcher,
+            request.signal,
+          )) === "missing"
+        ) {
+          const key = originalKey(
+            identity.eventId,
+            identity.postId,
+            identity.assetId,
+          );
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const absent = await Promise.race([
+            env.ORIGINALS_BUCKET.head(key).then((value) => value === null),
+            new Promise<boolean>((resolve) => {
+              timer = setTimeout(() => resolve(false), 3000);
+            }),
+          ]).finally(() => {
+            if (timer !== undefined) clearTimeout(timer);
+          });
+          if (!absent) return failure("UPLOAD_INCOMPLETE");
+          const old = session;
+          session = await rpc(
+            "restart",
+            {
+              attempt_id: attemptId,
+              provider_upload_id: old.provider_upload_id,
+            },
+            true,
+          );
+          if (session instanceof Response) return session;
+          if (
+            session.code !== "provision" ||
+            session.post_id !== old.post_id ||
+            session.asset_id !== old.asset_id ||
+            session.upload_id === old.upload_id ||
+            JSON.stringify(session.request) !== JSON.stringify(old.request)
+          )
+            return failure("INTERNAL_ERROR");
+        }
+      }
+    }
     if (session.code === "provision") {
-      if (action !== "open") return failure("INTERNAL_ERROR");
+      if (action !== "open" && action !== "recover")
+        return failure("INTERNAL_ERROR");
       const pending = session;
       const leaseEnd = Date.parse(pending.provisioning_locked_until!);
       if (leaseEnd <= Date.now()) return failure("UPLOAD_INCOMPLETE");
@@ -387,7 +469,16 @@ export async function handleUploads(
       );
     const plan = planR2Upload(session.request.file_size_bytes);
     if (plan.mode !== "multipart") return failure("INTERNAL_ERROR");
-    return reply({ ...ticket, part_size_bytes: plan.partSizeBytes }, 200);
+    const multipartTicket = { ...ticket, part_size_bytes: plan.partSizeBytes };
+    return reply(
+      action === "recover"
+        ? {
+            previous_upload_id: uploadId!.toLowerCase(),
+            ticket: multipartTicket,
+          }
+        : multipartTicket,
+      200,
+    );
   } catch (error) {
     return failure(
       error instanceof R2UploadError ? error.code : "INTERNAL_ERROR",

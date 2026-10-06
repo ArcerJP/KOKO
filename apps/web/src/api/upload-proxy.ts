@@ -38,7 +38,7 @@ export async function handleUploadProxy(
     );
   const path = new URL(request.url).pathname;
   const match =
-    /^\/api\/(uploads\/([^/]+)\/(refresh|parts)|posts\/([^/]+)\/complete)$/.exec(
+    /^\/api\/(uploads\/([^/]+)\/(refresh|parts|recover)|posts\/([^/]+)\/complete)$/.exec(
       path,
     );
   const action =
@@ -59,7 +59,11 @@ export async function handleUploadProxy(
       methods: ["POST"],
       status: action === "complete" ? 202 : 200,
       inputLimit:
-        action === "refresh" ? 0 : action === "complete" ? 1024 * 1024 : 4096,
+        action === "refresh" || action === "recover"
+          ? 0
+          : action === "complete"
+            ? 1024 * 1024
+            : 4096,
       responseLimit: action === "parts" ? 1024 * 1024 : 16 * 1024,
       async run({ base, eventId, input, csrf, signal, fetcher: forward }) {
         const destination = {
@@ -73,6 +77,8 @@ export async function handleUploadProxy(
             return client.open(input as UploadRequest, csrf, signal);
           case "refresh":
             return client.refresh(resourceId!, csrf, signal);
+          case "recover":
+            return client.recover(resourceId!, csrf, signal);
           case "parts":
             if (!record(input) || Object.keys(input).length !== 1)
               throw new ApiFailure("INVALID_INPUT");

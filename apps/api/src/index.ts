@@ -123,7 +123,7 @@ export default {
       return handleUploadCompletion(request, env as CompletionEnv);
     if (
       pathname === "/uploads" ||
-      /^\/uploads\/[^/]+\/(refresh|parts)$/.test(pathname)
+      /^\/uploads\/[^/]+\/(refresh|parts|recover)$/.test(pathname)
     )
       return handleUploads(request, env as UploadEnv);
     if (
