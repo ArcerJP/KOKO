@@ -10,6 +10,7 @@ import { type OriginalIdentity } from "./r2-upload";
 import { type CompletionEnv } from "./upload-completion";
 
 export type RecoveryEnv = CompletionEnv & {
+  KOKO_EVENT_ID?: string;
   KOKO_UPLOAD_RECOVERY_ENABLED?: string;
   KOKO_UPLOAD_RECOVERY_QUEUE?: string;
   R2_ACCOUNT_ID?: string;
@@ -21,6 +22,18 @@ const summary = () => ({ accepted: 0, ignored: 0, deferred: 0, retry: 0 });
 const enabled = (env: RecoveryEnv) =>
   env.KOKO_UPLOADS_ENABLED === "true" &&
   env.KOKO_UPLOAD_RECOVERY_ENABLED === "true";
+
+function recoveryEvent(env: RecoveryEnv): string {
+  const eventId = env.KOKO_EVENT_ID;
+  if (
+    typeof eventId !== "string" ||
+    eventId.length !== 36 ||
+    !uuid.test(eventId) ||
+    eventId !== eventId.toLowerCase()
+  )
+    throw new Error("UPLOAD_RECOVERY_CONFIGURATION_INVALID");
+  return eventId;
+}
 
 /** Hints only: no owner, size, ETag, URL or manifest from the producer is trusted. */
 function notification(body: unknown, account: string): OriginalIdentity | null {
@@ -165,11 +178,15 @@ export async function handleUploadRecoveryQueue(
     batch.messages.length > maxCandidates
   )
     throw new Error("UPLOAD_RECOVERY_QUEUE_NOT_READY");
+  const eventId = recoveryEvent(env);
   const rpc = recoveryClient(env, fetcher);
   const counts = summary();
   for (const message of batch.messages) {
     const identity = notification(message.body, env.R2_ACCOUNT_ID!);
-    const outcome = identity ? await recover(identity, env, rpc) : "ignored";
+    const outcome =
+      identity?.eventId === eventId
+        ? await recover(identity, env, rpc)
+        : "ignored";
     counts[outcome]++;
     if (outcome === "retry") message.retry({ delaySeconds: 60 });
     else message.ack();
@@ -185,8 +202,12 @@ export async function handleUploadRecoveryScheduled(
   if (!enabled(env)) return null;
   if (controller.cron !== recoveryCron)
     throw new Error("UPLOAD_RECOVERY_CRON_NOT_READY");
+  const eventId = recoveryEvent(env);
   const rpc = recoveryClient(env, fetcher);
-  const result = await rpc("claim_upload_recovery", { p_limit: maxCandidates });
+  const result = await rpc("claim_upload_recovery", {
+    p_event_id: eventId,
+    p_limit: maxCandidates,
+  });
   if (
     !object(result) ||
     result.code !== "candidates" ||
@@ -203,6 +224,7 @@ export async function handleUploadRecoveryScheduled(
       typeof item.event_id !== "string" ||
       typeof item.post_id !== "string" ||
       typeof item.asset_id !== "string" ||
+      item.event_id !== eventId ||
       [item.event_id, item.post_id, item.asset_id].some(
         (id) => id.length !== 36 || !uuid.test(id) || id !== id.toLowerCase(),
       )

@@ -68,13 +68,13 @@ beforeEach(async () => {
   );
 });
 after(async () => db.close());
-async function session(overrides = {}) {
+async function session(overrides = {}, scope = event) {
   const attempt = randomUUID();
   let row = (
     await db.query(
       "SELECT public.manage_upload_session($1,$2,'open',$3) result",
       [
-        event,
+        scope,
         user,
         JSON.stringify({
           request: { ...request, ...overrides },
@@ -89,7 +89,7 @@ async function session(overrides = {}) {
       await db.query(
         "SELECT public.manage_upload_session($1,$2,'attach',$3) result",
         [
-          event,
+          scope,
           user,
           JSON.stringify({
             upload_id: row.upload_id,
@@ -157,11 +157,14 @@ async function recover(
     await db.exec("RESET ROLE");
   }
 }
-async function claim(limit = 10) {
+async function claim(limit = 10, scope = event) {
   await db.exec("SET ROLE service_role");
   try {
     return (
-      await db.query("SELECT public.claim_upload_recovery($1) result", [limit])
+      await db.query("SELECT public.claim_upload_recovery($1,$2) result", [
+        scope,
+        limit,
+      ])
     ).rows[0].result;
   } finally {
     await db.exec("RESET ROLE");
@@ -285,19 +288,90 @@ test("scheduled claim requires service role and bounds, READ COMMITTED", async (
   for (const role of ["anon", "authenticated"]) {
     await db.exec(`SET ROLE ${role}`);
     await assert.rejects(
-      db.query("SELECT public.claim_upload_recovery(10)"),
+      db.query("SELECT public.claim_upload_recovery($1,10)", [event]),
       /permission denied/,
     );
     await db.exec("RESET ROLE");
   }
   for (const count of [0, 11, null])
     assert.equal((await claim(count)).code, "INVALID_INPUT");
+  assert.equal((await claim(10, null)).code, "INVALID_INPUT");
   await db.exec("BEGIN ISOLATION LEVEL REPEATABLE READ");
   await assert.rejects(
-    db.query("SELECT public.claim_upload_recovery(1)"),
+    db.query("SELECT public.claim_upload_recovery($1,1)", [event]),
     /READ COMMITTED/,
   );
   await db.exec("ROLLBACK");
+});
+test("recovery claim has no unscoped overload and keeps invoker/empty search_path", async () => {
+  assert.equal(
+    (
+      await db.query(
+        "SELECT to_regprocedure('public.claim_upload_recovery(integer)') old",
+      )
+    ).rows[0].old,
+    null,
+  );
+  const row = (
+    await db.query(
+      "SELECT prosecdef,proconfig FROM pg_proc WHERE oid='public.claim_upload_recovery(uuid,integer)'::regprocedure",
+    )
+  ).rows[0];
+  assert.equal(row.prosecdef, false);
+  assert.ok(row.proconfig.includes('search_path=""'));
+  assert.deepEqual((await claim(10, randomUUID())).items, []);
+});
+test("recovery claim never reads or delays another event's reservation", async () => {
+  const secondEvent = "22222222-2222-4222-8222-222222222222";
+  await db.query(
+    `INSERT INTO public.events(event_id,slug,name,status,starts_at,ends_at,archive_at,private_at,terms_version)
+    SELECT $1,'second','Second',status,starts_at,ends_at,archive_at,private_at,terms_version FROM public.events WHERE event_id=$2`,
+    [secondEvent, event],
+  );
+  await db.query(
+    "INSERT INTO public.event_settings(event_id,uploads_enabled,publication_stopped) VALUES($1,true,false)",
+    [secondEvent],
+  );
+  await db.query(
+    "INSERT INTO public.event_members(event_id,user_id,display_name) VALUES($1,$2,'Fixture')",
+    [secondEvent, user],
+  );
+  await db.query(
+    "INSERT INTO public.consents(event_id,user_id,terms_version) VALUES($1,$2,'v1')",
+    [secondEvent, user],
+  );
+  const first = await session();
+  const second = await session({}, secondEvent);
+  await db.exec(
+    "UPDATE public.upload_sessions SET created_at=now()-interval '6 minutes'",
+  );
+  const state = async (scope) =>
+    (
+      await db.query(
+        "SELECT to_jsonb(s) value FROM public.upload_sessions s WHERE event_id=$1 ORDER BY id",
+        [scope],
+      )
+    ).rows;
+  const untouched = await state(secondEvent);
+  assert.deepEqual((await claim()).items, [
+    { event_id: event, post_id: first.post_id, asset_id: first.asset_id },
+  ]);
+  assert.deepEqual(await state(secondEvent), untouched);
+  assert.deepEqual((await claim()).items, []);
+  const firstClaimed = await state(event);
+  assert.deepEqual((await claim(10, secondEvent)).items, [
+    {
+      event_id: secondEvent,
+      post_id: second.post_id,
+      asset_id: second.asset_id,
+    },
+  ]);
+  assert.deepEqual(await state(event), firstClaimed);
+  assert.equal(
+    (await db.query("SELECT count(*)::int n FROM public.outbox_jobs")).rows[0]
+      .n,
+    0,
+  );
 });
 test("scheduled scan skips fresh/provisioning/deleted/completed and rotates durable cooldown", async () => {
   const s = await session();

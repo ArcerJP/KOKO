@@ -57,6 +57,7 @@ function fixture(results: unknown[] = [prepared, receipt]) {
   );
   const resumeMultipartUpload = vi.fn();
   const env: RecoveryEnv = {
+    KOKO_EVENT_ID: eventId,
     KOKO_UPLOADS_ENABLED: "true",
     KOKO_UPLOAD_RECOVERY_ENABLED: "true",
     KOKO_UPLOAD_RECOVERY_QUEUE: "fixture-recovery",
@@ -157,6 +158,7 @@ it.each([
   { ...body, bucket: "koko-dev-delivery" },
   { ...body, action: "CopyObject" },
   { ...body, action: "DeleteObject" },
+  { ...body, object: { key: originalKey(uploadId, postId, assetId) } },
   ...[
     "../object",
     key.toUpperCase(),
@@ -181,6 +183,7 @@ it.each([
   "KOKO_UPLOADS_ENABLED",
   "KOKO_UPLOAD_RECOVERY_ENABLED",
   "KOKO_UPLOAD_RECOVERY_QUEUE",
+  "KOKO_EVENT_ID",
   "R2_ACCOUNT_ID",
   "SUPABASE_URL",
   "SUPABASE_SECRET_KEY",
@@ -380,7 +383,7 @@ it("scheduled claim uses fixed bounded RPC, then same completion path", async ()
   expect((await scan(f))?.accepted).toBe(1);
   expect(f.calls[0]).toEqual({
     name: "/rest/v1/rpc/claim_upload_recovery",
-    input: { p_limit: 10 },
+    input: { p_event_id: eventId, p_limit: 10 },
   });
   expect(f.resumeMultipartUpload).not.toHaveBeenCalled();
 });
@@ -390,6 +393,8 @@ it.each([
   { ...candidates, items: [item, {}] },
   { ...candidates, items: Array(11).fill(item) },
   { ...candidates, items: [{ ...item, user_id: "injected" }] },
+  { ...candidates, items: [item, { ...item, event_id: uploadId }] },
+  { ...candidates, items: [{ ...item, event_id: uploadId }, item] },
 ])(
   "invalid candidate list %# is rejected before any HEAD/recovery RPC",
   async (value) => {
@@ -412,6 +417,44 @@ it("scheduled one failure does not prevent next candidate", async () => {
     deferred: 0,
     ignored: 0,
   });
+});
+it.each([
+  undefined,
+  "",
+  "not-a-uuid",
+  "Aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  eventId + "\n",
+])(
+  "invalid fixed event %# fails before Queue ACK, RPC or HEAD",
+  async (value) => {
+    const f = fixture(),
+      b = batch();
+    if (value === undefined) delete f.env.KOKO_EVENT_ID;
+    else f.env.KOKO_EVENT_ID = value;
+    await expect(run(f, b)).rejects.toThrow("CONFIGURATION_INVALID");
+    await expect(scan(f)).rejects.toThrow("CONFIGURATION_INVALID");
+    expect(f.fetcher).not.toHaveBeenCalled();
+    expect(f.head).not.toHaveBeenCalled();
+    expect(b.messages[0]?.ack).not.toHaveBeenCalled();
+    expect(b.messages[0]?.retry).not.toHaveBeenCalled();
+  },
+);
+it("ignores other event hints but continues valid hints in the same batch", async () => {
+  const f = fixture([receipt]);
+  const b = batch([
+    { ...body, object: { key: originalKey(uploadId, postId, assetId) } },
+    body,
+  ]);
+  expect(await run(f, b)).toEqual({
+    accepted: 1,
+    ignored: 1,
+    deferred: 0,
+    retry: 0,
+  });
+  expect(f.calls).toHaveLength(1);
+  expect(f.calls[0]?.input.p_event_id).toBe(eventId);
+  expect(f.head).not.toHaveBeenCalled();
+  for (const message of b.messages) expect(message.ack).toHaveBeenCalledOnce();
 });
 it("Worker entrypoints are default-off and no HTTP recovery route is exposed", async () => {
   const f = fixture();

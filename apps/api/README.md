@@ -144,23 +144,26 @@ R2 bindingは[Wrangler設定](wrangler.jsonc)へ定義しています。配備�
 
 ## 保存済み原本の回復（B1-6、既定無効）
 
-[回復Worker](src/upload-recovery.ts)はR2通知のQueue入口と、通知・complete申告の取りこぼしを補うscheduled入口を追加します。[追加migration](supabase/migrations/20261005030000_upload_recovery.sql)のservice専用RPCを経由し、上記completeと同じguard・原子確定・outbox重複排除へ合流します。公開HTTP routeや利用者JWTの代理生成は追加しません。
+[回復Worker](src/upload-recovery.ts)はR2通知のQueue入口と、通知・complete申告の取りこぼしを補うscheduled入口を追加します。[初期migration](supabase/migrations/20261005030000_upload_recovery.sql)と[event限定migration](supabase/migrations/20261007000000_upload_recovery_event_scope.sql)のservice専用RPCを経由し、上記completeと同じguard・原子確定・outbox重複排除へ合流します。公開HTTP routeや利用者JWTの代理生成は追加しません。
 
 - **通知は照会のきっかけのみ**：設定したQueue名、R2 account、開発原本bucket、`PutObject`/`CompleteMultipartUpload`、UUIDのcanonical keyを照合します。通知本文の本人ID・size・ETag等は使いません。DBの既存予約から所有者・申告サイズ・固定partsを導出し、HEADの実測値を再照合します。本文中のaccountは署名ではなく、認証の境界はCloudflareのQueue配信とproducer権限です。任意利用者から当該Queueへ投入できる構成を許可しません。
 - **R2はHEAD限定**：既知の単発送信、またはparts固定済みのmultipartについて、組立て済み原本だけを回復します。未存在時もcomplete/create/abort/deleteを呼びません。provisioning不明・未固定parts・誤ETagを推測で修復しません。変換・公開の成功や安全判定ではありません。
 - **毎回の再認可**：内部`recover_upload`はevent/post/asset/sessionを照合し、DB導出のowner/partsで既存`complete_upload`へ委譲します。prepare/commit間のBAN・規約変更・受付停止等も再検査します。API先行・通知先行・応答喪失後の再送は同じ受領票へ合流し、処理jobを追加登録しません。保留・削除投稿の復活や受付終了の迂回をしません。
-- **件数限定の定期照合**：`claim_upload_recovery(10)`は5分以上前の未完了ready sessionを最大10件取得します。singleまたはparts固定済みmultipartで、uploading・BANラッチなし・原本削除予約なしが対象です。`READ COMMITTED`、session行の`SKIP LOCKED`、同transactionでの`recovery_after`の5分繰下げにより同時claimと連続再取得を抑制します。失敗・応答喪失も5分後に再候補となり、古い未保存原本だけが先頭を占有しない順序にします。これ自体は完了・排他lease・厳密な一度だけ処理の保証ではありません。
+- **固定eventの隔離**：有効時は小文字正規形UUIDの`KOKO_EVENT_ID`を必須とし、不正設定ではRPC・R2接続・ackをしません。Queueの別event通知はignoredとしてackするだけ。Cronの返却候補に別eventが1件でもあれば、全件のHEAD/回復を止めます。DB側も固定eventで候補を選択・更新し、別eventの予約やcooldownに触れません。
+- **件数限定の定期照合**：`claim_upload_recovery(固定event,10)`は対象eventの5分以上前の未完了ready sessionを最大10件取得します。singleまたはparts固定済みmultipartで、uploading・BANラッチなし・原本削除予約なしが対象です。`READ COMMITTED`、session行の`SKIP LOCKED`、同transactionでの`recovery_after`の5分繰下げにより同時claimと連続再取得を抑制します。失敗・応答喪失も5分後に再候補となり、古い未保存原本だけが先頭を占有しない順序にします。これ自体は完了・排他lease・厳密な一度だけ処理の保証ではありません。
 - **再試行と観測**：各通知を個別ack/retryします。不正/無関係な通知・不存在予約はignored、同意/BAN/停止等はdeferredとしてackし、状態を進めません。R2未保存・照合不一致・上流障害・不正応答は60秒遅延retry。定期照合でも1件の失敗で残件を止めず、次回候補に残します。ログはaccepted/ignored/deferred/retryの件数のみで、payload・ID・原本キー・秘密・生例外を出しません。RPCは固定Supabase URL、redirect禁止、5秒timeoutです。
 
 ### 実接続前の条件
 
 WranglerのQueue consumer・Cron・flagは**未追加**です。コードmergeだけでは回復処理は起動しません。既存の`KOKO_UPLOADS_ENABLED`と新しい`KOKO_UPLOAD_RECOVERY_ENABLED`の両方が文字列`true`の場合だけ有効です。未設定のscheduledは無操作、Queueは成功returnによる暗黙ackを避けて固定エラーで失敗させます。無効化時はconsumer停止/切離しを調整し、retry上限による配送喪失を放置しません。
 
-本人確認後の実接続では、既存Supabase設定・R2 bindingに加え、`KOKO_UPLOAD_RECOVERY_QUEUE`と実consumerのQueue名一致、既存`R2_ACCOUNT_ID`との一致、原本bucketの限定通知規則を確認します。batch最大10件、有限retryとDLQ、consumer concurrency上限、Cron `*/5 * * * *`を明示し、秘密やproducer権限・公開範囲を拡大しません。これらの外部設定、追加SQLの実適用・実配備・受付有効化は別の保護操作です。
+本人確認後の実接続では、既存Supabase設定・R2 bindingに加え、`KOKO_EVENT_ID`と対象event/後段処理の一致、`KOKO_UPLOAD_RECOVERY_QUEUE`と実consumerのQueue名一致、既存`R2_ACCOUNT_ID`との一致、原本bucketの限定通知規則を確認します。batch最大10件、有限retryとDLQ、consumer concurrency上限、Cron `*/5 * * * *`を明示し、秘密やproducer権限・公開範囲を拡大しません。これらの外部設定、追加SQLの実適用・実配備・受付有効化は別の保護操作です。
+
+2026-10-07のevent限定migrationは無範囲の旧`claim_upload_recovery(integer)`を削除します。consumer/Cron停止→実ledger確認→migration→対応Worker→固定eventの確認→限定有効化の順に適用します。新旧のWorker/RPC混在ではCronのclaimが失敗しますが、旧WorkerのQueue経路は`recover_upload`を引き続き呼べるため、SQL移行だけでは隔離できません。必ず回復停止中に両方を更新します。復旧時も回復をOFFにしてforward fixし、無範囲RPCの復活や旧Workerだけへのrollbackは行いません。通常の利用者completeと保存済み原本は変更・削除しません。
 
 DLQ監視/回収、スキャンの滞留・負荷検証、未完了uploadの失効/安全な中止、受付終了・BAN等で確定できない原本の運用回収は後続です。定期照合は全bucket列挙を行わずDB予約のみを対象とするため、予約のない孤児原本は拾いません。R2イベント実配送・多接続DB競合・DB→R2の実通し試験は未実施です。
 
-[SQL試験](../../packages/contract/test/upload-completion.test.mjs)はAPI/回復の順序・同じoutboxへの合流・guard変化・権限・claim上限/繰下げを検証します。[Workers試験](test/upload-recovery.spec.ts)は通知hint・RPC/R2異常・HEAD限定・個別再試行・定期候補検証・既定無効入口を検証します。共通の[応答parser](src/completion-result.ts)と既存HTTP試験で、公開受領票へ内部情報を混入させません。
+[SQL試験](../../packages/contract/test/upload-completion.test.mjs)はAPI/回復の順序・同じoutboxへの合流・guard変化・権限・claim上限/繰下げ・2event間の行不変・旧overload不存在を検証します。[Workers試験](test/upload-recovery.spec.ts)は通知hint・RPC/R2異常・HEAD限定・個別再試行・定期候補全件検証・別event通知・不正event設定・既定無効入口を検証します。共通の[応答parser](src/completion-result.ts)と既存HTTP試験で、公開受領票へ内部情報を混入させません。
 
 根拠（2026-10-05確認）：[R2通知schema](https://developers.cloudflare.com/r2/buckets/event-notifications/)、[Queuesのack/retry・DLQへの遷移](https://developers.cloudflare.com/queues/configuration/batching-retries/)。
 
