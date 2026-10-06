@@ -4,7 +4,7 @@
 
 ## 今の目的と影響
 
-Googleの長期秘密鍵を作らず、既存Vercelの署名IDから短命のGoogle ID tokenを取得する準備です。**第1節は本人作成済み・保存条件も照合済みで、やり直し不要。今は第2節の鍵・ロールなしアカウント2件の作成だけ**を本人へ依頼します。Cloud Runの公開化、IAM権限付与、Secret登録、課金、配備は行いません。アカウント作成だけで画像処理が動くわけではありません。
+Googleの長期秘密鍵を作らず、既存Vercelの署名IDから短命のGoogle ID tokenを取得する準備です。**第1節のプールと第2節の専用アカウント2件は本人作成済み。やり直し不要です。** 次はCodexが実IDと権限を照合し、限定したIAM手順を準備します。Cloud Runの公開化、IAM権限付与、Secret登録、課金、配備は別の本人ゲートです。アカウント作成だけで画像処理が動くわけではありません。
 
 APIの初期化時に有効化されたサービスはcloud-setupを参照してください。カード・請求・有料契約の画面が出たら、その先へ進まず画面の名称だけ知らせてください。秘密は送らないでください。
 
@@ -45,25 +45,22 @@ APIの初期化時に有効化されたサービスはcloud-setupを参照して
 
 [Vercel公式のGoogle連携](https://vercel.com/docs/oidc/gcp)をKOKO用に限定した手順です。例にあるStorage Object Adminや広いproject権限は付与しません。固有project IDのclaimは[OIDC公式仕様](https://vercel.com/docs/oidc/reference)を根拠にし、実tokenでの照合は受入時に別途実施します。
 
-## 2. 今、本人が行うこと：専用アカウントを2つ作成
+## 2. 専用アカウント2件（作成済み・参照用）
 
-**目的**：呼出し役と画像処理役を分け、必要な権限を後でそれぞれ最小限に付けるための「名前だけの入れ物」を作ります。2026-10-07の一覧にはサービスアカウントがありませんでした。同名が既にあれば重複作成せず知らせてください。
+2026-10-07、本人が「2アカウント作成済み・鍵とロール追加なし」と報告。callerのIDは画面で `id-koko-cloud-run-caller` へ自動変換されたため採用した、との本人説明です。Codexも一覧と詳細で下記を照合しました。表示名をIDと取り違えず、今後の設定には**実際のメールと数値ID**を使います。作り直し・改名・削除は不要です。
 
-1. [KOKOのサービスアカウント一覧](https://console.cloud.google.com/iam-admin/serviceaccounts?project=koko-510318)を開き、上部が `KOKO / koko-510318` であることを確認します。ログインが求められた場合は本人が行います。
-2. 「サービスアカウントを作成」を押し、下表の1件目の名前・ID・説明を入力します。自動生成されたIDも表と一致させます。
+| 項目                 | 呼出し役                                                       | 画像処理役                                               |
+| -------------------- | -------------------------------------------------------------- | -------------------------------------------------------- |
+| 表示名               | `koko-cloud-run-caller`                                        | `koko-image-runtime`                                     |
+| サービスアカウントID | `id-koko-cloud-run-caller`                                     | `koko-image-runtime`                                     |
+| メール               | `id-koko-cloud-run-caller@koko-510318.iam.gserviceaccount.com` | `koko-image-runtime@koko-510318.iam.gserviceaccount.com` |
+| 一意の数値ID         | `112882822082848355348`                                        | `113117666142374318919`                                  |
+| 説明                 | `KOKO Vercel WIF caller only; no keys`                         | `KOKO private image service runtime; no keys`            |
+| 一覧の表示           | 有効・キーがありません                                         | 有効・キーがありません                                   |
 
-   | 項目                 | 1件目：呼出し役                                             | 2件目：画像処理役                                        |
-   | -------------------- | ----------------------------------------------------------- | -------------------------------------------------------- |
-   | 名前                 | `koko-cloud-run-caller`                                     | `koko-image-runtime`                                     |
-   | サービスアカウントID | `koko-cloud-run-caller`                                     | `koko-image-runtime`                                     |
-   | 説明                 | `KOKO Vercel WIF caller only; no keys`                      | `KOKO private image service runtime; no keys`            |
-   | 生成されるメール     | `koko-cloud-run-caller@koko-510318.iam.gserviceaccount.com` | `koko-image-runtime@koko-510318.iam.gserviceaccount.com` |
+確認先：[KOKOのサービスアカウント一覧](https://console.cloud.google.com/iam-admin/serviceaccounts?project=koko-510318)。追加ロールなしは本人報告であり、継承・既存ポリシーまで無権限と確認済みではありません。鍵の発行・IAM変更・課金・配備は行っていません。
 
-3. **プロジェクトのロール、サービスアカウントへのアクセスを許可するユーザー/管理者は、すべて空欄**にして「完了」。画面に「作成して続行」しかなければ、それを押した後の省略可能な権限欄をすべて空欄のまま完了します。Owner/Editor、Vision、Storage、Workload Identity User、Token Creatorをここで選びません。
-4. 同じ手順で2件目を作ります。**「キーを追加」「新しい鍵を作成」は押しません。** JSONファイルのダウンロードも不要です。
-5. 一覧に2件のメールアドレスが表示されたら、`2アカウント作成済み・鍵とロール追加なし` とだけ知らせてください。数値の固有IDや継承権限の照合はCodexが読取りで続けます。秘密や画面全体を送る必要はありません。
-
-今回の変更はこのGoogle project内のサービスID新規作成2件に限定します。既存WIFプールはOFFのまま、課金/契約・Cloud Run配備・他人の権限は変更しません。追加ロールなしでも継承/既存ポリシーの影響がないとは断定せず、作成後に確認します。誤作成時は鍵や権限を追加せず名前を知らせ、対象の確認後に無効化/取消しを別途判断します。請求・規約同意・API追加有効化・予期しない権限の画面が出たらその操作だけ止めてください。
+`KOKO_IMAGE_CALLER_EMAIL` は呼出し役のメール、`KOKO_IMAGE_CALLER_SUBJECT` は呼出し役の一意の数値IDを使います。runtimeのメール/ID、表示名、プロジェクト番号で代用しません。まだ実環境へ値を登録していません。WIFプールはOFFを維持し、Owner/Editor等の広いロールや長期JSON鍵を追加しません。
 
 [Google公式のサービスアカウント作成手順](https://docs.cloud.google.com/iam/docs/service-accounts-create)に基づき、作成と省略可能な権限設定を分離しています（2026-10-07確認）。
 
