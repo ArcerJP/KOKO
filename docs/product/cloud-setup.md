@@ -8,7 +8,9 @@
 
 一度編集画面の内容領域が空欄になりましたが、再読込み後にConsole内のprovider詳細リンクから設定を表示できました。表示不良を設定消失と推定して再作成していません。作成依頼時のサービスアカウント一覧は0件でしたが、その後本人がcaller/runtime 2件を作成しました。実際のID・メール・数値IDは[認証手順第2節](cloud-run-auth-setup.md#2-専用アカウント2件作成済み参照用)を正本とし、callerの表示名と実IDの違いも記録しています。両方の有効・キーなしを一覧で確認し、追加ロールなしとの本人報告も受けました。作成のやり直しは不要です。
 
-続く読取りで、両アカウントのアクセス一覧にはプロジェクトから継承する本人Ownerのみを確認。callerとプロジェクトIAMはGoogle提供ロールの表示を含めてもWIF principalやcaller/runtime向けprojectロールがなく、プールもOFF（スイッチの `aria-checked=false`）でした。全実効権限監査や実token交換と混同しません。次の本人操作は[認証手順第3節](cloud-run-auth-setup.md#3-今することcallerへの限定wif権限1件)のcaller上・production完全subjectへのWIF権限1件だけです。公式手順/ロール定義とコードを独立照合し、入力値・影響・取消し・停止条件を用意しました。フォーム入力・IAM保存・課金・有効化・配備は未実施です。
+付与前の読取りでは、両アカウントのアクセス一覧は継承Ownerのみでした。その後Codexがcaller上の限定principal/ロールを入力し、本人が保存。保存済み一覧でproduction完全subjectへのWorkload Identity User 1件と既存Ownerの維持、プールOFF（`aria-checked=false`）を確認しました。[認証手順第3節](cloud-run-auth-setup.md#3-callerへの限定wif権限1件完了参照用)は完了済み参照です。全実効権限監査や実token交換の成功とは混同しません。
+
+次の読取りでKOKOに請求先がないこと、Cloud Run/Artifact Registry/Vision/Secret Managerの4 APIがlibrary上「有効にする」の状態と確認。作成リンクのAPI自動有効化を避け、無料トライアルの申込み画面まで開きました。**次は[認証手順第4節](cloud-run-auth-setup.md#4-今すること無料トライアルの本人登録)の本人登録だけ**です。Codexは規約同意、本人/支払情報の入力、請求先確定、有効化、配備を実行していません。表示上の無料クレジットを登録済みやアプリ全体の費用ゼロと扱いません。
 
 GitHubのコードcheckpoint `d2db030d70c1d84770005eb471678934bfeda832` の必須16check成功、API自動配備変数false、両PR DraftとGit/PR主体一致を再確認しました。これはコードのCI/保存設定確認であり、WIF token交換・Cloud Run IAM・実DB/実媒体・本番受入の成功ではありません。未承認の実配備・課金・IAM・Secret登録を行わず、既存の保護を変更しません。
 
