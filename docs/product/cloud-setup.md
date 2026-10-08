@@ -6,7 +6,11 @@
 
 本人の完了報告後、KOKOのlinkedaccountが無料トライアル請求先の概要へ遷移し、アカウント管理のリンク済みプロジェクト一覧に `KOKO / koko-510318` が存在することを確認しました。同じ一覧のMy First Projectは別物で、移動・再作成・削除は不要です。請求先ID・個人の支払情報は記録しません。
 
-Budgets & capsは新規作成案内のみで保存済み行なし。8,000円は準備方針であって設定済み停止上限ではありません。Cloud Run Admin/Artifact Registry/Cloud Vision/Secret Managerの4画面はKOKOが対象で「有効にする」が押せる状態と再確認。最終ボタンは未操作で本人へまとめて引き渡します。正本は[第5節の本人手順](cloud-run-auth-setup.md#5-今することkokoの4-apiを有効化)。API有効化とサービスagent自動追加、資源作成、Secret登録、実配備、実接続受入を区別します。今回AIはクラウド設定を変更していません。
+続く本人の「4 API有効化済み」報告後、Cloud Run Admin/Artifact Registry/Cloud Vision/Secret Managerの4 metrics画面でKOKOと有効状態を確認しました。[第5節](cloud-run-auth-setup.md#5-kokoの4-api有効化完了参照用)は完了済み参照です。API有効化と資源作成、Secret登録、実配備、実接続受入を区別します。
+
+予算の保存済み行、Artifact Registryの既存リポジトリ、Cloud Runサービスの一覧行はありませんでした。Google限定1,000円/月の早期通知案と、東京の非公開Docker保存先 `koko-images` の未保存フォームを準備。Container Scanning APIは無効で、従量課金の追加提案として有効化画面を開きました。3件の対象・費用・最終ボタンは[第6節](cloud-run-auth-setup.md#6-今すること費用通知検査非公開保存先)へ集約し、本人確定待ちです。8,000円は準備方針であり設定済み停止上限ではなく、提案の通知も自動停止ではありません。今回AIは確定ボタン・コンテナー送信・配備を実行していません。
+
+project IAMに標準Compute SAのEditorとGoogle管理service agent群を確認しました。前回との差のすべてを4 APIによる自動追加と断定しません。他アプリ有無は本人も未把握、Compute Engine API無効のためVM一覧は未確認。権限削除/API追加有効化はせず、専用runtimeを使う方針と、既存Editorの別途依存調査を記録しました。既存の保護は変更しません。
 
 ## 2026-10-08の無料登録確認とKOKO請求先リンク準備
 
