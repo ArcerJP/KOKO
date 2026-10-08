@@ -22,24 +22,24 @@ Pull Requestの作成・更新時に再現可能な自動検証を行い、既�
 
 ## 現在の導入状態
 
-| 検査                        | 状態       | 現在の実装または未導入理由                                                                                                        |
-| --------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 依存関係の再現可能なinstall | 導入済み   | npm workspacesを`npm ci`とlockfileで再現。                                                                                        |
-| format／対応形式の構文解析  | 導入済み   | `.github/workflows/format-check.yml`の`Prettier` jobが`npm run format:check`を実行。                                              |
-| Markdown Linter／静的解析   | 導入済み   | `.github/workflows/markdown-lint.yml`の`Markdown Lint` jobが`npm run lint:md`を実行。                                             |
-| OpenAPIと生成物一致         | CI定義済み | `Contract Schema`：Redocly lint、生成型とエラー表の一致。                                                                         |
-| ユニットテスト              | CI定義済み | `Contract Tests`：Node test runnerで状態・判定・キー・エラー・権限・トークン等を検証。                                            |
-| SQL統合テスト               | CI定義済み | 同jobでPGliteへmigrationを実適用し、14テーブル・制約・grants/RLS・イベント境界を検証。                                            |
-| JS/TS Linter                | CI定義済み | `TypeScript Lint`：契約側ESLint 10とWeb側ESLint 9／Next.js公式設定。生成型は生成一致とtscで検査。                                 |
-| 型チェック                  | CI定義済み | `Type Check`と`API Type Check`：契約build、Web/APIのstrict tsc、Wrangler生成型一致。                                              |
-| 契約package build           | CI定義済み | `Contract Build`：共用ESMと型宣言をdistへ出力。Web/API production buildの代替ではない。                                           |
-| Web単体・HTTP／メディア統合 | CI定義済み | `Web Tests`：Vitest、MSW、合成メディアの実トリムとpacket照合、Worker境界。                                                        |
-| Web production build        | CI定義済み | `Web Build`：共有契約build後のNext.js production build。                                                                          |
-| Webブラウザ操作             | CI定義済み | `Web Browser Tests`：production serverを使うPlaywright Chromium。写真・動画・異常入力・モバイル幅。                               |
-| API実行環境テスト           | CI定義済み | `API Tests`：Cloudflare公式Vitest pluginとローカルMiniflareでHTTP境界・R2 binding分離を検証。                                     |
-| API production build        | CI定義済み | `API Build`：実deployと同じWrangler設定を`wrangler deploy --dry-run`でbundle化し、外部へuploadしない。                            |
-| 画像変換コア                | CI定義済み | `Image Type Check`・`Image Tests`：strict tscと実decoderの合成画像・metadata・異常系・CLI検査。                                   |
-| Docker image build          | CI定義済み | `Image Container Build`：画像コアの実Dockerfile/runtimeと、その同じ依存・成果物の隔離コンテナー試験。Cloud Run HTTP配備は未実装。 |
+| 検査                        | 状態       | 現在の実装または未導入理由                                                                                                                      |
+| --------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 依存関係の再現可能なinstall | 導入済み   | npm workspacesを`npm ci`とlockfileで再現。                                                                                                      |
+| format／対応形式の構文解析  | 導入済み   | `.github/workflows/format-check.yml`の`Prettier` jobが`npm run format:check`を実行。                                                            |
+| Markdown Linter／静的解析   | 導入済み   | `.github/workflows/markdown-lint.yml`の`Markdown Lint` jobが`npm run lint:md`を実行。                                                           |
+| OpenAPIと生成物一致         | CI定義済み | `Contract Schema`：Redocly lint、生成型とエラー表の一致。                                                                                       |
+| ユニットテスト              | CI定義済み | `Contract Tests`：Node test runnerで状態・判定・キー・エラー・権限・トークン等を検証。                                                          |
+| SQL統合テスト               | CI定義済み | 同jobでPGliteへmigrationを実適用し、14テーブル・制約・grants/RLS・イベント境界を検証。                                                          |
+| JS/TS Linter                | CI定義済み | `TypeScript Lint`：契約側ESLint 10とWeb側ESLint 9／Next.js公式設定。生成型は生成一致とtscで検査。                                               |
+| 型チェック                  | CI定義済み | `Type Check`と`API Type Check`：契約build、Web/APIのstrict tsc、Wrangler生成型一致。                                                            |
+| 契約package build           | CI定義済み | `Contract Build`：共用ESMと型宣言をdistへ出力。Web/API production buildの代替ではない。                                                         |
+| Web単体・HTTP／メディア統合 | CI定義済み | `Web Tests`：Vitest、MSW、合成メディアの実トリムとpacket照合、Worker境界。                                                                      |
+| Web production build        | CI定義済み | `Web Build`：共有契約build後のNext.js production build。                                                                                        |
+| Webブラウザ操作             | CI定義済み | `Web Browser Tests`：production serverを使うPlaywright Chromium。写真・動画・異常入力・モバイル幅。                                             |
+| API実行環境テスト           | CI定義済み | `API Tests`：Cloudflare公式Vitest pluginとローカルMiniflareでHTTP境界・R2 binding分離を検証。                                                   |
+| API production build        | CI定義済み | `API Build`：実deployと同じWrangler設定を`wrangler deploy --dry-run`でbundle化し、外部へuploadしない。                                          |
+| 画像変換コア                | CI定義済み | `Image Type Check`・`Image Tests`：strict tscと実decoderの合成画像・metadata・異常系・CLI検査。                                                 |
+| Docker image build          | CI定義済み | `Image Container Build`：画像コア/HTTP/判定adapterの実Dockerfile/runtimeと、その同じ依存・成果物の隔離コンテナー試験。実Cloud Run配備は未実施。 |
 
 契約向け5jobは`.github/workflows/contract-check.yml`に定義しています。workflowの存在とGitHub上の実行成功は別です。PGliteはPostgreSQLエンジンでSQLを実行しますが、Supabase Auth、実OAuth、クラウド通信、認証付きメディア配信を検証していません。これらは第1〜第3要件の別の統合/実機試験です。
 
@@ -48,6 +48,8 @@ Markdownlintは`.gitignore`を尊重して追跡対象相当のMarkdownを検査
 画像処理の[DB確定](../apps/api/README.md#画像処理のdb確定b2-1の一部実環境未接続)は既存`Contract Tests`の`image-processing.test.mjs`で検査します。全migration・service限定権限・lease/所有者/版・停止/BAN・原本identity・4receipt全検査・例外時の全rollback・冪等再送を対象とし、公開状態やQueue配送完了へ進めないことも確認します。PGlite単一接続の成功を実PostgreSQLの多接続競合や実R2/HTTP/consumerの受入としません。新job、秘密、実DB接続は不要です。
 
 ## Web検査とLintの保守
+
+初回参加も既存Contract/API/Web Tests・Web Browser Testsへ含めます。SQL権限/再送/rollback、固定event/本人・Cookie/CSRF、表示名だけの登録、直前の本人変更・取消し・曖昧結果、390/1280pxでの実React操作と実routeの既定OFFを検査します。合成Google/DB応答は実認証・実DB適用・多接続競合の代替ではありません。
 
 Web向け3jobは`.github/workflows/web-check.yml`に定義します。秘密やクラウド課金なしで実行でき、実機のカメラ・実OAuth・R2通信をモック成功で代替しません。詳細は[撮影検証](product/stage-one-capture.md)を参照してください。既存の契約job名は維持し、`Contract Tests`は`test:contract`、`Contract Build`は`build:contract`へ明示的に限定します。
 
@@ -61,13 +63,21 @@ API向け3jobは`.github/workflows/api-check.yml`に定義します。`API Type 
 
 本人投稿の状態・一覧は既存`Contract Tests`でread-only SQLの所有権/権限・状態・精度を、`API Tests`で実Web Cryptoの署名cursor・改ざん/期限・最小応答・認証/異常通信を検査します。追加のjobや秘密は不要です。合成Auth/RPCとPGliteの成功は実Supabase適用・Web画面・メディア配信の受入ではありません。[本人投稿APIの実装境界](../apps/api/README.md#本人の投稿状態と一覧b2-6の一部既定無効)を参照してください。
 
-APIが共有契約の生成済み`dist/`を参照するため、rootの`typecheck:api`・`test:api`・`build:api`は、それぞれ`build:contract`の成功後にworkspaceの処理を実行します。別jobや以前のローカルbuildの生成物には依存しません。APIだけを検証する場合もroot commandを使用し、workspaceの下位commandを直接実行する場合は共有契約buildを先に行います。2026-10-03のPR #15で判明した準備漏れへの対応です。再現検査ではlockfileどおり依存を導入し、各commandの前に共有契約の生成物がないことを確認します。親ディレクトリに別の`node_modules`があるコピーだけでは依存解決の独立性を保証できないため、GitHub CIの新規checkoutでも結果を照合します。
+API/Webが共有契約と処理通信コアの生成済み`dist/`を参照するため、rootのAPI/Web向け型・test・buildは`build:shared`（`build:contract`→`build:processing`）の成功後にworkspaceの処理を実行します。API Deployの検証jobも同じ準備を行います。契約専用jobは従来どおり`build:contract`だけを使用します。別jobや以前のローカルbuildの生成物には依存しません。API/Webだけを検証する場合もroot commandを使用し、workspaceの下位commandを直接実行する場合は共有buildを先に行います。2026-10-03のPR #15で判明した準備漏れへの対応を、新しい共有コアにも適用します。再現検査ではlockfileどおり依存を導入し、共有生成物のない新規コピーで検査します。親ディレクトリに別の`node_modules`があるコピーだけでは依存解決の独立性を保証できないため、GitHub CIの新規checkoutでも結果を照合します。
+
+Cloud Run固定中継は既存Web/API Testsで合成HMAC・native OIDC fixture・STS/IAM/Cloud Run模擬通信・Queueの独立DB再照会を検査します。productionだけの実行、固定宛先、秘密を返さない応答、有限body/timeout/abort、Preview/default OFF、HTTP成功だけではACKしない境界を含みます。実OIDC署名/IAM・Vercel runtime・保護bypass・実媒体の受入は別工程です。設定の正本は[Web README](../apps/web/README.md#cloud-run固定中継既定off)です。
 
 [メディア処理予約の配送](../apps/api/README.md#メディア処理予約のqueue配送b1-6の後段既定無効)は既存`Contract Tests`でservice限定RPC・lease/世代・有限retry・処理状態不変を、`API Tests`で模擬Queueの遅延/失敗・曖昧結果・最小message・RPC期限/サイズ・既定OFFを検査します。新job・秘密・実bindingは追加しません。PGlite単一接続と模擬producerは実PostgreSQLの多接続競合・実Queue/DLQ・変換consumerを検証しません。
 
 `API Tests`には`npm run test:deploy-workflow`も追加しています。既存のAPI実行環境テストとjob名は維持し、配備jobをPRの必須checkには追加しません。
 
 ## 画像変換コアの検査
+
+第3集約実装では既存jobのまま、Stream準備/署名Webhook・固定eventのQueue配送/consumer・通知outbox/容量監視・認証付きmedia/個別原本取得・お題/通報/管理・安全な状態投影・費用snapshotを検査します。Webにはgrid/全画面・HLS・お題選択・本人操作・管理画面の単体/Chromium試験を追加。内部cacheでも認可を省略しないこと、停止/BAN/版変更・遅延・失敗・有限retryを対象とします。AI/課金APIは合成応答で、実秘密・有料呼出し・公開・実配備は行いません。これらの成功は実環境の負荷/費用/失効SLOや実端末の受入を代替しません。
+
+判定接続には固定DB client/AI/Stream frame取得のmockと、PGlite全migration→HTTP→実decode→模擬AI→DB判定確定/再送の縦通しを含めます。Docker verification stageだけにroot dev依存のPGliteとmigrationをコピーし、production runtimeには追加しません。実サービス受入、校正、競合/負荷の証明とは区別します。
+
+認証HTTPも既存Image Tests/Container Buildへ含めます。合成RSA署名・Google JWKS fixtureを用いてaud/主体/期限・不正鍵・timeoutを検査し、Node loopbackで本文上限・header重複・最小応答と既存runner接続を確認。外部Google認証、実IAM、実DB/実R2、配備は行いません。Dockerの明示`service` targetとCLIは同じbuild成果物を使います。
 
 内部pipelineの試験も既存`Image Tests`と`Image Container Build`で実行します。`test/pipeline.test.mjs`は実decoderと模擬R2を通す再送、全確認点の中断、部分失敗・改変を検証。追加の`test/db.test.mjs`・`test/runner.test.mjs`は固定RPC・秘密非露出・応答/期限制限・claim→7地点check→finish・記録済み再配送を確認し、実decoder＋署名付き模擬R2＋模擬DB通信の通し試験も行います。Dockerの明示test一覧にも追加し、新job/秘密情報/実クラウド書込みはありません。実SQLは別PGlite試験で、実DB/PostgREST/IAM・実機受入を検証済みとはしません。
 
@@ -153,6 +163,12 @@ ESLint 9は2026-08-06にEOLとなっています。[公式サポート表](https
 `package.json`のscoped overridesでNext.js配下を9系へ固定し、9／10の両方に対応するTypeScript ESLintとeslint-utilsの共有helperは既存のroot版を参照します。npmのhoistによるpeer競合を避けるための設定です。バージョン更新時は、overrideも含めて`npm ci --strict-peer-deps`と`npm ls --all`で再検証してください。
 
 ## 依存関係のセキュリティ更新
+
+### 2026-10-06の固定中継追加時監査
+
+公式`@vercel/oidc@4.0.0`を固定導入し、既存Next.js/PostCSS経由の`source-map-js@1.2.1`に[GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)を検出しました。同じ互換範囲内の修正版`1.2.2`へlockfileを更新し、本番実行依存の監査は0件になりました。開発用の既知High 7件は残り、検査無効化・`audit fix --force`・認証SDKのローカル資格情報fallbackによる回避は行いません。監査値は確認時点の既知指摘であり、安全保証ではありません。
+
+新規検証コピーの`npm audit --include=dev --json`は計11パッケージ（High 7、Moderate 1、Low 3）。追加の低/中指摘は既存Markdown検査経路の[KaTeX](https://github.com/advisories/GHSA-238p-pmpm-9mq7)と[smol-toml](https://github.com/advisories/GHSA-r4xh-jqrq-34v2)、および間接依存への波及です。OIDC SDKの実行依存ではありません。npmの候補はMarkdown検査ツールのdowngradeを伴うため、今回の認証実装へ混在させず互換性調査を残します。任意の外部TOML設定や信頼できないHTML出力を実行せず、未修正を全依存0件と報告しません。
 
 ### 2026-10-03の追加監査：開発用依存のHigh 7件
 

@@ -6,9 +6,9 @@ import "../styles/tokens.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "KOKO | ログイン・撮影検証",
+  title: "第49回技科大祭 | 写真・動画共有",
   description:
-    "第49回技科大祭 KOKOのGoogleログイン導線と端末内メディア検証。撮影画面からの投稿は行いません。",
+    "第49回技科大祭の写真・動画共有アプリ。ログインして投稿やお題を確認できます。",
   robots: { index: false, follow: false },
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };

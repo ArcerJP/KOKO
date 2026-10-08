@@ -27,6 +27,35 @@ const error = (code) => (e) =>
   e.code === code &&
   !e.cause;
 
+test("processing failure uses only a fixed code and exact lease; never treats ambiguous DB outcome as held", async () => {
+  const p = plan();
+  const calls = [];
+  const db = client(async (_url, init) => {
+    calls.push(JSON.parse(init.body));
+    return json({ code: "HELD" });
+  });
+  assert.deepEqual(await db.fail(p, "DECODE_FAILED"), { code: "HELD" });
+  assert.deepEqual(calls[0].p_input, { plan: p, reason: "DECODE_FAILED" });
+  assert.equal(calls[0].p_action, "fail");
+  for (const reason of ["raw secret", "DB_FAILED", "RETRY_EXHAUSTED", null])
+    await assert.rejects(db.fail(p, reason), error("INVALID_INPUT"));
+  assert.equal(calls.length, 1);
+  for (const response of [
+    { code: "RECORDED" },
+    { code: "HELD", raw: "secret" },
+  ])
+    await assert.rejects(
+      client(async () => json(response)).fail(p, "DECODE_FAILED"),
+      error("DB_FAILED"),
+    );
+  await assert.rejects(
+    client(async () => {
+      throw new Error("secret");
+    }).fail(p, "DECODE_FAILED"),
+    error("DB_FAILED"),
+  );
+});
+
 test("disabled by default; construction makes no request", () => {
   assert.equal(createImageDatabase(), null);
   for (const enabled of [false, "true", 1, undefined])

@@ -32,6 +32,38 @@ beforeEach(() =>
 const api = (fetcher: typeof fetch) =>
   createUploadClient(new URL(`${origin}/api/`), destination, fetcher);
 describe("upload control client", () => {
+  it("recovery is a bodyless authenticated operation with a bound prior UUID", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ previous_upload_id: uploadId, ticket: multipart() }),
+    );
+    expect((await api(fetcher).recover(uploadId, csrf)).ticket.mode).toBe(
+      "multipart",
+    );
+    expect(String(fetcher.mock.calls[0]![0])).toBe(
+      `${origin}/api/uploads/${uploadId}/recover`,
+    );
+    expect(fetcher.mock.calls[0]![1]).toMatchObject({
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    expect(fetcher.mock.calls[0]![1]?.body).toBeUndefined();
+  });
+  it.each(["prior", "single", "extra"])(
+    "rejects unbound recovery %s",
+    async (kind) => {
+      const fetcher = vi.fn<typeof fetch>(async () =>
+        Response.json({
+          previous_upload_id: kind === "prior" ? postId : uploadId,
+          ticket: kind === "single" ? single() : multipart(),
+          ...(kind === "extra" ? { extra: true } : {}),
+        }),
+      );
+      await expect(api(fetcher).recover(uploadId, csrf)).rejects.toMatchObject({
+        code: "INTERNAL_ERROR",
+      });
+    },
+  );
   it("accepts 100 signed parts and a 10,000-part completion within bounded JSON", async () => {
     const numbers = Array.from({ length: 100 }, (_, i) => i + 1);
     const fetcher = vi

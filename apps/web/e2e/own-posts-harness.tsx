@@ -8,7 +8,11 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <main className="shell">
       <h1>自分の投稿状況（合成試験）</h1>
-      <PostsPanel owner={me.user_id} eventId={eventId} />
+      <PostsPanel
+        owner={me.user_id}
+        eventId={eventId}
+        operationsEnabled={new URL(location.href).searchParams.has("actions")}
+      />
     </main>
   </StrictMode>,
 );

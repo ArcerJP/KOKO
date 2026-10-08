@@ -1,6 +1,48 @@
 # クラウドの役割と準備ガイド
 
-**配備作業の最新記録は[2026-10-03の障害・権限修正・停止状態](#2026-10-03の配備障害と再発防止)です。** 以下の日付付き履歴を現在の設定と混同せず、再開時は[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)に従って現物を再確認します。
+**接続準備の最新確認は[2026-10-09の記録](#2026-10-09の請求先リンク確認とapi準備)、WIF権限は[2026-10-07の記録](#2026-10-07のwif保存条件と次の本人操作)、API配備障害の経緯は[2026-10-03の記録](#2026-10-03の配備障害と再発防止)です。** 以下の日付付き履歴を現在の設定と混同せず、再開時は[api-deployment Skill](../../.agents/skills/api-deployment/SKILL.md)に従って現物を再確認します。
+
+## 2026-10-09の請求先リンク確認とAPI準備
+
+本人の完了報告後、KOKOのlinkedaccountが無料トライアル請求先の概要へ遷移し、アカウント管理のリンク済みプロジェクト一覧に `KOKO / koko-510318` が存在することを確認しました。同じ一覧のMy First Projectは別物で、移動・再作成・削除は不要です。請求先ID・個人の支払情報は記録しません。
+
+続く本人の「4 API有効化済み」報告後、Cloud Run Admin/Artifact Registry/Cloud Vision/Secret Managerの4 metrics画面でKOKOと有効状態を確認しました。[第5節](cloud-run-auth-setup.md#5-kokoの4-api有効化完了参照用)は完了済み参照です。API有効化と資源作成、Secret登録、実配備、実接続受入を区別します。
+
+続く本人の「3件完了」報告後、Google限定1,000円/月・500/900/1,000円の費用通知、Container Scanning API有効、東京の非公開Docker保存先 `koko-images` を確認しました。保存済み設定と費用は[第6節](cloud-run-auth-setup.md#6-費用通知検査非公開保存先完了参照用)が正本。通知先は本人の最終指定によりプロジェクトオーナーと既存の課金管理者・課金ユーザーの両方ONを維持し、AIによる変更・再保存はしていません。リポジトリは不変タグON・削除ポリシーなし・スキャン有効。初回の非アクティブ表示は再読込み後にアクティブへ変わり、設定変更は不要でした。image一覧は空です。8,000円は準備方針であり設定済み停止上限ではなく、通知も自動停止ではありません。
+
+固定ソースからserviceコンテナーをローカルbuildし、外部通信なし・非rootで処理OFFのhealthと処理ルート拒否を検証しました。公式Google CLI 588.0.0もchecksum照合して作業フォルダーに準備。続く本人ログイン完了後、登録アカウントとKOKOへの読取り成功を確認しました。[第7節](cloud-run-auth-setup.md#7-google-cliへ本人ログイン完了参照用)は完了済みです。OS PATH・既定アカウントを変更せず、CLIは毎回対象を明示します。
+
+CLIでregistry空・不変タグON・スキャンACTIVE・直接IAM bindingなし、projectに公開principalなし、caller/runtimeのprojectロールなし、pool disabled=true、東京Run一覧空を確認しました。固定候補1版の本人用送信手順を準備し、ガード自己試験と読取りcheck成功。**次の本人操作は[第8節の送信](cloud-run-auth-setup.md#8-今すること固定プログラム1版の送信)**です。コンテナー送信、クラウド検査の実行、Cloud Run作成/配備、Secret、IAM変更、プールONは未実施です。プロジェクト/リポジトリの読取りを全実効権限監査や実アプリ受入と混同しません。
+
+project IAMに標準Compute SAのEditorとGoogle管理service agent群を確認しました。前回との差のすべてを4 APIによる自動追加と断定しません。他アプリ有無は本人も未把握、Compute Engine API無効のためVM一覧は未確認。権限削除/API追加有効化はせず、専用runtimeを使う方針と、既存Editorの別途依存調査を記録しました。既存の保護は変更しません。
+
+## 2026-10-08の無料登録確認とKOKO請求先リンク準備
+
+本人の完了報告後、請求先一覧のアクティブ1件と概要の「無料トライアル アカウント」・残クレジット/終了日表示を確認しました。この10/8時点は既存KOKOが未リンクだったため、KOKO側のダイアログで請求先を選択し、最後の「アカウントを設定」を未操作で本人へ渡しました。手順は[完了済み第4節](cloud-run-auth-setup.md#4-kokoへの請求先リンク完了参照用)に保存し、10/9の結果は上の節を参照します。個人の支払情報や請求先IDは公開記録へ載せません。
+
+本人が開いていた予算作成フォームは変更・保存せず維持。新しいSpend capsのCloud Run対応も公式で確認しましたが、1プロジェクト/1サービス限定でKOKO全体の強制上限ではありません。リンク確定、予算保存、有料化、API有効化、IAM/Secret、配備はそれぞれ別の状態として記録します。今回AIはそれらの確定操作を行っていません。
+
+## 2026-10-07のWIF保存条件と次の本人操作
+
+本人の作成完了報告後の読取りで、KOKO / `koko-510318` のプール `koko-cloud-run` はOFF、provider `koko-vercel` は存在を確認しました。さらにprovider編集画面の保存済み値を読み、[認証手順第1節](cloud-run-auth-setup.md#1-google-cloudでプールを作成完了参照用)のissuer・単一audience・subject mapping・固定project ID/production条件との完全一致を確認しました。入力・保存・有効化は行っていません。providerのON表示と、上位プールOFFを区別します。
+
+一度編集画面の内容領域が空欄になりましたが、再読込み後にConsole内のprovider詳細リンクから設定を表示できました。表示不良を設定消失と推定して再作成していません。作成依頼時のサービスアカウント一覧は0件でしたが、その後本人がcaller/runtime 2件を作成しました。実際のID・メール・数値IDは[認証手順第2節](cloud-run-auth-setup.md#2-専用アカウント2件作成済み参照用)を正本とし、callerの表示名と実IDの違いも記録しています。両方の有効・キーなしを一覧で確認し、追加ロールなしとの本人報告も受けました。作成のやり直しは不要です。
+
+付与前の読取りでは、両アカウントのアクセス一覧は継承Ownerのみでした。その後Codexがcaller上の限定principal/ロールを入力し、本人が保存。保存済み一覧でproduction完全subjectへのWorkload Identity User 1件と既存Ownerの維持、プールOFF（`aria-checked=false`）を確認しました。[認証手順第3節](cloud-run-auth-setup.md#3-callerへの限定wif権限1件完了参照用)は完了済み参照です。全実効権限監査や実token交換の成功とは混同しません。
+
+次の読取りでKOKOに請求先がないこと、Cloud Run/Artifact Registry/Vision/Secret Managerの4 APIがlibrary上「有効にする」の状態と確認。作成リンクのAPI自動有効化を避け、無料トライアルの申込み画面まで開きました。この10/7時点では本人登録待ちでした（10/8の完了確認は上の節）。Codexは規約同意、本人/支払情報の入力、請求先確定、有効化、配備を実行していません。無料クレジットをアプリ全体の費用ゼロと扱いません。
+
+GitHubのコードcheckpoint `d2db030d70c1d84770005eb471678934bfeda832` の必須16check成功、API自動配備変数false、両PR DraftとGit/PR主体一致を再確認しました。これはコードのCI/保存設定確認であり、WIF token交換・Cloud Run IAM・実DB/実媒体・本番受入の成功ではありません。未承認の実配備・課金・IAM・Secret登録を行わず、既存の保護を変更しません。
+
+## 2026-10-06の認証準備とPreview停止確認
+
+追加の本人依頼により、既存の未保存WIF作成フォームへ指定値を入力しました。対象はKOKO / `koko-510318`、プールID `koko-cloud-run`（有効なプールOFF）、OIDC provider `koko-vercel`、Team issuer・単一audience・subject mappingとproduction/project限定条件です。最後の保存は押さず本人へ引き渡しました。これは未保存の入力準備であり、プール/provider作成済み・条件のサーバー側受理・実認証成功ではありません。鍵・サービスアカウント・IAM・課金・配備は操作していません。
+
+本人提供の画像は`arcer2/koko-web`のPreview環境でBranch TrackingがOFFの状態です。管理画面を再読込みしてOFFが維持され、Saveが無効であることを確認しました。これは以後のGit連携によるPreview追従を止める設定で、既存Previewの削除を意味しません。既存配備の保護・Production・Cloudflare Accessを変更していません。追加pushではAPI自動配備OFFと他の配備経路も再確認します。
+
+VercelのSecurity画面ではOIDCのTeam方式が選択済み、issuerは`https://oidc.vercel.com/arcer2`、audは`https://vercel.com/arcer2`、production subjectは`owner:arcer2:project:koko-web:environment:production`です。これは非秘密の設定値の読取りで、実runtime tokenの取得・Google WIFの成功ではありません。セキュリティを優先した方式選定は[ADR-0007](../decisions/ADR-0007-private-image-service.md#呼出元の方式選定2026-10-06)、本人が今行う無効プールの準備は[Cloud Run認証手順](cloud-run-auth-setup.md)に分離します。
+
+Google CloudはKOKO / `koko-510318`の管理画面へログイン済み、Cloud Run概要にはリソース作成案内が表示されました。WIFの「開始」リンクから作成フォームへ進む際、コンソールが`cloudresourcemanager.googleapis.com`、`sts.googleapis.com`、`iam.googleapis.com`、`iamcredentials.googleapis.com`を自動有効化し、4件の完了通知を確認しました。読取り準備のリンクにこの副作用があることを事前確認できなかった操作上の逸脱として、直ちに本人へ報告しました。API無効化による復旧も外部変更なので無断では実行しません。プール/providerの保存、サービスアカウント作成、IAM授権、鍵/Secretの発行・登録、請求設定・Cloud Run配備は行っていません。これを「外部変更なし」と記録しません。有効化の通知だけから料金ゼロやサービス接続成功も推定しません。
 
 確認日：GitHub Actionsの初回手動配備・通常main更新による自動配備と配備後の応答・保護確認は2026-10-01〜02、Cloudflare Workerの初回build・deploy成功と未認証アクセスの転送確認は2026-09-29、保存済みAccess設定の閲覧確認は2026-09-28〜29、専用トークンの作成・保存とBuilds登録成功のユーザー報告、Zero Trust Free有効化とWorker作成フォームの画面確認は2026-09-28、Vercelの初回配備・保護設定とCloudflareアカウント・R2の初期準備は2026-09-23、その他の準備・料金情報は2026-09-22。対象はB1-1〜B1-3の準備です。採用構成の正本は[プロダクト構成](../architecture/product-architecture.md)、費用判断の方針は[費用方針](cost-policy.md)です。確認済みの範囲は各節に記載し、全サービスの契約・課金・実連携や本番受け入れの完了とは区別します。
 

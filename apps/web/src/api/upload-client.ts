@@ -167,6 +167,26 @@ export function createUploadClient(
       if (result.upload_id !== expected) throw new ApiFailure("INTERNAL_ERROR");
       return result;
     },
+    async recover(uploadId: string, csrf: string, signal?: AbortSignal) {
+      const expected = id(uploadId);
+      const result = await post(
+        `uploads/${expected}/recover`,
+        undefined,
+        csrf,
+        200,
+        0,
+        signal,
+      );
+      if (
+        !record(result) ||
+        Object.keys(result).length !== 2 ||
+        result.previous_upload_id !== expected
+      )
+        throw new ApiFailure("INTERNAL_ERROR");
+      const current = ticket(result.ticket, scope, Date.now());
+      if (current.mode !== "multipart") throw new ApiFailure("INTERNAL_ERROR");
+      return { previous_upload_id: expected, ticket: current };
+    },
     async parts(
       uploadId: string,
       numbers: number[],

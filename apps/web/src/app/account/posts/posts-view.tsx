@@ -2,6 +2,9 @@
 import { errors } from "@koko/contract";
 import type { OwnPost } from "../../../api/own-posts-contract";
 import type { OwnPostsState } from "../../../api/own-posts-controller";
+import Link from "next/link";
+import { PostActions } from "../../../components/post-actions";
+import { PostStateDetails } from "../../../components/post-state-details";
 
 const labels: Record<OwnPost["status"], string> = {
   uploading: "送信中",
@@ -20,11 +23,15 @@ export function PostsView({
   onReload,
   onMore,
   onRefresh,
+  operationsEnabled = false,
+  onDeleted,
 }: {
   state: OwnPostsState;
   onReload: () => void;
   onMore: () => void;
   onRefresh: (id: string) => void;
+  operationsEnabled?: boolean;
+  onDeleted?: () => void;
 }) {
   return (
     <section className="panel" aria-labelledby="own-posts-heading">
@@ -43,19 +50,21 @@ export function PostsView({
         {state.nextCursor && (
           <button
             className="secondary"
-            disabled={state.phase !== "ready" || state.items.length >= 300}
+            disabled={state.phase !== "ready"}
             onClick={onMore}
           >
-            続きを読み込む
+            {state.items.length >= 300
+              ? "さらに古い投稿へ（表示を入れ替え）"
+              : "続きを読み込む"}
           </button>
         )}
       </div>
       {state.phase === "ready" && state.items.length === 0 && (
         <p>投稿はまだありません。</p>
       )}
-      {state.items.length >= 300 && (
-        <p>表示は300件までです。最新の状態は先頭から読み直してください。</p>
-      )}
+      <p className="caption">
+        最大300件ずつ表示します。さらに古い投稿へ進むと直前の表示分を入れ替えます。最新の投稿へ戻るときは先頭から読み直してください。
+      </p>
       <div className="results">
         {state.items.map((post) => (
           <article
@@ -76,6 +85,7 @@ export function PostsView({
             {post.error_code && (
               <p className="warning">{errors[post.error_code].message}</p>
             )}
+            <PostStateDetails post={post} />
             {["uploading", "upload_failed"].includes(post.status) && (
               <p>送信の再開は、元の端末の送信画面で確認してください。</p>
             )}
@@ -86,7 +96,14 @@ export function PostsView({
             )}
             {["blocked", "held", "hidden"].includes(post.status) && (
               <p>
-                この画面から再公開はできません。異議申立て機能は準備中です。
+                この画面から再公開はできません。
+                {operationsEnabled ? (
+                  <Link href={`/appeal?post=${post.id}`} prefetch={false}>
+                    この投稿について異議を申し立てる
+                  </Link>
+                ) : (
+                  "異議申立て機能は準備中です。"
+                )}
               </p>
             )}
             <button
@@ -96,6 +113,16 @@ export function PostsView({
             >
               この投稿の状態を更新
             </button>
+            {operationsEnabled &&
+            state.phase === "ready" &&
+            post.status !== "deleted" ? (
+              <PostActions
+                eventId={post.event_id}
+                postId={post.id}
+                mode="delete-own"
+                {...(onDeleted ? { onCompleted: onDeleted } : {})}
+              />
+            ) : null}
           </article>
         ))}
       </div>

@@ -1,5 +1,7 @@
 import {
   ImageDatabaseError,
+  imageFailureReasons,
+  type ImageFailureReason,
   type ImageDatabase,
   type ImageJobReference,
 } from "./db.js";
@@ -35,7 +37,8 @@ export function createImageRunner(
     !database ||
     typeof database.claim !== "function" ||
     typeof database.check !== "function" ||
-    typeof database.finish !== "function"
+    typeof database.finish !== "function" ||
+    typeof database.fail !== "function"
   )
     throw new Error("INVALID_RUNNER_CONFIG");
   const claim = database.claim.bind(database);
@@ -57,7 +60,20 @@ export function createImageRunner(
           return { ok: true, outcome: "image_already_recorded" };
         if (found.code !== "CLAIMED") return { ok: false, reason: found.code };
         const saved = await pipeline.process(found.plan);
-        if (!saved.ok) return saved;
+        if (!saved.ok) {
+          if (
+            imageFailureReasons.includes(saved.reason as ImageFailureReason)
+          ) {
+            const held = await database.fail(
+              found.plan,
+              saved.reason as ImageFailureReason,
+            );
+            if (held.code !== "HELD") return { ok: false, reason: held.code };
+          }
+          // Even after a durable hold, never claim that image conversion/AI succeeded.
+          // Queue delivery is settled only after its separate authoritative DB read.
+          return saved;
+        }
         const result = await finish(found.plan, {
           originalSha256: saved.originalSha256,
           deliveries: saved.deliveries,

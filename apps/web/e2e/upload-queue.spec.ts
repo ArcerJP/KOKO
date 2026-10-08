@@ -27,6 +27,14 @@ test.beforeAll(async () => {
       {
         name: "no-worker-in-photo-harness",
         setup(builder) {
+          builder.onResolve({ filter: /auth\/browser$/ }, () => ({
+            path: "auth",
+            namespace: "theme-auth",
+          }));
+          builder.onLoad({ filter: /.*/, namespace: "theme-auth" }, () => ({
+            loader: "js",
+            contents: `export const createBrowserAuthClient = () => ({auth:{onAuthStateChange(listener){listener("INITIAL_SESSION");return {data:{subscription:{unsubscribe(){}}}}}}});`,
+          }));
           // Match Next's CJS interop without replacing its real Image implementation.
           builder.onResolve({ filter: /^next\/image$/ }, () => ({
             path: "image",
@@ -279,4 +287,131 @@ test("productionの送信画面は既定無効", async ({ page }) => {
   await page.goto("/upload");
   await expect(page.getByRole("status")).toContainText("送信機能は現在無効");
   await expect(page.locator('input[type="file"]')).toHaveCount(0);
+});
+test("開催中のお題だけを明示選択してqueueへ渡し、自動送信しない", async ({
+  page,
+  context,
+}) => {
+  const eventId = "00000000-0000-4000-8000-000000000001",
+    themeId = "00000000-0000-4000-8000-000000000011";
+  await page.route("**/auth/api-session", (route) =>
+    route.fulfill({ json: { ok: true } }),
+  );
+  await page.route("**/api/me", (route) =>
+    route.fulfill({
+      json: {
+        user_id: "00000000-0000-4000-8000-000000000009",
+        event_id: eventId,
+        display_name: "合成利用者",
+        role: "user",
+        is_banned: false,
+        consent_required: false,
+        terms_version: "synthetic",
+        crown: "none",
+      },
+    }),
+  );
+  const theme = {
+    id: themeId,
+    event_id: eventId,
+    title: "開催中の合成お題",
+    description: "合成試験",
+    icon: "📷",
+    color: "#334455",
+    status: "published",
+    starts_at: new Date(Date.now() - 60000).toISOString(),
+    ends_at: new Date(Date.now() + 60000).toISOString(),
+  };
+  await page.route("**/api/themes", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          theme,
+          {
+            ...theme,
+            id: "00000000-0000-4000-8000-000000000012",
+            title: "終了したお題",
+            status: "ended",
+          },
+        ],
+      },
+    }),
+  );
+  await mount(context, page, "?themes=1");
+  await page.getByRole("button", { name: "開催中のお題を読み込む" }).click();
+  await expect(page.getByRole("option", { name: theme.title })).toHaveCount(1);
+  await expect(page.getByRole("option", { name: "終了したお題" })).toHaveCount(
+    0,
+  );
+  await page.getByLabel("今回の投稿のお題").selectOption(themeId);
+  await page.getByLabel("投稿する写真を撮る／選ぶ").setInputFiles(photo);
+  expect(await page.evaluate(() => window.queueHarness.puts)).toEqual([]);
+  await page
+    .getByRole("button", { name: "端末に保存して送信", exact: true })
+    .click();
+  await expect
+    .poll(async () => {
+      const rows = await page.evaluate(() => window.queueHarness.metadata());
+      return rows[0]?.request.theme_id;
+    })
+    .toBe(themeId);
+  await page.evaluate(() => window.queueHarness.release());
+});
+test("お題が送信前に終了した場合は自由投稿へ無断変更せず停止", async ({
+  page,
+  context,
+}) => {
+  await page.clock.install();
+  const eventId = "00000000-0000-4000-8000-000000000001",
+    themeId = "00000000-0000-4000-8000-000000000011";
+  await page.route("**/auth/api-session", (route) =>
+    route.fulfill({ json: { ok: true } }),
+  );
+  await page.route("**/api/me", (route) =>
+    route.fulfill({
+      json: {
+        user_id: "00000000-0000-4000-8000-000000000009",
+        event_id: eventId,
+        display_name: "合成利用者",
+        role: "user",
+        is_banned: false,
+        consent_required: false,
+        terms_version: "synthetic",
+        crown: "none",
+      },
+    }),
+  );
+  const theme = {
+    id: themeId,
+    event_id: eventId,
+    title: "短期間の合成お題",
+    description: "合成試験",
+    icon: "📷",
+    color: "#334455",
+    status: "published",
+    starts_at: new Date(Date.now() - 60000).toISOString(),
+    ends_at: new Date(Date.now() + 10000).toISOString(),
+  };
+  await page.route("**/api/themes", (route) =>
+    route.fulfill({ json: { items: [theme] } }),
+  );
+  await mount(context, page, "?themes=1");
+  await page.getByRole("button", { name: "開催中のお題を読み込む" }).click();
+  await page.getByLabel("今回の投稿のお題").selectOption(themeId);
+  await page.getByLabel("投稿する写真を撮る／選ぶ").setInputFiles(photo);
+  await page.clock.fastForward(11000);
+  await page
+    .getByRole("button", { name: "端末に保存して送信", exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      "お題を確認できません。開催中のお題を選び直すか、自由投稿を選んでください。",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect(await page.evaluate(() => window.queueHarness.metadata())).toEqual([]);
+  await page.getByLabel("今回の投稿のお題").selectOption("");
+  await expect(
+    page.getByRole("button", { name: "端末に保存して送信", exact: true }),
+  ).toBeEnabled();
 });

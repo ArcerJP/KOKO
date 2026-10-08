@@ -23,6 +23,33 @@ const reasons = [
   "PROCESSING_HELD",
   "CONTENT_BLOCKED",
 ] as const;
+const blockCategories = [
+  "sexual",
+  "violence",
+  "hate",
+  "harassment",
+  "self_harm",
+  "illicit",
+  "other",
+] as const;
+const deletionStates = [
+  "RETENTION_UNKNOWN",
+  "RETENTION_PENDING",
+  "PHYSICAL_DELETION_NOT_ENABLED",
+  "DELETION_UNCONFIRMED",
+] as const;
+function validTimestamp(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/.test(value)
+  )
+    return false;
+  const wall = value.slice(0, 19);
+  return (
+    Number.isFinite(Date.parse(value)) &&
+    new Date(`${wall}Z`).toISOString().slice(0, 19) === wall
+  );
+}
 
 export function validCursor(value: unknown): value is string {
   return (
@@ -93,6 +120,33 @@ export function parseOwnPost(
     )
       return null;
     item.error_code = value.error_code as NonNullable<OwnPost["error_code"]>;
+  }
+  if (value.block_category !== undefined) {
+    if (
+      item.status !== "blocked" ||
+      !blockCategories.includes(
+        value.block_category as (typeof blockCategories)[number],
+      )
+    )
+      return null;
+    item.block_category = value.block_category as NonNullable<
+      OwnPost["block_category"]
+    >;
+  }
+  if (value.deletion !== undefined) {
+    const d = value.deletion;
+    if (
+      item.status !== "deleted" ||
+      !record(d) ||
+      !deletionStates.includes(d.state as (typeof deletionStates)[number]) ||
+      (d.retention_until !== null && !validTimestamp(d.retention_until)) ||
+      (d.state === "RETENTION_PENDING" && d.retention_until === null)
+    )
+      return null;
+    item.deletion = {
+      state: d.state as NonNullable<OwnPost["deletion"]>["state"],
+      retention_until: d.retention_until as string | null,
+    };
   }
   return item;
 }

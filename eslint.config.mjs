@@ -18,7 +18,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["packages/contract/src/**/*.ts"],
+    files: ["packages/contract/src/**/*.ts", "packages/processing/src/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",

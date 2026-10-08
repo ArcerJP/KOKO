@@ -144,7 +144,7 @@ function assertWorkflowBoundary(w) {
     deploy.steps.filter((s) => s.run).map((s) => s.run),
     [
       "npm ci --include=dev --strict-peer-deps",
-      "npm run build:contract",
+      "npm run build:shared",
       "node .github/scripts/api-deploy.mjs deploy",
     ],
   );
@@ -196,11 +196,11 @@ test("actual workflow preserves the deployment and credential boundaries", () =>
 const mutations = {
   "missing deployment contract build": (w) => {
     w.jobs.deploy.steps = w.jobs.deploy.steps.filter(
-      (s) => s.run !== "npm run build:contract",
+      (s) => s.run !== "npm run build:shared",
     );
   },
   "credentials in contract build": (w) => {
-    w.jobs.deploy.steps.find((s) => s.run === "npm run build:contract").env = {
+    w.jobs.deploy.steps.find((s) => s.run === "npm run build:shared").env = {
       TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}",
     };
   },
@@ -278,8 +278,16 @@ function assertApiPreparation(pkg, command, workspaceCommand) {
     "npm run build --workspace @koko/contract",
   );
   assert.equal(
+    pkg.scripts["build:processing"],
+    "npm run build --workspace @koko/processing",
+  );
+  assert.equal(
+    pkg.scripts["build:shared"],
+    "npm run build:contract && npm run build:processing",
+  );
+  assert.equal(
     pkg.scripts[command],
-    `npm run build:contract && npm run ${workspaceCommand} --workspace @koko/api`,
+    `npm run build:shared && npm run ${workspaceCommand} --workspace @koko/api`,
   );
 }
 
@@ -299,11 +307,11 @@ for (const [command, workspaceCommand] of [
     ["missing build", `npm run ${workspaceCommand} --workspace @koko/api`],
     [
       "reversed order",
-      `npm run ${workspaceCommand} --workspace @koko/api && npm run build:contract`,
+      `npm run ${workspaceCommand} --workspace @koko/api && npm run build:shared`,
     ],
     [
       "ignored build failure",
-      `npm run build:contract ; npm run ${workspaceCommand} --workspace @koko/api`,
+      `npm run build:shared ; npm run ${workspaceCommand} --workspace @koko/api`,
     ],
   ]) {
     test(`${command} rejects ${name}`, () => {

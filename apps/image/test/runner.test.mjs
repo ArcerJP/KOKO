@@ -45,6 +45,8 @@ function harness(options = {}) {
           ? options.check(checks, b, init)
           : json({ code: "CURRENT" });
       }
+      if (b.p_action === "fail")
+        return options.fail ? options.fail(b, init) : json({ code: "HELD" });
       finishBody = b.p_input;
       return options.finish
         ? options.finish(b, init)
@@ -97,6 +99,32 @@ test("runner disabled by default and rejects incomplete internal dependencies", 
     () => createImageRunner({ enabled: true, database: harness().database }),
     /INVALID_PIPELINE_CONFIG/,
   );
+});
+
+test("decode failure records durable hold without image/AI success; DB loss or stale lease is not concealed", async () => {
+  for (const code of ["HELD", "STALE"]) {
+    const h = harness({
+      transform: () => ({ ok: false, reason: "DECODE_FAILED" }),
+      fail: (body) => {
+        assert.deepEqual(body.p_input, { plan: h.p, reason: "DECODE_FAILED" });
+        return json({ code });
+      },
+    });
+    assert.deepEqual(await h.runner.run(job), {
+      ok: false,
+      reason: code === "HELD" ? "DECODE_FAILED" : "STALE",
+    });
+    assert.equal(h.calls.at(-1), "fail");
+    assert.ok(!h.calls.includes("PUT"));
+    assert.ok(!h.calls.includes("finish"));
+  }
+  const h = harness({
+    transform: () => ({ ok: false, reason: "DECODE_FAILED" }),
+    fail: () => {
+      throw new Error("secret");
+    },
+  });
+  assert.deepEqual(await h.runner.run(job), { ok: false, reason: "DB_FAILED" });
 });
 test("claim → seven DB guards → image storage → exact metadata finish; AI returned only after commit", async () => {
   const h = harness(),

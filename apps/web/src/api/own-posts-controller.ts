@@ -61,15 +61,11 @@ export function createOwnPostsController(
   async function run(kind: "reload" | "more" | "status", id?: string) {
     if (active || state.phase === "closed") return;
     const previous = state;
-    if (
-      kind === "more" &&
-      (previous.phase !== "ready" ||
-        !previous.nextCursor ||
-        previous.items.length >= 300)
-    )
+    if (kind === "more" && (previous.phase !== "ready" || !previous.nextCursor))
       return;
     const selected = previous.items.find((post) => post.id === id);
     if (kind === "status" && (previous.phase !== "ready" || !selected)) return;
+    const replaceWindow = kind === "more" && previous.items.length >= 300;
     const current = ++revision,
       controller = new AbortController();
     active = controller;
@@ -126,14 +122,20 @@ export function createOwnPostsController(
             );
             nextCursor = previous.nextCursor;
           } else {
+            const limit =
+              kind === "more" && !replaceWindow
+                ? Math.min(30, 300 - previous.items.length)
+                : 30;
             const page = await client.listOwnPosts(
               {
-                limit: 30,
+                limit,
                 ...(kind === "more" ? { cursor: previous.nextCursor! } : {}),
               },
               controller.signal,
             );
             check();
+            if (page.items.length > limit)
+              throw new ApiFailure("INTERNAL_ERROR");
             const last = previous.items.at(-1),
               first = page.items[0];
             if (
@@ -149,7 +151,9 @@ export function createOwnPostsController(
             )
               throw new ApiFailure("INTERNAL_ERROR");
             items =
-              kind === "more" ? [...previous.items, ...page.items] : page.items;
+              kind === "more" && !replaceWindow
+                ? [...previous.items, ...page.items]
+                : page.items;
             nextCursor = page.next_cursor;
           }
           await verify();
@@ -161,7 +165,9 @@ export function createOwnPostsController(
             message:
               kind === "status"
                 ? "選択した投稿を更新しました。他の投稿は前回取得時点の状態です。"
-                : "取得時点の投稿状態です。自動更新ではありません。",
+                : replaceWindow
+                  ? "さらに古い投稿へ移動しました。直前の表示分は破棄し、最大300件ずつ表示します。"
+                  : "取得時点の投稿状態です。自動更新ではありません。",
           });
         })(),
       ]);

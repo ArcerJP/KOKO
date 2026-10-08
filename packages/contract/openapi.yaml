@@ -107,6 +107,43 @@ paths:
                 $ref: "#/components/schemas/Acknowledgement"
         "401": *unauthorized
         default: *error
+  /me/enrollment:
+    parameters: *eventParameters
+    get:
+      tags: [account]
+      operationId: getEnrollment
+      summary: 固定イベントへの本人の参加状態と初回受付可否を取得
+      description: |
+        Google本人とサーバー設定の固定eventを確認。所属がなくても利用できる専用読取り経路。
+        状態変更や規約同意は行わない。Cookie時だけ同一セッション/eventのCSRFを返す。
+        role・BAN・他人の情報は含めず、既存APIの所属認可を代替しない。private, no-store。
+      x-stage: 1
+      responses:
+        "200":
+          description: 本人専用の初回参加preflight
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentStatus"
+        "401": *unauthorized
+        default: *error
+    post:
+      tags: [account]
+      operationId: enrollEvent
+      summary: 表示名を明示して固定イベントへ初回参加
+      description: |
+        Google本人からIDを決定し、Cookie時はOriginとセッション束縛CSRFが必須。
+        初回はlive・開催期間内・受付有効・公開停止なしを原子的に確認しuser権限で登録。
+        既存所属は表示名・role・BAN・同意を一切変更せず成功。規約同意はPOST /consentsで別途行う。
+        専用flagは既定OFF。一般利用者が任意eventやroleを指定する登録経路ではない。
+      x-stage: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollmentRequest"
+      responses: *ackResponses
   /consents:
     parameters: *eventParameters
     post:
@@ -165,6 +202,32 @@ paths:
       x-stage: 1
       responses:
         "200": *uploadResponse
+        "401": *unauthorized
+        default: *error
+  /uploads/{upload_id}/recover:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/UploadId"
+      - $ref: "#/components/parameters/CsrfToken"
+    post:
+      tags: [posts]
+      operationId: recoverUpload
+      summary: サーバー照合による未確定multipartの有限再開
+      description: upload_idが送信世代を表す。正確なprovider不存在・原本なし・complete未準備の場合だけ新世代へ変更する。旧IDはparts/refresh/completeでは使用不可。原本結果不明を自動再作成しない。
+      x-stage: 1
+      responses:
+        "200":
+          description: 依頼した旧世代に結び付く現行ticket。no-store。世代変更は端末checkpoint破棄と原子的に保存する。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [previous_upload_id, ticket]
+                properties:
+                  previous_upload_id: { type: string, format: uuid }
+                  ticket:
+                    $ref: "#/components/schemas/UploadTicket"
         "401": *unauthorized
         default: *error
   /uploads/{upload_id}/parts:
@@ -427,6 +490,43 @@ paths:
                 $ref: "#/components/schemas/AdminPostPage"
         "401": *unauthorized
         default: *error
+  /admin/posts/{post_id}/original:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+      - $ref: "#/components/parameters/PostId"
+      - name: expected_version
+        in: query
+        required: true
+        schema: { type: integer, minimum: 1, maximum: 2147483647 }
+      - name: Range
+        in: header
+        description: 任意の単一byte range。複数rangeは拒否する。
+        schema: { type: string, maxLength: 60 }
+    get:
+      tags: [admin]
+      operationId: getAdminOriginal
+      summary: moderator以上が保存原本を監査付きで個別取得
+      description: |
+        現在のGoogle本人・イベント権限・同意・BAN・投稿世代を検査する。
+        BLOCK・削除済みは取得不可。R2の原本identityを照合し、公開URLや署名を返さない。
+        Content-Dispositionは固定安全名のattachment。private/no-store、nosniff、sandbox。
+        第3の個別取得であり、一括exportではない。
+      x-stage: 3
+      responses:
+        "200":
+          description: 保存済み原本のバイナリー。原本の再圧縮やmetadataの変更は行わない。
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "206":
+          description: 単一Rangeの部分応答。Content-Rangeを付与する。
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "416":
+          description: 範囲外または非対応のRange。空本文とContent-Range。
+        "401": *unauthorized
+        default: *error
   /admin/posts/{post_id}/hide:
     parameters: *postParameters
     post:
@@ -447,7 +547,7 @@ paths:
       tags: [admin]
       operationId: restorePost
       summary: moderator以上が非表示を解除（BLOCK・BAN・公開停止は解除不可）
-      description: 保存済み判定と以前の公開状態を使用し、バージョン一致と配信準備を検証する。
+      description: 保存済み判定と以前の公開状態を使用し、バージョン一致と配信準備を検証する。現在BAN中は復帰不可。BAN解除後も残る非公開ラッチの解除はadminの明示的な個別復帰だけに限る。
       x-stage: 3
       requestBody: *adminAction
       responses: *ackResponses
@@ -834,6 +934,30 @@ components:
       properties:
         request_id: { type: string, format: uuid }
         resource_id: { type: string, format: uuid }
+    EnrollmentStatus:
+      type: object
+      additionalProperties: false
+      required: [user_id, event_id, enrolled, registration_open]
+      properties:
+        user_id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        enrolled: { type: boolean }
+        registration_open:
+          {
+            type: boolean,
+            description: 未参加かつ現在の初回受付条件を満たす場合のみtrue。,
+          }
+        csrf_token:
+          {
+            type: string,
+            description: Cookie時だけ。メモリ内限定、ログや永続保存は禁止。,
+          }
+    EnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [display_name]
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 50 }
     Me:
       type: object
       additionalProperties: false
@@ -950,10 +1074,25 @@ components:
         error_code:
           $ref: "#/components/schemas/ApiError/properties/code"
         block_category:
-          {
-            type: string,
-            description: 本人向けの大分類のみ。生スコア・OCR文・モデル内部情報は返さない。,
-          }
+          type: string
+          enum: [sexual, violence, hate, harassment, self_harm, illicit, other]
+          description: blocked時のみの大分類。生スコア・OCR文・モデル内部情報は返さない。
+        deletion:
+          type: object
+          additionalProperties: false
+          description: deleted時のみ。保持・削除予約と物理削除完了は異なる。実ストレージ照合未実装のため完了状態は返さない。
+          required: [state, retention_until]
+          properties:
+            state:
+              type: string
+              enum:
+                [
+                  RETENTION_UNKNOWN,
+                  RETENTION_PENDING,
+                  PHYSICAL_DELETION_NOT_ENABLED,
+                  DELETION_UNCONFIRMED,
+                ]
+            retention_until: { type: [string, "null"], format: date-time }
     PublicPost:
       type: object
       description: アプリ内で公開済みの投稿。匿名アクセス可能という意味ではない。
@@ -977,6 +1116,7 @@ components:
           display_name,
           crown,
           theme_id,
+          theme_name,
           created_at,
           like_count,
           media,
@@ -988,6 +1128,11 @@ components:
         display_name: { type: string }
         crown: { type: string, enum: [none, white, gold] }
         theme_id: { type: [string, "null"], format: uuid }
+        theme_name:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 100
+          description: 同イベントの公開中・終了済みのお題名。未選択・非公開お題はnull。HTMLとして解釈しない。
         created_at: { type: string, format: date-time }
         like_count: { type: integer, minimum: 0, description: 第4要件までは0 }
         media:
@@ -1099,6 +1244,10 @@ components:
           }
         publication_stopped: { type: boolean }
         uploads_enabled: { type: boolean }
+        thresholds_approved:
+          type: boolean
+          readOnly: true
+          description: 校正の承認状態。通常の設定PUTでは指定不可。閾値変更時はfalseへ戻る。
         moderation_concurrency: { type: integer, minimum: 1 }
         thresholds:
           type: array

@@ -114,6 +114,34 @@ export function createUploadQueue(deps: Dependencies) {
       item = next;
       await items(signal);
     };
+    const recoverMultipart = async () => {
+      const previous = item.session;
+      if (previous?.mode !== "multipart")
+        throw new ApiFailure("INTERNAL_ERROR");
+      const result = await authorized(signal, (csrf, bounded) =>
+        deps.client.recover(previous.uploadId, csrf, bounded),
+      );
+      const current = ticket(result.ticket, scope, now());
+      if (
+        result.previous_upload_id !== previous.uploadId ||
+        current.post_id !== previous.postId ||
+        current.mode !== "multipart" ||
+        current.part_size_bytes !== previous.partSize
+      )
+        throw new ApiFailure("INTERNAL_ERROR");
+      if (current.upload_id !== previous.uploadId) {
+        // Preserve request, owner and original Blob; never reuse another generation's ETags.
+        // Durable save must succeed before issuing any new part or completion request.
+        await save({
+          phase: "transferring",
+          session: { ...previous, uploadId: current.upload_id },
+          checkpoint: null,
+          manifest: null,
+          error: null,
+        });
+      }
+      return current;
+    };
     const finish = async () => {
       const session = item.session!;
       const manifest = item.manifest ?? { upload_id: session.uploadId };
@@ -129,10 +157,24 @@ export function createUploadQueue(deps: Dependencies) {
         nextAttemptAt: 0,
       });
     };
-    // Never PUT after a complete intent, even if its response was lost.
+    // Local completion intent is not evidence that DB prepare has happened.
+    // Probe recovery first so a vanished, still-unprepared generation is not frozen.
     if (item.phase === "completing") {
-      await finish();
-      return;
+      const oldId = item.session!.uploadId;
+      if (item.session?.mode === "multipart") {
+        try {
+          await recoverMultipart();
+        } catch (error) {
+          // A completed session is closed to recovery. Reconcile its immutable
+          // completion receipt without retransmitting any bytes.
+          if (!(error instanceof ApiFailure) || error.code !== "STATE_CONFLICT")
+            throw error;
+        }
+      }
+      if (item.session!.uploadId === oldId) {
+        await finish();
+        return;
+      }
     }
     // Single PUT may have succeeded before a timeout or page exit. Reconcile first.
     if (item.session?.mode === "single") {
@@ -150,7 +192,15 @@ export function createUploadQueue(deps: Dependencies) {
     const session: UploadTicket = ticket(
       await authorized(signal, (csrf, bounded) =>
         item.session
-          ? deps.client.refresh(item.session.uploadId, csrf, bounded)
+          ? item.session.mode === "multipart"
+            ? deps.client
+                .recover(item.session.uploadId, csrf, bounded)
+                .then((result) => {
+                  if (result.previous_upload_id !== item.session!.uploadId)
+                    throw new ApiFailure("INTERNAL_ERROR");
+                  return result.ticket;
+                })
+            : deps.client.refresh(item.session.uploadId, csrf, bounded)
           : deps.client.open(item.request, csrf, bounded),
       ),
       scope,
@@ -159,13 +209,17 @@ export function createUploadQueue(deps: Dependencies) {
     if (
       item.session &&
       (session.post_id !== item.session.postId ||
-        session.upload_id !== item.session.uploadId ||
+        (session.upload_id !== item.session.uploadId &&
+          item.session.mode !== "multipart") ||
         session.mode !== item.session.mode ||
         (session.part_size_bytes ?? null) !== item.session.partSize)
     )
       throw new ApiFailure("INTERNAL_ERROR");
     await save({
       phase: "transferring",
+      ...(item.session && session.upload_id !== item.session.uploadId
+        ? { checkpoint: null, manifest: null }
+        : {}),
       session: {
         postId: session.post_id,
         uploadId: session.upload_id,
@@ -198,6 +252,12 @@ export function createUploadQueue(deps: Dependencies) {
           }),
       },
     );
+    if (session.mode === "multipart") {
+      const before = item.session!.uploadId;
+      await recoverMultipart();
+      if (item.session!.uploadId !== before)
+        throw new ApiFailure("UPLOAD_INCOMPLETE");
+    }
     await save({ phase: "completing", manifest: completion(manifest) });
     await finish();
   }

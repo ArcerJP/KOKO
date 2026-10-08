@@ -9,7 +9,7 @@ COMMENT ON COLUMN public.outbox_jobs.dispatched_at IS 'Queue producer acknowledg
 CREATE INDEX outbox_media_dispatch ON public.outbox_jobs (dispatch_available_at, created_at, id)
   WHERE kind='process_media' AND completed_at IS NULL AND dispatched_at IS NULL;
 
-CREATE FUNCTION public.claim_media_dispatch(p_limit integer) RETURNS jsonb
+CREATE FUNCTION public.claim_media_dispatch(p_event_id uuid,p_limit integer) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path = ''
 AS $$
 DECLARE
@@ -20,12 +20,12 @@ BEGIN
   IF current_setting('transaction_isolation') <> 'read committed' THEN
     RAISE EXCEPTION USING ERRCODE='25001', MESSAGE='claim_media_dispatch requires READ COMMITTED';
   END IF;
-  IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 10 THEN
+  IF p_event_id IS NULL OR p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 50 THEN
     RETURN jsonb_build_object('code','INVALID_INPUT');
   END IF;
   WITH candidates AS (
     SELECT id FROM public.outbox_jobs
-    WHERE kind='process_media' AND completed_at IS NULL AND dispatched_at IS NULL
+    WHERE event_id=p_event_id AND kind='process_media' AND completed_at IS NULL AND dispatched_at IS NULL
       AND dispatch_attempt<8 AND dispatch_available_at<=observed_at
       AND (dispatch_locked_until IS NULL OR dispatch_locked_until<=observed_at)
     ORDER BY dispatch_available_at,created_at,id LIMIT p_limit FOR UPDATE SKIP LOCKED
@@ -44,13 +44,13 @@ BEGIN
           THEN payload->'post_version' ELSE 'null'::jsonb END ELSE 'null'::jsonb END
     ) ORDER BY dispatch_available_at,created_at,id),'[]'::jsonb) INTO jobs FROM claimed;
   SELECT EXISTS(SELECT 1 FROM public.outbox_jobs
-    WHERE kind='process_media' AND completed_at IS NULL AND dispatched_at IS NULL
+    WHERE event_id=p_event_id AND kind='process_media' AND completed_at IS NULL AND dispatched_at IS NULL
       AND dispatch_attempt=8 AND (dispatch_locked_until IS NULL OR dispatch_locked_until<=observed_at)) INTO exhausted;
   RETURN jsonb_build_object('code','ok','jobs',jobs,'exhausted',exhausted);
 END;
 $$;
 
-CREATE FUNCTION public.settle_media_dispatch(p_claims jsonb) RETURNS jsonb
+CREATE FUNCTION public.settle_media_dispatch(p_event_id uuid,p_claims jsonb) RETURNS jsonb
 LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path = ''
 AS $$
 DECLARE
@@ -63,10 +63,10 @@ BEGIN
   IF current_setting('transaction_isolation') <> 'read committed' THEN
     RAISE EXCEPTION USING ERRCODE='25001', MESSAGE='settle_media_dispatch requires READ COMMITTED';
   END IF;
-  IF jsonb_typeof(p_claims) IS DISTINCT FROM 'array' THEN
+  IF p_event_id IS NULL OR jsonb_typeof(p_claims) IS DISTINCT FROM 'array' THEN
     RETURN jsonb_build_object('code','INVALID_INPUT');
   END IF;
-  IF jsonb_array_length(p_claims) NOT BETWEEN 1 AND 10 THEN
+  IF jsonb_array_length(p_claims) NOT BETWEEN 1 AND 50 THEN
     RETURN jsonb_build_object('code','INVALID_INPUT');
   END IF;
   -- Validate the entire batch before mutations; reject duplicates and extra fields.
@@ -88,7 +88,7 @@ BEGIN
   END IF;
   -- Stable lock order. Check lease after taking the lock, not before waiting for it.
   FOR item IN SELECT value FROM jsonb_array_elements(p_claims) ORDER BY value->>'job_id' LOOP
-    SELECT * INTO row_data FROM public.outbox_jobs WHERE id=(item->>'job_id')::uuid FOR UPDATE;
+    SELECT * INTO row_data FROM public.outbox_jobs WHERE event_id=p_event_id AND id=(item->>'job_id')::uuid FOR UPDATE;
     observed_at := clock_timestamp();
     IF NOT FOUND OR row_data.kind<>'process_media' OR row_data.completed_at IS NOT NULL OR row_data.dispatched_at IS NOT NULL
       OR row_data.dispatch_attempt<>(item->>'attempt')::integer
@@ -102,13 +102,13 @@ BEGIN
       dispatch_available_at=CASE WHEN item->>'outcome'='retry'
         THEN observed_at+make_interval(secs=>least(900,15*power(2,row_data.dispatch_attempt-1))::double precision)
         ELSE dispatch_available_at END
-    WHERE id=row_data.id;
+    WHERE event_id=p_event_id AND id=row_data.id;
     settled := settled+1;
   END LOOP;
   RETURN jsonb_build_object('code','ok','settled',settled,'stale',stale);
 END;
 $$;
-REVOKE ALL ON FUNCTION public.claim_media_dispatch(integer), public.settle_media_dispatch(jsonb) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.claim_media_dispatch(integer), public.settle_media_dispatch(jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.claim_media_dispatch(uuid,integer), public.settle_media_dispatch(uuid,jsonb) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_media_dispatch(uuid,integer), public.settle_media_dispatch(uuid,jsonb) TO service_role;
 NOTIFY pgrst, 'reload schema';
 COMMIT;

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { errors, originalKey } from "@koko/contract";
 import {
   createCsrfToken,
@@ -39,7 +39,9 @@ function request(
       "content-type": "application/json",
       ...headers,
     },
-    ...(body === undefined || route.endsWith("refresh")
+    ...(body === undefined ||
+    route.endsWith("refresh") ||
+    route.endsWith("recover")
       ? {}
       : { body: JSON.stringify(body) }),
   });
@@ -79,6 +81,7 @@ function fixture(results: unknown[] = [session()]) {
     R2_ACCESS_KEY_ID: "b".repeat(32),
     R2_SECRET_ACCESS_KEY: "c".repeat(64),
     ORIGINALS_BUCKET: {
+      head: vi.fn(async () => null),
       createMultipartUpload: create,
       resumeMultipartUpload: resume,
     },
@@ -109,7 +112,10 @@ function fixture(results: unknown[] = [session()]) {
           id: userId,
           app_metadata: { provider: "google", providers: ["google"] },
         });
-      expect(url.pathname).toBe("/rest/v1/rpc/manage_upload_session");
+      expect([
+        "/rest/v1/rpc/manage_upload_session",
+        "/rest/v1/rpc/recover_upload_session",
+      ]).toContain(url.pathname);
       expect(new Headers(init?.headers).get("apikey")).toBe(
         env.SUPABASE_SECRET_KEY,
       );
@@ -118,11 +124,163 @@ function fixture(results: unknown[] = [session()]) {
       expect(call.body?.p_event_id).toBe(eventId);
       const next = results.shift();
       if (next instanceof Error) throw next;
+      if (
+        next &&
+        typeof next === "object" &&
+        "code" in next &&
+        next.code === "provision"
+      ) {
+        const rpcInput = call.body?.p_input as Record<string, unknown>;
+        return Response.json({
+          provisioning_attempt: rpcInput.attempt_id,
+          provisioning_locked_until: new Date(
+            Date.now() + 120000,
+          ).toISOString(),
+          ...next,
+        });
+      }
       return next instanceof Response ? next : Response.json(next);
     },
   ) as typeof fetch;
   return { env, fetcher, calls, create, abort, resume };
 }
+afterEach(() => vi.useRealTimers());
+
+describe("authenticated finite multipart recovery", () => {
+  const nextId = "99999999-9999-4999-8999-999999999999";
+  const current = (override: Record<string, unknown> = {}) =>
+    session({
+      mode: "multipart",
+      provider_upload_id: "old-provider",
+      request: { ...multipart, theme_id: null },
+      restartable: true,
+      previous_upload_id: uploadId,
+      ...override,
+    });
+  const intercept = (
+    s: ReturnType<typeof fixture>,
+    response: () => Response,
+  ) => {
+    const probe = vi.fn(response);
+    const forward: typeof fetch = async (target, init) => {
+      const url = new URL(
+        target instanceof Request ? target.url : String(target),
+      );
+      return url.hostname.endsWith(".r2.cloudflarestorage.com")
+        ? probe()
+        : s.fetcher(target, init);
+    };
+    return { probe, forward };
+  };
+  const missing = () =>
+    new Response("<Error><Code>NoSuchUpload</Code></Error>", {
+      status: 404,
+      headers: { "content-type": "application/xml" },
+    });
+  it("proves absence, claims one generation, attaches it and returns only bound ticket", async () => {
+    const s = fixture([
+      current(),
+      current({
+        code: "provision",
+        upload_id: nextId,
+        provider_upload_id: null,
+      }),
+      current({
+        upload_id: nextId,
+        provider_upload_id: "synthetic-provider-id",
+      }),
+    ]);
+    const f = intercept(s, missing);
+    const response = await handleUploads(
+      request(path("recover")),
+      s.env,
+      f.forward,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      previous_upload_id: uploadId,
+      ticket: {
+        post_id: postId,
+        upload_id: nextId,
+        mode: "multipart",
+        expires_at: expect.any(String),
+        part_size_bytes: 8388608,
+      },
+    });
+    expect(f.probe).toHaveBeenCalledTimes(1);
+    expect(s.env.ORIGINALS_BUCKET.head).toHaveBeenCalledTimes(1);
+    expect(s.create).toHaveBeenCalledTimes(1);
+    expect(s.calls.filter((c) => c.body).map((c) => c.body?.p_action)).toEqual([
+      "inspect",
+      "restart",
+      "attach",
+    ]);
+    expect(s.abort).not.toHaveBeenCalled();
+  });
+  it.each(["existing-object", "provider-403", "ambiguous-404", "prepare-race"])(
+    "does not recreate for %s",
+    async (kind) => {
+      const s = fixture([current(), { code: "STATE_CONFLICT" }]);
+      if (kind === "existing-object")
+        vi.mocked(s.env.ORIGINALS_BUCKET.head).mockResolvedValue({
+          key: "exists",
+        } as R2Object);
+      const f = intercept(s, () =>
+        kind === "provider-403"
+          ? new Response("", { status: 403 })
+          : kind === "ambiguous-404"
+            ? new Response("<Error><Code>NoSuchKey</Code></Error>", {
+                status: 404,
+                headers: { "content-type": "application/xml" },
+              })
+            : missing(),
+      );
+      const response = await handleUploads(
+        request(path("recover")),
+        s.env,
+        f.forward,
+      );
+      expect(response.ok).toBe(false);
+      expect(s.create).not.toHaveBeenCalled();
+      expect(s.abort).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["same-provider", "prepared", "lost-response"])(
+    "reuses %s without provider creation",
+    async (kind) => {
+      const s = fixture([
+        current({
+          restartable: kind !== "prepared",
+          ...(kind === "lost-response" ? { upload_id: nextId } : {}),
+        }),
+      ]);
+      const f = intercept(s, () => new Response("<ListPartsResult/>"));
+      const response = await handleUploads(
+        request(path("recover")),
+        s.env,
+        f.forward,
+      );
+      expect(response.status).toBe(200);
+      expect(f.probe).toHaveBeenCalledTimes(kind === "same-provider" ? 1 : 0);
+      expect(s.env.ORIGINALS_BUCKET.head).not.toHaveBeenCalled();
+      expect(s.create).not.toHaveBeenCalled();
+    },
+  );
+  it("unknown old-generation binding and BAN fail before provider access", async () => {
+    for (const result of [
+      current({ previous_upload_id: nextId }),
+      { code: "ACCOUNT_BANNED" },
+    ]) {
+      const s = fixture([result]),
+        f = intercept(s, missing);
+      expect(
+        (await handleUploads(request(path("recover")), s.env, f.forward)).ok,
+      ).toBe(false);
+      expect(f.probe).not.toHaveBeenCalled();
+      expect(s.create).not.toHaveBeenCalled();
+    }
+  });
+});
 async function code(response: Response, expected: keyof typeof errors) {
   expect(response.status).toBe(errors[expected].status);
   expect(response.headers.get("cache-control")).toBe("private, no-store");
@@ -257,6 +415,160 @@ describe("upload HTTP admission and session orchestration", () => {
       (await handleUploads(request(path("refresh")), f.env, f.fetcher)).status,
     ).toBe(200);
     expect(f.create).not.toHaveBeenCalled();
+  });
+  it("a later explicit open recovers an unknown create only after DB grants a new generation", async () => {
+    const pending = session({
+      code: "provision",
+      mode: "multipart",
+      request: { ...multipart, theme_id: null },
+    });
+    const ready = {
+      ...pending,
+      code: "ready",
+      provider_upload_id: "synthetic-provider-id",
+    };
+    const f = fixture([
+      pending,
+      { code: "UPLOAD_INCOMPLETE" },
+      pending,
+      ready,
+      ready,
+    ]);
+    f.create.mockRejectedValueOnce(new Error("unknown provider outcome"));
+    await code(
+      await handleUploads(request("/uploads", multipart), f.env, f.fetcher),
+      "INTERNAL_ERROR",
+    );
+    await code(
+      await handleUploads(request("/uploads", multipart), f.env, f.fetcher),
+      "UPLOAD_INCOMPLETE",
+    );
+    expect(f.create).toHaveBeenCalledTimes(1);
+    const recovered = await handleUploads(
+      request("/uploads", multipart),
+      f.env,
+      f.fetcher,
+    );
+    expect(recovered.status).toBe(200);
+    expect(Object.keys(await recovered.json()).sort()).toEqual([
+      "expires_at",
+      "mode",
+      "part_size_bytes",
+      "post_id",
+      "upload_id",
+    ]);
+    expect(
+      (await handleUploads(request("/uploads", multipart), f.env, f.fetcher))
+        .status,
+    ).toBe(200);
+    expect(f.create).toHaveBeenCalledTimes(2);
+    expect(f.abort).not.toHaveBeenCalled();
+    const opens = f.calls.filter((call) => call.body?.p_action === "open");
+    expect(
+      new Set(
+        opens.map(
+          (call) => (call.body?.p_input as Record<string, unknown>).attempt_id,
+        ),
+      ).size,
+    ).toBe(opens.length);
+  });
+  it("lost attach response followed by ready never recreates or aborts the committed provider", async () => {
+    const pending = session({
+      code: "provision",
+      mode: "multipart",
+      request: { ...multipart, theme_id: null },
+    });
+    const ready = {
+      ...pending,
+      code: "ready",
+      provider_upload_id: "synthetic-provider-id",
+    };
+    const f = fixture([pending, new Error("unknown attach response"), ready]);
+    await code(
+      await handleUploads(request("/uploads", multipart), f.env, f.fetcher),
+      "INTERNAL_ERROR",
+    );
+    expect(
+      (await handleUploads(request("/uploads", multipart), f.env, f.fetcher))
+        .status,
+    ).toBe(200);
+    expect(f.create).toHaveBeenCalledTimes(1);
+    expect(f.abort).not.toHaveBeenCalled();
+  });
+  it.each([
+    { provisioning_attempt: "00000000-0000-4000-8000-000000000001" },
+    { provisioning_attempt: null },
+    { provisioning_locked_until: null },
+    { provisioning_locked_until: "invalid" },
+    { provisioning_locked_until: "2000-01-01T00:00:00Z" },
+    { provisioning_locked_until: "2099-01-01T00:00:00Z" },
+  ])(
+    "malformed or expired provisioning lease %# cannot create",
+    async (patch) => {
+      const f = fixture([
+        session({
+          code: "provision",
+          mode: "multipart",
+          request: { ...multipart, theme_id: null },
+          ...patch,
+        }),
+      ]);
+      await code(
+        await handleUploads(request("/uploads", multipart), f.env, f.fetcher),
+        "INTERNAL_ERROR",
+      );
+      expect(f.create).not.toHaveBeenCalled();
+      expect(f.calls).toHaveLength(2);
+    },
+  );
+  it("provider result arriving after lease expiry cannot attach, ticket or abort", async () => {
+    vi.useFakeTimers();
+    const f = fixture([
+      session({
+        code: "provision",
+        mode: "multipart",
+        request: { ...multipart, theme_id: null },
+      }),
+    ]);
+    const original = f.create.getMockImplementation()!;
+    let finish!: () => Promise<void>;
+    f.create.mockImplementationOnce(
+      (key) =>
+        new Promise((resolve) => {
+          finish = async () => resolve(await original(key));
+        }),
+    );
+    const pending = handleUploads(
+      request("/uploads", multipart),
+      f.env,
+      f.fetcher,
+    );
+    await vi.advanceTimersByTimeAsync(120001);
+    await code(await pending, "UPLOAD_INCOMPLETE");
+    await finish();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(
+      f.calls.filter((call) => call.body?.p_action === "attach"),
+    ).toHaveLength(0);
+    expect(f.create).toHaveBeenCalledTimes(1);
+    expect(f.abort).not.toHaveBeenCalled();
+  });
+  it("DB rejects an expired/replaced generation attach without granting a ticket or recreating", async () => {
+    const f = fixture([
+      session({
+        code: "provision",
+        mode: "multipart",
+        request: { ...multipart, theme_id: null },
+      }),
+      { code: "STATE_CONFLICT" },
+    ]);
+    await code(
+      await handleUploads(request("/uploads", multipart), f.env, f.fetcher),
+      "STATE_CONFLICT",
+    );
+    expect(f.create).toHaveBeenCalledTimes(1);
+    expect(f.abort).not.toHaveBeenCalled();
+    expect(f.resume).not.toHaveBeenCalled();
   });
   it("parts only grants requested numbers and rejects numbers beyond the planned count", async () => {
     const result = session({

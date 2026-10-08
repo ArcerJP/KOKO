@@ -111,7 +111,9 @@ function base64url(bytes: Uint8Array) {
     .replace(/=+$/, "");
 }
 
-/** Only call after Google identity and event membership have been verified. */
+/** Verified Google identity + membership, or fixed-event enrollment preflight.
+ * CSRF proof never substitutes for membership or operation authorization.
+ */
 export async function createCsrfToken(
   auth: CookieAuthentication,
   eventId: string,

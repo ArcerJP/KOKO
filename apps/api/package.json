@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@koko/contract": "0.1.0",
+    "@koko/processing": "0.1.0",
     "aws4fetch": "1.0.20"
   },
   "devDependencies": {

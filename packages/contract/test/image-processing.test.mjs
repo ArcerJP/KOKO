@@ -224,6 +224,9 @@ test("expired claim renews lease but never assets or processing version; old hol
   await expire();
   assert.equal((await claim()).code, "EXHAUSTED");
   assert.equal((await assets()).length, 5);
+  assert.equal((await postRow()).status, "held");
+  assert.equal((await postRow()).processing_error, "IMAGE_RETRY_EXHAUSTED");
+  assert.ok((await jobRow()).completed_at);
 });
 test("records all metadata atomically; retries are order/outcome insensitive, not publication", async () => {
   const plan = (await claim()).plan,
@@ -423,15 +426,16 @@ test("resource budget is not an upload limit and does not reserve assets", async
   );
   assert.equal((await claim()).code, "RESOURCE_LIMIT");
   assert.equal((await assets()).length, 1);
-  assert.equal((await postRow()).status, "uploaded");
+  assert.equal((await postRow()).status, "held");
+  assert.equal((await postRow()).processing_error, "IMAGE_RESOURCE_LIMIT");
 });
 test("maximum supported processing version remains checkable and finishable", async () => {
   await db.exec(
-    "UPDATE public.posts SET version=2147483646; UPDATE public.outbox_jobs SET payload=jsonb_set(payload,'{post_version}','2147483646')",
+    "UPDATE public.posts SET version=2147483645; UPDATE public.outbox_jobs SET payload=jsonb_set(payload,'{post_version}','2147483645')",
   );
   const result = await claim();
   assert.equal(result.code, "CLAIMED");
-  assert.equal(result.plan.postVersion, 2147483647);
+  assert.equal(result.plan.postVersion, 2147483646);
   assert.equal((await check(result.plan)).code, "CURRENT");
   assert.equal((await finish(result.plan)).code, "RECORDED");
 });
@@ -442,6 +446,178 @@ test("version increment overflow is rejected before reserving any asset", async 
   assert.equal((await claim()).code, "STALE");
   assert.equal((await assets()).length, 1);
   assert.equal((await postRow()).status, "uploaded");
+});
+
+test("decode failure atomically holds, retains original, notifies once, and exposes durable Queue proof", async () => {
+  const originalBefore = (await assets())[0];
+  const plan = (await claim()).plan;
+  assert.equal(
+    (await rpc("fail", { plan, reason: "DECODE_FAILED" })).code,
+    "HELD",
+  );
+  const p = await postRow(),
+    j = await jobRow();
+  assert.equal(p.status, "held");
+  assert.equal(p.processing_error, "IMAGE_DECODE_FAILED");
+  assert.equal(p.moderation_verdict, null);
+  assert.equal(p.ban_latched, false);
+  assert.equal(p.version, 4);
+  assert.ok(j.completed_at);
+  assert.equal(j.image_completed_at, null);
+  assert.deepEqual(j.processing_failure_receipt, {
+    stage: "image",
+    reason: "DECODE_FAILED",
+    postVersion: 3,
+    heldVersion: 4,
+  });
+  assert.deepEqual(
+    (await assets()).find((a) => a.purpose === "original"),
+    originalBefore,
+  );
+  assert.equal(
+    (await rpc("fail", { plan, reason: "DECODE_FAILED" })).code,
+    "STALE",
+  );
+  assert.equal(
+    (
+      await db.query(
+        "SELECT count(*)::int n FROM public.outbox_jobs WHERE kind='notify'",
+      )
+    ).rows[0].n,
+    1,
+  );
+  assert.equal(
+    (await db.query("SELECT count(*)::int n FROM public.moderation_runs"))
+      .rows[0].n,
+    0,
+  );
+  const status = (
+    await db.query("SELECT public.media_processing_status($1,$2,$3,$4,$5) r", [
+      event,
+      post,
+      job,
+      asset,
+      2,
+    ])
+  ).rows[0].r;
+  assert.equal(status.code, "HELD");
+});
+
+for (const change of [
+  "expired",
+  "lease",
+  "version",
+  "ban",
+  "delete",
+  "completed",
+  "stopped",
+])
+  test(`image failure cannot settle ${change} work`, async () => {
+    const plan = (await claim()).plan;
+    if (change === "expired") await expire();
+    if (change === "lease") plan.leaseId = randomUUID();
+    if (change === "version")
+      await db.exec("UPDATE public.posts SET version=version+1");
+    if (change === "ban")
+      await db.exec(
+        "UPDATE public.event_members SET is_banned=true,banned_at=now()",
+      );
+    if (change === "delete")
+      await db.exec(
+        "UPDATE public.posts SET status='deleted',deleted_at=now()",
+      );
+    if (change === "completed") await finish(plan);
+    if (change === "stopped")
+      await db.exec(
+        "UPDATE public.event_settings SET publication_stopped=true",
+      );
+    assert.equal(
+      (await rpc("fail", { plan, reason: "DECODE_FAILED" })).code,
+      "STALE",
+    );
+    assert.equal((await jobRow()).processing_failure_receipt, null);
+  });
+
+test("failure reason is an exact code and transaction rollback never leaves a false hold", async () => {
+  const plan = (await claim()).plan;
+  for (const reason of [
+    null,
+    "secret exception body",
+    "RETRY_EXHAUSTED",
+    { reason: "DECODE_FAILED" },
+  ])
+    assert.equal((await rpc("fail", { plan, reason })).code, "INVALID_INPUT");
+  await db.exec(`CREATE FUNCTION public.fixture_reject_failure_notify() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.kind='notify' THEN RAISE EXCEPTION 'fixture'; END IF; RETURN NEW; END $$;
+ CREATE TRIGGER fixture_failure_notify BEFORE INSERT ON public.outbox_jobs FOR EACH ROW EXECUTE FUNCTION public.fixture_reject_failure_notify()`);
+  try {
+    await assert.rejects(
+      rpc("fail", { plan, reason: "DECODE_FAILED" }),
+      /fixture/,
+    );
+  } finally {
+    await db.exec(
+      "DROP TRIGGER fixture_failure_notify ON public.outbox_jobs; DROP FUNCTION public.fixture_reject_failure_notify()",
+    );
+  }
+  assert.equal((await postRow()).status, "processing");
+  assert.equal((await jobRow()).completed_at, null);
+});
+
+test("explicit admin retry alone reuses the exact failed reservation with a new generation and lease", async () => {
+  const old = (await claim()).plan;
+  await rpc("fail", { plan: old, reason: "DECODE_FAILED" });
+  const before = await assets();
+  await db.exec("UPDATE public.event_members SET role='admin'");
+  const response = (
+    await db.query(
+      "SELECT public.stage_three_operation($1,$2,'retry',$3,$4,$5) r",
+      [
+        event,
+        owner,
+        post,
+        JSON.stringify({ expected_version: 4, reason: "Synthetic retry" }),
+        randomUUID(),
+      ],
+    )
+  ).rows[0].r;
+  assert.equal(response.code, "ok");
+  const next = (
+    await db.query(
+      "SELECT id FROM public.outbox_jobs WHERE kind='process_media' AND completed_at IS NULL",
+    )
+  ).rows[0].id;
+  const found = await rpc("claim", {}, { job: next });
+  assert.equal(found.code, "CLAIMED");
+  assert.equal(found.plan.postVersion, 6);
+  assert.deepEqual(found.plan.deliveries, old.deliveries);
+  assert.notEqual(found.plan.leaseId, old.leaseId);
+  assert.deepEqual(await assets(), before);
+  assert.equal(
+    (await rpc("fail", { plan: old, reason: "DECODE_FAILED" })).code,
+    "STALE",
+  );
+  assert.equal(
+    (await rpc("finish", receipts(found.plan), { job: next })).code,
+    "RECORDED",
+  );
+});
+
+test("processing status alone cannot adopt an unproved reservation", async () => {
+  const old = (await claim()).plan;
+  await db.query(
+    "UPDATE public.outbox_jobs SET completed_at=now() WHERE id=$1",
+    [job],
+  );
+  const next = randomUUID();
+  await db.query(
+    "INSERT INTO public.outbox_jobs(event_id,id,post_id,kind,deduplication_key,payload) SELECT event_id,$1,post_id,kind,'unproved',jsonb_set(payload,'{post_version}','3') FROM public.outbox_jobs WHERE id=$2",
+    [next, job],
+  );
+  assert.equal((await rpc("claim", {}, { job: next })).code, "STALE");
+  assert.equal(
+    (await rpc("fail", { plan: old, reason: "DECODE_FAILED" })).code,
+    "STALE",
+  );
 });
 test("preexisting derivatives are not adopted", async () => {
   const id = randomUUID();

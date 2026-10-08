@@ -12,10 +12,12 @@ export type MediaProcessingMessage = {
 };
 export type MediaDispatchEnv = AccountEnv & {
   KOKO_MEDIA_DISPATCH_ENABLED?: string;
+  KOKO_EVENT_ID?: string;
   MEDIA_PROCESSING_QUEUE?: Pick<Queue<MediaProcessingMessage>, "sendBatch">;
 };
 export const mediaDispatchCron = "* * * * *";
-const limit = 10;
+// Admit the 30 posts/minute target with bounded retry headroom, not an unbounded drain.
+const limit = 50;
 const summary = () => ({
   claimed: 0,
   sent: 0,
@@ -133,7 +135,7 @@ function dispatchClient(
   };
 }
 
-function claims(result: unknown) {
+function claims(result: unknown, eventId: string) {
   if (
     !object(result) ||
     result.code !== "ok" ||
@@ -147,6 +149,7 @@ function claims(result: unknown) {
     if (
       !object(job) ||
       !id(job.job_id) ||
+      job.event_id !== eventId ||
       seen.has(job.job_id) ||
       !integer(job.attempt, 8) ||
       job.attempt < 1
@@ -188,11 +191,20 @@ export async function handleMediaDispatchScheduled(
   try {
     const settings = readApiSettings(env);
     const queue = env.MEDIA_PROCESSING_QUEUE;
-    if (!settings || !queue || typeof queue.sendBatch !== "function")
+    if (
+      !id(env.KOKO_EVENT_ID) ||
+      !settings ||
+      !queue ||
+      typeof queue.sendBatch !== "function"
+    )
       throw invalid();
     const rpc = dispatchClient(settings, fetcher);
     const claimed = claims(
-      await rpc("claim_media_dispatch", { p_limit: limit }),
+      await rpc("claim_media_dispatch", {
+        p_event_id: env.KOKO_EVENT_ID,
+        p_limit: limit,
+      }),
+      env.KOKO_EVENT_ID,
     );
     counts.exhausted = claimed.exhausted;
     counts.claimed = claimed.jobs.length;
@@ -214,6 +226,7 @@ export async function handleMediaDispatchScheduled(
     counts.sent = sent ? messages.length : 0;
     counts.retry = counts.claimed - counts.sent;
     const settled = await rpc("settle_media_dispatch", {
+      p_event_id: env.KOKO_EVENT_ID,
       p_claims: claimed.jobs.map((job) => ({
         job_id: job.job_id,
         attempt: job.attempt,

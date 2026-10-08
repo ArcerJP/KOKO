@@ -43,6 +43,9 @@ function setup() {
     }),
   };
   const client = {
+    recover: vi.fn<ReturnType<typeof createUploadClient>["recover"]>(
+      async (id) => ({ previous_upload_id: id, ticket: multipart() }),
+    ),
     open: vi.fn<ReturnType<typeof createUploadClient>["open"]>(async () =>
       single(),
     ),
@@ -353,6 +356,100 @@ it("multipart restart skips acknowledged part and preserves ETags", async () => 
   expect(done.phase).toBe("done");
   expect(done.manifest?.parts?.length).toBe(2);
 });
+it("server-proven replacement discards old checkpoint atomically and retransmits all parts", async () => {
+  const s = setup();
+  await s.queue.initialize();
+  s.client.open.mockResolvedValue(multipart());
+  let calls = 0;
+  s.fetcher.mockImplementation(async () => {
+    if (++calls === 2) throw new Error();
+    return new Response(null, { headers: { etag: "d".repeat(32) } });
+  });
+  const nextId = "00000000-0000-4000-8000-000000000077";
+  s.client.recover.mockImplementation(async (id) => ({
+    previous_upload_id: id,
+    ticket: { ...multipart(), upload_id: nextId },
+  }));
+  const large = new Blob([new Uint8Array(5 * 1024 ** 2), "xyz"]);
+  await s.queue.enqueue(large, { ...input, file_size_bytes: large.size });
+  await s.queue.settled();
+  expect(s.client.parts.mock.calls.map(([, numbers]) => numbers)).toEqual([
+    [1],
+    [2],
+    [1],
+    [2],
+  ]);
+  const replacement = vi
+    .mocked(s.store.save)
+    .mock.calls.find(
+      ([r]) => r.session?.uploadId === nextId && r.checkpoint === null,
+    );
+  expect(replacement?.[0].manifest).toBeNull();
+  expect(s.entries.get(input.client_request_id)?.manifest?.upload_id).toBe(
+    nextId,
+  );
+  expect(s.entries.get(input.client_request_id)?.phase).toBe("done");
+  expect(s.client.open).toHaveBeenCalledTimes(1);
+});
+it("replacement persistence failure prevents new generation transfer", async () => {
+  const s = setup();
+  await s.queue.initialize();
+  s.client.open.mockResolvedValue(multipart());
+  s.fetcher.mockRejectedValueOnce(new Error());
+  const nextId = "00000000-0000-4000-8000-000000000077";
+  s.client.recover.mockImplementation(async (id) => ({
+    previous_upload_id: id,
+    ticket: { ...multipart(), upload_id: nextId },
+  }));
+  const baseSave = s.store.save;
+  s.store.save = vi.fn(async (item) => {
+    if (item.session?.uploadId === nextId)
+      throw new ApiFailure("LOCAL_STORAGE_UNAVAILABLE");
+    await baseSave(item);
+  });
+  const large = new Blob([new Uint8Array(5 * 1024 ** 2), "xyz"]);
+  await s.queue.enqueue(large, { ...input, file_size_bytes: large.size });
+  await s.queue.settled();
+  expect(s.fetcher).toHaveBeenCalledTimes(1);
+  expect(s.client.complete).not.toHaveBeenCalled();
+  expect(s.entries.get(input.client_request_id)?.session?.uploadId).toBe(
+    uploadId,
+  );
+});
+it.each(["replace", "prepared", "completed"] as const)(
+  "multipart local completion resumes safely when %s",
+  async (mode) => {
+    const s = setup();
+    await s.queue.initialize();
+    s.client.open.mockResolvedValue(multipart());
+    s.client.complete.mockRejectedValue(new ApiFailure("NETWORK_UNAVAILABLE"));
+    const large = new Blob([new Uint8Array(5 * 1024 ** 2), "xyz"]);
+    await s.queue.enqueue(large, { ...input, file_size_bytes: large.size });
+    await s.queue.settled();
+    expect(s.entries.get(input.client_request_id)?.phase).toBe("completing");
+    s.client.complete.mockClear();
+    s.fetcher.mockClear();
+    const nextId = "00000000-0000-4000-8000-000000000077";
+    if (mode === "replace")
+      s.client.recover.mockImplementation(async (id) => ({
+        previous_upload_id: id,
+        ticket: { ...multipart(), upload_id: nextId },
+      }));
+    if (mode === "completed")
+      s.client.recover.mockRejectedValue(new ApiFailure("STATE_CONFLICT"));
+    if (mode !== "replace") s.blobs.clear();
+    s.client.complete.mockResolvedValue({ ...receipt, status: "uploaded" });
+    const next = createUploadQueue(s.deps);
+    await next.initialize();
+    await next.resume(input.client_request_id);
+    expect(s.entries.get(input.client_request_id)?.phase).toBe("done");
+    expect(s.fetcher).toHaveBeenCalledTimes(mode === "replace" ? 2 : 0);
+    expect(s.client.complete).toHaveBeenCalledTimes(1);
+    expect(s.client.complete.mock.calls[0]![1].upload_id).toBe(
+      mode === "replace" ? nextId : uploadId,
+    );
+  },
+);
 it("durable completion intent survives a fresh engine without media present", async () => {
   const s = setup();
   await s.queue.initialize();

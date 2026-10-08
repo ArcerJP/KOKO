@@ -63,20 +63,22 @@ async function insert({
   );
   return id;
 }
-async function rpc(name, input, role = "service_role") {
+async function rpc(name, input, role = "service_role", scope = event) {
   assert.ok(["claim_media_dispatch", "settle_media_dispatch"].includes(name));
   assert.ok(["service_role", "anon", "authenticated"].includes(role));
   await db.exec(`SET ROLE ${role}`);
   try {
-    return (await db.query(`SELECT public.${name}($1) result`, [input])).rows[0]
-      .result;
+    return (
+      await db.query(`SELECT public.${name}($1,$2) result`, [scope, input])
+    ).rows[0].result;
   } finally {
     await db.exec("RESET ROLE");
   }
 }
-const claim = (limit = 10, role) => rpc("claim_media_dispatch", limit, role);
-const settle = (items, role) =>
-  rpc("settle_media_dispatch", JSON.stringify(items), role);
+const claim = (limit = 10, role, scope = event) =>
+  rpc("claim_media_dispatch", limit, role, scope);
+const settle = (items, role, scope = event) =>
+  rpc("settle_media_dispatch", JSON.stringify(items), role, scope);
 const ack = (job, outcome = "sent") => ({
   job_id: job.job_id,
   attempt: job.attempt,
@@ -87,8 +89,8 @@ const row = async (id) =>
     .rows[0];
 test("service-only invoker functions, empty search path and outbox RLS retained", async () => {
   for (const [name, signature, input] of [
-    ["claim_media_dispatch", "integer", 10],
-    ["settle_media_dispatch", "jsonb", "[]"],
+    ["claim_media_dispatch", "uuid,integer", 10],
+    ["settle_media_dispatch", "uuid,jsonb", "[]"],
   ]) {
     const meta = (
       await db.query(
@@ -109,6 +111,27 @@ test("service-only invoker functions, empty search path and outbox RLS retained"
     ).rows[0].relrowsecurity,
     true,
   );
+  assert.deepEqual(
+    (
+      await db.query(
+        "SELECT to_regprocedure('public.claim_media_dispatch(integer)') AS claim, to_regprocedure('public.settle_media_dispatch(jsonb)') AS settle",
+      )
+    ).rows[0],
+    { claim: null, settle: null },
+  );
+});
+test("null event cannot claim or settle and leaves every event unchanged", async () => {
+  const local = await insert();
+  const foreign = await insert({ scope: otherEvent });
+  const beforeClaim = [await row(local), await row(foreign)];
+  assert.deepEqual(await claim(10, undefined, null), { code: "INVALID_INPUT" });
+  assert.deepEqual([await row(local), await row(foreign)], beforeClaim);
+  const [job] = (await claim()).jobs;
+  const beforeSettle = [await row(local), await row(foreign)];
+  assert.deepEqual(await settle([ack(job)], undefined, null), {
+    code: "INVALID_INPUT",
+  });
+  assert.deepEqual([await row(local), await row(foreign)], beforeSettle);
 });
 test("claim leases once, projects minimal identifiers, and preserves processing fields", async () => {
   const id = await insert();
@@ -140,21 +163,91 @@ test("claim leases once, projects minimal identifiers, and preserves processing 
   ])
     assert.deepEqual(current[key], original[key]);
 });
-test("claim is bounded and oldest-first across events, without taking other job kinds", async () => {
+test("claim is bounded and oldest-first only within its event, without touching foreign work or other kinds", async () => {
   const oldest = await insert({ scope: otherEvent });
   await db.query(
     "UPDATE public.outbox_jobs SET dispatch_available_at=now()-interval '1 hour' WHERE id=$1",
     [oldest],
   );
   for (let i = 0; i < 12; i++) await insert();
+  const localOldest = await insert();
+  await db.query(
+    "UPDATE public.outbox_jobs SET dispatch_available_at=now()-interval '30 minutes' WHERE id=$1",
+    [localOldest],
+  );
   for (const kind of ["notify", "delete_assets", "revoke_delivery", "export"])
     await insert({ kind });
+  const foreignBefore = await row(oldest);
   const result = await claim();
   assert.equal(result.jobs.length, 10);
-  assert.equal(result.jobs[0].job_id, oldest);
+  assert.equal(result.jobs[0].job_id, localOldest);
+  assert.ok(
+    result.jobs.every((job) => job.event_id === event && job.job_id !== oldest),
+  );
   assert.equal((await claim()).jobs.length, 3);
   assert.equal((await claim()).jobs.length, 0);
+  assert.deepEqual(await row(oldest), foreignBefore);
 });
+test("foreign exhausted work is neither claimed nor reported for this event", async () => {
+  const foreign = await insert({ scope: otherEvent });
+  await db.query(
+    "UPDATE public.outbox_jobs SET dispatch_attempt=8 WHERE id=$1",
+    [foreign],
+  );
+  const before = await row(foreign);
+  assert.deepEqual(await claim(), { code: "ok", jobs: [], exhausted: false });
+  assert.deepEqual(await claim(10, undefined, randomUUID()), {
+    code: "ok",
+    jobs: [],
+    exhausted: false,
+  });
+  assert.deepEqual(await row(foreign), before);
+  assert.deepEqual(await claim(10, undefined, otherEvent), {
+    code: "ok",
+    jobs: [],
+    exhausted: true,
+  });
+  assert.deepEqual(await row(foreign), before);
+});
+test("settlement cannot consume another event lease even with the correct job and attempt", async () => {
+  const local = await insert();
+  const foreign = await insert({ scope: otherEvent });
+  const [localJob] = (await claim()).jobs;
+  const [foreignJob] = (await claim(10, undefined, otherEvent)).jobs;
+  const foreignBefore = await row(foreign);
+  assert.deepEqual(await settle([ack(localJob), ack(foreignJob)]), {
+    code: "ok",
+    settled: 1,
+    stale: 1,
+  });
+  assert.ok((await row(local)).dispatched_at);
+  assert.deepEqual(await row(foreign), foreignBefore);
+  assert.deepEqual(await settle([ack(foreignJob, "retry")]), {
+    code: "ok",
+    settled: 0,
+    stale: 1,
+  });
+  assert.deepEqual(await row(foreign), foreignBefore);
+  assert.deepEqual(await settle([ack(foreignJob)], undefined, otherEvent), {
+    code: "ok",
+    settled: 1,
+    stale: 0,
+  });
+  assert.ok((await row(foreign)).dispatched_at);
+});
+test("fifty-row batch admits the thirty-per-minute target with bounded retry headroom", async () => {
+  for (let i = 0; i < 51; i++) await insert();
+  const batch = await claim(50);
+  assert.equal(batch.jobs.length, 50);
+  assert.equal(new Set(batch.jobs.map((j) => j.job_id)).size, 50);
+  assert.deepEqual(await settle(batch.jobs.map((j) => ack(j))), {
+    code: "ok",
+    settled: 50,
+    stale: 0,
+  });
+  assert.equal((await claim(50)).jobs.length, 1);
+});
+
 test("skips future, leased, completed, dispatched, and exhausted work", async () => {
   for (const expr of [
     "dispatch_available_at=now()+interval '1 hour'",
@@ -281,18 +374,18 @@ test("claim and settle are transactional; rollback preserves pending work", asyn
 test("rejects stronger isolation instead of accepting stale snapshots", async () => {
   await db.exec("BEGIN ISOLATION LEVEL REPEATABLE READ");
   await assert.rejects(
-    db.query("SELECT public.claim_media_dispatch(10)"),
+    db.query("SELECT public.claim_media_dispatch($1,10)", [event]),
     /requires READ COMMITTED/,
   );
   await db.exec("ROLLBACK");
   await db.exec("BEGIN ISOLATION LEVEL REPEATABLE READ");
   await assert.rejects(
-    db.query("SELECT public.settle_media_dispatch('[]')"),
+    db.query("SELECT public.settle_media_dispatch($1,'[]')", [event]),
     /requires READ COMMITTED/,
   );
   await db.exec("ROLLBACK");
 });
-for (const value of [null, 0, -1, 11])
+for (const value of [null, 0, -1, 51])
   test(`invalid limit ${value}`, async () => {
     const id = await insert();
     assert.equal((await claim(value)).code, "INVALID_INPUT");
@@ -328,7 +421,7 @@ test("empty, oversized, duplicate, non-array and null settlement inputs are reje
     {},
     [null],
     [ack(job), ack(job)],
-    Array(11).fill(ack(job)),
+    Array(51).fill(ack(job)),
   ])
     assert.equal((await settle(input)).code, "INVALID_INPUT");
   assert.equal((await row(job.job_id)).dispatched_at, null);

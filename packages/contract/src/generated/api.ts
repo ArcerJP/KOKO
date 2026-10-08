@@ -55,6 +55,40 @@ export interface paths {
     patch: operations["updateMe"];
     trace?: never;
   };
+  "/me/enrollment": {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。 */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 固定イベントへの本人の参加状態と初回受付可否を取得
+     * @description Google本人とサーバー設定の固定eventを確認。所属がなくても利用できる専用読取り経路。
+     *     状態変更や規約同意は行わない。Cookie時だけ同一セッション/eventのCSRFを返す。
+     *     role・BAN・他人の情報は含めず、既存APIの所属認可を代替しない。private, no-store。
+     */
+    get: operations["getEnrollment"];
+    put?: never;
+    /**
+     * 表示名を明示して固定イベントへ初回参加
+     * @description Google本人からIDを決定し、Cookie時はOriginとセッション束縛CSRFが必須。
+     *     初回はlive・開催期間内・受付有効・公開停止なしを原子的に確認しuser権限で登録。
+     *     既存所属は表示名・role・BAN・同意を一切変更せず成功。規約同意はPOST /consentsで別途行う。
+     *     専用flagは既定OFF。一般利用者が任意eventやroleを指定する登録経路ではない。
+     */
+    post: operations["enrollEvent"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/consents": {
     parameters: {
       query?: never;
@@ -123,6 +157,33 @@ export interface paths {
     put?: never;
     /** 所有者の未完了アップロードURLを再発行 */
     post: operations["refreshUpload"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/uploads/{upload_id}/recover": {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。 */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        upload_id: components["parameters"]["UploadId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * サーバー照合による未確定multipartの有限再開
+     * @description upload_idが送信世代を表す。正確なprovider不存在・原本なし・complete未準備の場合だけ新世代へ変更する。旧IDはparts/refresh/completeでは使用不可。原本結果不明を自動再作成しない。
+     */
+    post: operations["recoverUpload"];
     delete?: never;
     options?: never;
     head?: never;
@@ -384,6 +445,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/admin/posts/{post_id}/original": {
+    parameters: {
+      query: {
+        expected_version: number;
+      };
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description 任意の単一byte range。複数rangeは拒否する。 */
+        Range?: string;
+      };
+      path: {
+        post_id: components["parameters"]["PostId"];
+      };
+      cookie?: never;
+    };
+    /**
+     * moderator以上が保存原本を監査付きで個別取得
+     * @description 現在のGoogle本人・イベント権限・同意・BAN・投稿世代を検査する。
+     *     BLOCK・削除済みは取得不可。R2の原本identityを照合し、公開URLや署名を返さない。
+     *     Content-Dispositionは固定安全名のattachment。private/no-store、nosniff、sandbox。
+     *     第3の個別取得であり、一括exportではない。
+     */
+    get: operations["getAdminOriginal"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/admin/posts/{post_id}/hide": {
     parameters: {
       query?: never;
@@ -426,7 +519,7 @@ export interface paths {
     put?: never;
     /**
      * moderator以上が非表示を解除（BLOCK・BAN・公開停止は解除不可）
-     * @description 保存済み判定と以前の公開状態を使用し、バージョン一致と配信準備を検証する。
+     * @description 保存済み判定と以前の公開状態を使用し、バージョン一致と配信準備を検証する。現在BAN中は復帰不可。BAN解除後も残る非公開ラッチの解除はadminの明示的な個別復帰だけに限る。
      */
     post: operations["restorePost"];
     delete?: never;
@@ -833,6 +926,20 @@ export interface components {
       /** Format: uuid */
       resource_id?: string;
     };
+    EnrollmentStatus: {
+      /** Format: uuid */
+      user_id: string;
+      /** Format: uuid */
+      event_id: string;
+      enrolled: boolean;
+      /** @description 未参加かつ現在の初回受付条件を満たす場合のみtrue。 */
+      registration_open: boolean;
+      /** @description Cookie時だけ。メモリ内限定、ログや永続保存は禁止。 */
+      csrf_token?: string;
+    };
+    EnrollmentRequest: {
+      display_name: string;
+    };
     Me: {
       /** Format: uuid */
       user_id: string;
@@ -916,8 +1023,29 @@ export interface components {
       /** Format: date-time */
       created_at: string;
       error_code?: components["schemas"]["ApiError"]["code"];
-      /** @description 本人向けの大分類のみ。生スコア・OCR文・モデル内部情報は返さない。 */
-      block_category?: string;
+      /**
+       * @description blocked時のみの大分類。生スコア・OCR文・モデル内部情報は返さない。
+       * @enum {string}
+       */
+      block_category?:
+        | "sexual"
+        | "violence"
+        | "hate"
+        | "harassment"
+        | "self_harm"
+        | "illicit"
+        | "other";
+      /** @description deleted時のみ。保持・削除予約と物理削除完了は異なる。実ストレージ照合未実装のため完了状態は返さない。 */
+      deletion?: {
+        /** @enum {string} */
+        state:
+          | "RETENTION_UNKNOWN"
+          | "RETENTION_PENDING"
+          | "PHYSICAL_DELETION_NOT_ENABLED"
+          | "DELETION_UNCONFIRMED";
+        /** Format: date-time */
+        retention_until: string | null;
+      };
     };
     /** @description アプリ内で公開済みの投稿。匿名アクセス可能という意味ではない。 */
     PublicPost: {
@@ -932,6 +1060,8 @@ export interface components {
       crown: "none" | "white" | "gold";
       /** Format: uuid */
       theme_id: string | null;
+      /** @description 同イベントの公開中・終了済みのお題名。未選択・非公開お題はnull。HTMLとして解釈しない。 */
+      theme_name: string | null;
       /** Format: date-time */
       created_at: string;
       /** @description 第4要件までは0 */
@@ -1012,6 +1142,8 @@ export interface components {
       version: number;
       publication_stopped: boolean;
       uploads_enabled: boolean;
+      /** @description 校正の承認状態。通常の設定PUTでは指定不可。閾値変更時はfalseへ戻る。 */
+      readonly thresholds_approved?: boolean;
       moderation_concurrency: number;
       /** @description 各エンジンのアダプターが正規化した0〜1スコア用。flagがblock以下であることを検証し、更新を監査。DBのmoderation_thresholdsへ配列として保存。 */
       thresholds: {
@@ -1195,6 +1327,64 @@ export interface operations {
       default: components["responses"]["Error"];
     };
   };
+  getEnrollment: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。 */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 本人専用の初回参加preflight */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EnrollmentStatus"];
+        };
+      };
+      401: components["responses"]["Error"];
+      default: components["responses"]["Error"];
+    };
+  };
+  enrollEvent: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。 */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["EnrollmentRequest"];
+      };
+    };
+    responses: {
+      /** @description 処理完了 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Acknowledgement"];
+        };
+      };
+      401: components["responses"]["Error"];
+      default: components["responses"]["Error"];
+    };
+  };
   acceptTerms: {
     parameters: {
       query?: never;
@@ -1284,6 +1474,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["UploadTicket"];
+        };
+      };
+      401: components["responses"]["Error"];
+      default: components["responses"]["Error"];
+    };
+  };
+  recoverUpload: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description Cookie認証の書込みでは必須。GET/HEADとBearer認証では不要。GET /meで取得するセッション束縛値。 */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        upload_id: components["parameters"]["UploadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 依頼した旧世代に結び付く現行ticket。no-store。世代変更は端末checkpoint破棄と原子的に保存する。 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** Format: uuid */
+            previous_upload_id: string;
+            ticket: components["schemas"]["UploadTicket"];
+          };
         };
       };
       401: components["responses"]["Error"];
@@ -1646,6 +1869,53 @@ export interface operations {
         };
       };
       401: components["responses"]["Error"];
+      default: components["responses"]["Error"];
+    };
+  };
+  getAdminOriginal: {
+    parameters: {
+      query: {
+        expected_version: number;
+      };
+      header: {
+        /** @description イベントID。所有者IDやroleは受け取らない。 */
+        "X-Event-ID": components["parameters"]["EventId"];
+        /** @description 任意の単一byte range。複数rangeは拒否する。 */
+        Range?: string;
+      };
+      path: {
+        post_id: components["parameters"]["PostId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 保存済み原本のバイナリー。原本の再圧縮やmetadataの変更は行わない。 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/octet-stream": string;
+        };
+      };
+      /** @description 単一Rangeの部分応答。Content-Rangeを付与する。 */
+      206: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/octet-stream": string;
+        };
+      };
+      401: components["responses"]["Error"];
+      /** @description 範囲外または非対応のRange。空本文とContent-Range。 */
+      416: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       default: components["responses"]["Error"];
     };
   };

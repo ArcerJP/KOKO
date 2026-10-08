@@ -1,0 +1,95 @@
+.form {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  min-width: 0;
+}
+.form label {
+  font-weight: 600;
+}
+.form input:not([type="checkbox"]),
+.form select,
+.form textarea {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem;
+  border: 1px solid #a4acbb;
+  border-radius: 0.4rem;
+  font: inherit;
+  color: inherit;
+  background: white;
+}
+.form textarea {
+  resize: vertical;
+}
+.form select:focus-visible,
+.form textarea:focus-visible,
+.form input:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0;
+}
+.check input {
+  flex-shrink: 0;
+}
+.details {
+  border-top: 1px solid #dbe1eb;
+  padding-top: 0.7rem;
+  margin-top: 0.7rem;
+}
+.details summary {
+  cursor: pointer;
+  min-height: 2.75rem;
+  padding: 0.5rem 0;
+}
+.break {
+  overflow-wrap: anywhere;
+}
+.rows {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.row {
+  border: 1px solid #dbe1eb;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  min-width: 0;
+}
+.row p {
+  overflow-wrap: anywhere;
+}
+.themeIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  border-radius: 0.5rem;
+  border: 3px solid;
+  padding: 0.5rem;
+  color: #182333;
+  background: white;
+  overflow-wrap: anywhere;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 1rem;
+}
+.reason {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.badge {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 0.4rem;
+}

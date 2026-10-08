@@ -30,6 +30,12 @@ Accepted（認証方針2026-09-21、契約一式の承認2026-09-22、iijima）�
 
 ログイン済み利用者がすでに取得・保存したbytes、スクリーンショット、録画は回収できません。この方式はDRMではありません。
 
+### 2026-10-06のローカル実装と互換性ゲート
+
+メディア専用のWeb中継、Workerの要求ごとの認可、HLS参照の固定route書換え、上流URL/署名の非露出、長いR2転送の途中再認可を実装しました。原本取得は独立した運営権限検査と添付応答で扱い、一般フィードからは提供しません。設定・制限・試験の入口は[API README](../../apps/api/README.md)と[Web README](../../apps/web/README.md)へ集約します。
+
+[Cloudflareの独自プレイヤー向け説明](https://developers.cloudflare.com/stream/viewing-videos/using-own-player/)はmanifestのcache/proxy/storeを推奨していません。KOKOはURLの単純共有で再生できない要件を優先した独自proxy構成であり、公式推奨の標準配信経路として扱いません。manifestを永続保存/cacheせず、実Stream・Safari/Android・Range・各HLS参照・署名期限・性能/費用の受入を必須とします。模擬HLS試験の成功だけで互換性を宣言せず、受入失敗時は保護を弱めず配信を止め、方式を再検討します。
+
 ## 一次資料と設計上の推論
 
 [Streamの公式仕様](https://developers.cloudflare.com/stream/viewing-videos/securing-your-stream/)では、署名トークンを動画IDの代わりにURLへ使用します。そのURLをブラウザへ渡すだけではログインセッションへの継続的な束縛にならない、という点からKOKO独自のゲート設計を導いています。ゲートがすでに提供・検証済みという意味ではありません。

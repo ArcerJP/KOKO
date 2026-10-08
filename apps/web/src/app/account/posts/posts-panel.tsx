@@ -10,9 +10,11 @@ import { PostsView } from "./posts-view";
 export function PostsPanel({
   owner,
   eventId,
+  operationsEnabled = false,
 }: {
   owner: string;
   eventId: string;
+  operationsEnabled?: boolean;
 }) {
   const [posts] = useState(() => {
     const client = () =>
@@ -78,6 +80,11 @@ export function PostsPanel({
         onReload={() => void posts.reload()}
         onMore={() => void posts.more()}
         onRefresh={(id) => void posts.refresh(id)}
+        operationsEnabled={operationsEnabled}
+        onDeleted={() => {
+          posts.invalidate();
+          void posts.reload();
+        }}
       />
       <LogoutButton apiEnabled onStart={posts.close} />
     </>

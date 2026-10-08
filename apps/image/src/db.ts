@@ -12,6 +12,14 @@ export type ImageJobReference = Readonly<{
 }>;
 type Saved = Extract<ImageProcessingResult, { ok: true }>;
 export type ImageReceipt = Pick<Saved, "originalSha256" | "deliveries">;
+export const imageFailureReasons = [
+  "DECODE_FAILED",
+  "INVALID_DERIVATIVES",
+  "ORIGINAL_MISMATCH",
+  "DELIVERY_CONFLICT",
+  "RESOURCE_LIMIT",
+] as const;
+export type ImageFailureReason = (typeof imageFailureReasons)[number];
 type ClaimCode =
   | "BUSY"
   | "EXHAUSTED"
@@ -28,6 +36,10 @@ export type ImageDatabase = {
     { code: "CLAIMED"; plan: ImageProcessingPlan } | { code: ClaimCode }
   >;
   check(plan: ImageProcessingPlan): Promise<boolean>;
+  fail(
+    plan: ImageProcessingPlan,
+    reason: ImageFailureReason,
+  ): Promise<{ code: "HELD" | "STALE" | "INVALID_INPUT" }>;
   finish(
     plan: ImageProcessingPlan,
     receipt: ImageReceipt,
@@ -169,7 +181,7 @@ export function createImageDatabase(
 
   async function rpc(
     ref: ImageJobReference,
-    action: "claim" | "check" | "finish",
+    action: "claim" | "check" | "finish" | "fail",
     input: object,
   ): Promise<Record<string, unknown>> {
     const body = JSON.stringify({
@@ -304,6 +316,17 @@ export function createImageDatabase(
       )
         failed();
       return r.code === "CURRENT" && p.expiresAt > Date.now();
+    },
+    async fail(value: ImageProcessingPlan, reason: ImageFailureReason) {
+      const p = plan(value);
+      if (!imageFailureReasons.includes(reason)) invalid();
+      const r = await rpc(refFor(p), "fail", { plan: p, reason });
+      if (
+        !exact(r, ["code"]) ||
+        !["HELD", "STALE", "INVALID_INPUT"].includes(r.code as string)
+      )
+        failed();
+      return { code: r.code as "HELD" | "STALE" | "INVALID_INPUT" };
     },
     async finish(value: ImageProcessingPlan, saved: ImageReceipt) {
       const p = plan(value);

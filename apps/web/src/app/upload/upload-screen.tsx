@@ -3,7 +3,15 @@ import { useState } from "react";
 import { useUploadQueue } from "../../components/upload-provider";
 import { UploadPanel } from "../../components/upload-panel";
 
-export function UploadScreen({ owner }: { owner: string }) {
+export function UploadScreen({
+  owner,
+  eventId,
+  themesEnabled = false,
+}: {
+  owner: string;
+  eventId: string;
+  themesEnabled?: boolean;
+}) {
   const context = useUploadQueue();
   const [failed, setFailed] = useState(false);
   if (!context) return <p>送信画面は現在無効です。</p>;
@@ -23,7 +31,12 @@ export function UploadScreen({ owner }: { owner: string }) {
         </p>
       )}
       {context.owner === owner && context.queue && (
-        <UploadPanel key={owner} queue={context.queue} />
+        <UploadPanel
+          key={`${eventId}:${owner}`}
+          queue={context.queue}
+          eventId={eventId}
+          themesEnabled={themesEnabled}
+        />
       )}
     </>
   );

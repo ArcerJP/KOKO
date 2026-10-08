@@ -13,6 +13,10 @@ export type UpdateMe =
   operations["updateMe"]["requestBody"]["content"]["application/json"];
 export type AcceptTerms =
   operations["acceptTerms"]["requestBody"]["content"]["application/json"];
+export type EnrollmentStatus =
+  operations["getEnrollment"]["responses"][200]["content"]["application/json"];
+export type EnrollmentRequest =
+  operations["enrollEvent"]["requestBody"]["content"]["application/json"];
 export type Acknowledgement = components["schemas"]["Acknowledgement"];
 type ApiError = components["schemas"]["ApiError"];
 const uuid =
@@ -164,7 +168,7 @@ export function createApiClient(
   }
 
   async function mutate(
-    path: "me" | "consents",
+    path: "me" | "consents" | "me/enrollment",
     method: "PATCH" | "POST",
     input: UpdateMe | AcceptTerms,
     csrfToken: string,
@@ -186,6 +190,49 @@ export function createApiClient(
   }
 
   return {
+    async getEnrollment(signal?: AbortSignal): Promise<EnrollmentStatus> {
+      const body = await request("me/enrollment", "GET", signal);
+      if (
+        !object(body) ||
+        typeof body.user_id !== "string" ||
+        !uuid.test(body.user_id) ||
+        body.event_id !== eventId ||
+        typeof body.enrolled !== "boolean" ||
+        typeof body.registration_open !== "boolean" ||
+        (body.enrolled && body.registration_open) ||
+        (body.csrf_token !== undefined && !isCsrfToken(body.csrf_token))
+      )
+        throw new ApiFailure("INTERNAL_ERROR");
+      return {
+        user_id: body.user_id,
+        event_id: eventId,
+        enrolled: body.enrolled,
+        registration_open: body.registration_open,
+        ...(body.csrf_token === undefined
+          ? {}
+          : { csrf_token: body.csrf_token }),
+      };
+    },
+    async enrollEvent(
+      input: EnrollmentRequest,
+      csrfToken: string,
+      signal?: AbortSignal,
+    ): Promise<Acknowledgement> {
+      signal?.throwIfAborted();
+      if (
+        !object(input) ||
+        Object.keys(input).length !== 1 ||
+        !isValidDisplayName(input.display_name)
+      )
+        throw new ApiFailure("INVALID_INPUT");
+      return mutate(
+        "me/enrollment",
+        "POST",
+        { display_name: input.display_name },
+        csrfToken,
+        signal,
+      );
+    },
     async getPostStatus(id: string, signal?: AbortSignal) {
       if (!uuid.test(id)) throw new ApiFailure("INVALID_INPUT");
       const normalized = id.toLowerCase();

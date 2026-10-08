@@ -10,6 +10,7 @@ import {
   receipt,
   signed,
   single,
+  multipart,
   uploadId,
 } from "./upload-fixture";
 
@@ -65,6 +66,12 @@ it.each([
   ["uploads", input, () => single(), 200],
   [`uploads/${uploadId}/refresh`, null, () => single(), 200],
   [
+    `uploads/${uploadId}/recover`,
+    null,
+    () => ({ previous_upload_id: uploadId, ticket: multipart() }),
+    200,
+  ],
+  [
     `uploads/${uploadId}/parts`,
     { part_numbers: [1] },
     () => ({ parts: [{ part_number: 1, ...signed(1) }] }),
@@ -78,7 +85,10 @@ it.each([
     const expected = output();
     const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json(
-        { ...expected, private: "discard" },
+        {
+          ...expected,
+          ...(path.endsWith("/recover") ? {} : { private: "discard" }),
+        },
         {
           status,
           headers: {
@@ -193,6 +203,7 @@ it.each([
 });
 it.each([
   [`uploads/${uploadId}/refresh`, {}],
+  [`uploads/${uploadId}/recover`, {}],
   ["uploads", { ...input, content_type: "a".repeat(4096) }],
   [`uploads/${uploadId}/parts`, { part_numbers: [1], extra: true }],
   [
