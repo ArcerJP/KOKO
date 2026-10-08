@@ -10,7 +10,9 @@
 
 続く本人の「3件完了」報告後、Google限定1,000円/月・500/900/1,000円の費用通知、Container Scanning API有効、東京の非公開Docker保存先 `koko-images` を確認しました。保存済み設定と費用は[第6節](cloud-run-auth-setup.md#6-費用通知検査非公開保存先完了参照用)が正本。通知先は本人の最終指定によりプロジェクトオーナーと既存の課金管理者・課金ユーザーの両方ONを維持し、AIによる変更・再保存はしていません。リポジトリは不変タグON・削除ポリシーなし・スキャン有効。初回の非アクティブ表示は再読込み後にアクティブへ変わり、設定変更は不要でした。image一覧は空です。8,000円は準備方針であり設定済み停止上限ではなく、通知も自動停止ではありません。
 
-固定ソースからserviceコンテナーをローカルbuildし、外部通信なし・非rootで処理OFFのhealthと処理ルート拒否を検証しました。公式Google CLI 588.0.0もchecksum照合して作業フォルダーに準備し、隔離した空設定でversion確認済み。OS PATH・既存認証設定は変更していません。**次の本人操作は[第7節のCLIログイン](cloud-run-auth-setup.md#7-今することgoogle-cliへ本人ログイン)**です。コンテナー送信、クラウド検査の実行、Cloud Run作成/配備、Secret、IAM変更、プールONは未実施です。
+固定ソースからserviceコンテナーをローカルbuildし、外部通信なし・非rootで処理OFFのhealthと処理ルート拒否を検証しました。公式Google CLI 588.0.0もchecksum照合して作業フォルダーに準備。続く本人ログイン完了後、登録アカウントとKOKOへの読取り成功を確認しました。[第7節](cloud-run-auth-setup.md#7-google-cliへ本人ログイン完了参照用)は完了済みです。OS PATH・既定アカウントを変更せず、CLIは毎回対象を明示します。
+
+CLIでregistry空・不変タグON・スキャンACTIVE・直接IAM bindingなし、projectに公開principalなし、caller/runtimeのprojectロールなし、pool disabled=true、東京Run一覧空を確認しました。固定候補1版の本人用送信手順を準備し、ガード自己試験と読取りcheck成功。**次の本人操作は[第8節の送信](cloud-run-auth-setup.md#8-今すること固定プログラム1版の送信)**です。コンテナー送信、クラウド検査の実行、Cloud Run作成/配備、Secret、IAM変更、プールONは未実施です。プロジェクト/リポジトリの読取りを全実効権限監査や実アプリ受入と混同しません。
 
 project IAMに標準Compute SAのEditorとGoogle管理service agent群を確認しました。前回との差のすべてを4 APIによる自動追加と断定しません。他アプリ有無は本人も未把握、Compute Engine API無効のためVM一覧は未確認。権限削除/API追加有効化はせず、専用runtimeを使う方針と、既存Editorの別途依存調査を記録しました。既存の保護は変更しません。
 

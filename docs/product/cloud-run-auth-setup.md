@@ -4,7 +4,7 @@
 
 ## 今の目的と影響
 
-Googleの長期秘密鍵を作らず、既存Vercelの署名IDから短命のGoogle ID tokenを取得する準備です。**第1〜6節は完了確認済み。やり直し不要です。今する作業は第7節のGoogle CLIログインだけです。** Codexが公式CLIと固定ソースのコンテナーをローカルで準備・検証しました。CLIの本人認証は未実施です。プールON、公開化、Secret登録、コンテナー送信、実配備は含みません。
+Googleの長期秘密鍵を作らず、既存Vercelの署名IDから短命のGoogle ID tokenを取得する準備です。**第1〜7節は完了確認済み。やり直し不要です。今する作業は第8節の固定プログラム1版の送信です。** Codexが本人用の送信手順を準備し、読取りcheckまで検証しました。最後の送信判断と実行は本人へ渡し、まだ送信していません。プールON、公開化、Secret登録、実配備は含みません。
 
 APIの初期化時に有効化されたサービスはcloud-setupを参照してください。有料アップグレード・前払い・想定外の追加契約を求められたら、その先へ進まず画面の名称だけ知らせてください。再認証・パスワード入力は本人が行い、秘密は送らないでください。
 
@@ -210,7 +210,9 @@ WIFプールOFF、既存Access、API自動配備OFFは維持します。取り�
 
 3件は確認済みです。コンテナー送信、Cloud Run作成/配備、秘密登録、IAM変更、プールONは未実施です。リモートdigestと配備対象が確定していないため、仮の公開imageでCloud Runを先に作らないでください。
 
-## 7. 今すること：Google CLIへ本人ログイン
+## 7. Google CLIへ本人ログイン（完了・参照用）
+
+10/9、本人のログイン完了報告後、CLIの登録アカウント `arcer.jp@gmail.com` と、同アカウント指定によるKOKOの読取り成功を確認しました。project IDは `koko-510318`、numberは `468956212777`、状態はACTIVE。既定の有効アカウントが空欄なのは `--no-activate` の指定どおりで、エラーではありません。**再ログイン・既定アカウント切替は不要です。** 以下は実施済み手順です。
 
 ### 準備済みのことと認証の影響
 
@@ -235,11 +237,40 @@ Codexは既に固定ソースからserviceコンテナーを作り、非root・�
 
 根拠（2026-10-09確認）：[公式versioned archiveとchecksum](https://docs.cloud.google.com/sdk/docs/downloads-versioned-archives)、[gcloud auth loginの公式仕様](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login)、[Artifact Registryの認証方式](https://docs.cloud.google.com/artifact-registry/docs/docker/authentication)。SA長期鍵による代用はしません。
 
-## 8. 今は操作しない後続工程
+## 8. 今すること：固定プログラム1版の送信
+
+### 最後の実行前に確認すること
+
+10/9のCLI読取りで、保存先はDocker標準・不変タグON・スキャンACTIVE・image一覧空、直接IAM bindingなし。project IAMには匿名/全認証利用者のprincipalなし、本人は既存Owner、caller/runtimeのprojectロール追加なし、WIFプールは `disabled=true` でした。組織/グループ経由を含む全実効権限の監査とは区別します。東京のCloud Runサービス一覧は空でした。
+
+| 項目           | 今回だけの対象                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 操作           | 準備済みコンテナー1版を1回push。送信後の自動脆弱性検査を含む                                                        |
+| 送信元         | Public commit `49546c9ad02be737fb17850dcb891368adcc40d4` の必要追跡ソースからbuildしたservice target                |
+| 送信先         | `asia-northeast1-docker.pkg.dev/koko-510318/koko-images/image-service:git-49546c9ad02be737fb17850dcb891368adcc40d4` |
+| 内容           | 実行プログラムと固定依存。投稿写真/動画、秘密、ローカル作業資料は含めない                                           |
+| 認証           | 本人ログイン済み `arcer.jp@gmail.com` を公式gcloud credential helperで利用。長期JSON鍵・tokenの表示/平文保存なし    |
+| 変更しないもの | 既定Docker設定、OS PATH、既定Googleアカウント、IAM、公開範囲、WIF、Cloud Run、API自動配備                           |
+
+ローカルimage ID・revision・非root・service入口を固定照合し、空保存先と実アカウント/対象を送信直前にも再確認します。現headから送信元SHAまでのimage/contract/package/lockに差分がないことも確認済みです。**これは未mergeのDraft内候補の検査用保管で、アプリの実配備ではありません。** 公開前の独立レビュー・mergeは引き続き必要です。
+
+費用は1つの実行imageの初回検査 **$0.26（仮150円/USDで約39円、税別）** と保存料等。今回のlocal imageは約0.37GiBですが、registryの圧縮保存量・共有無料枠の使用量は未測定で、無料を保証しません。保存は請求先合算0.5GiB/月まで無料、超過は約$0.10/GiB・月。別版を繰り返し送る場合は再見積りします。通知は停止上限ではありません。[検査料金](https://cloud.google.com/artifact-analysis/pricing)、[保存料金](https://cloud.google.com/artifact-registry/pricing)（2026-10-09確認）
+
+### 本人が行うこと
+
+1. 非公開の本人作業指示書にある送信コマンドを通常のPowerShellで実行します。事前確認は読取りのみです。
+2. 対象と費用を確認し、この1回の送信に同意する場合だけ **`UPLOAD KOKO 49546c9`** と入力してEnter。違う対象・想定外の要求なら入力せず止めます。
+3. 成功後は **`RESULT=IMAGE_PUSH_COMMAND_SUCCEEDED`** だけを返信してください。検査合格・配備完了という意味ではありません。失敗/中断時は再実行せず「送信準備/送信が停止」と知らせ、Codexがremoteの状態を先に確認します。
+
+手順は今回限りの固定候補用です。非対話の送信、別image/repo、保存先の状態変化、再試行を拒否します。Docker helper設定と非秘密の試行記録はこのPCの専用tmpにだけ作り、既存設定は上書きしません。CLIのtokenはhelperとDockerが内部で使用し、チャットやGitへ出しません。送信直前の操作は本人が行い、AIはuploadモードを実行しません。
+
+取消しは確認語を入力する前なら中断できます。送信後は費用の取消しや削除を自動実行せず、digest・依存先・不変タグの制約を確認した別の本人操作に分離します。別案のCloud Buildは追加の権限/費用/送信範囲を要するため、今回は検証済みlocal imageを使います。credential helperは一時設定に限定し、恒久的なDocker認証登録や長期鍵を増やしません。[公式Docker認証](https://docs.cloud.google.com/artifact-registry/docs/docker/authentication)、[pushと不変タグ](https://docs.cloud.google.com/artifact-registry/docs/docker/pushing-and-pulling)、[Dockerの設定分離](https://docs.docker.com/reference/cli/docker/)
+
+## 9. 今は操作しない後続工程
 
 コードと実際の対象が確定してから、別途本人へ案内します。今の作成作業と混ぜません。
 
-1. 第1〜6節は完了。第7節の本人ログイン後、Codexがアカウント・対象・固定SHAを照合し、コンテナー送信・digest・処理OFFの初回配備案と費用/停止条件を準備します。送信と初回配備は別ゲートで、ブラウザログインだけでCLI認証済みとしません。画面保存と実token交換の成功を区別します。
+1. 第1〜7節は完了。第8節の本人送信後、Codexがリモートdigest・脆弱性検査結果を照合し、処理OFFの初回配備案と費用/停止条件を確定します。重大な検査結果があれば配備せず修正し、別版の送信は再確認します。送信と初回配備は別ゲートで、画面保存・CLIログイン・WIF実token交換の成功を区別します。
 2. caller/runtimeのメール・数値IDを環境別設定へ反映する準備をします。runtimeやプロジェクト番号をcaller subjectとして代用しません。登録先・費用・停止方法を提示し、実保存は別ゲートにします。
 3. 画像Cloud Run **1サービス上だけ**で、callerに`roles/run.invoker`を付与。全利用者・全認証利用者は許可しません。別のruntimeアカウントがVision等の処理権限を持ちます。
 4. Worker→固定Vercel中継の専用認証を本人が登録。既存Access/Supabase/CSRFの秘密を再利用せず、期限/更新/漏洩時の停止方法を確認します。
