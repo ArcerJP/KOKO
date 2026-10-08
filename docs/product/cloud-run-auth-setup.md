@@ -4,7 +4,7 @@
 
 ## 今の目的と影響
 
-Googleの長期秘密鍵を作らず、既存Vercelの署名IDから短命のGoogle ID tokenを取得する準備です。**第1〜5節は完了確認済み。やり直し不要です。今する作業は第6節の3件です。** Codexが費用通知・検査API・非公開保存先の画面を準備し、最後の確定ボタンは押さず残しています。プールON、公開化、Secret登録、コンテナー送信、実配備は含みません。
+Googleの長期秘密鍵を作らず、既存Vercelの署名IDから短命のGoogle ID tokenを取得する準備です。**第1〜6節は完了確認済み。やり直し不要です。今する作業は第7節のGoogle CLIログインだけです。** Codexが公式CLIと固定ソースのコンテナーをローカルで準備・検証しました。CLIの本人認証は未実施です。プールON、公開化、Secret登録、コンテナー送信、実配備は含みません。
 
 APIの初期化時に有効化されたサービスはcloud-setupを参照してください。有料アップグレード・前払い・想定外の追加契約を求められたら、その先へ進まず画面の名称だけ知らせてください。再認証・パスワード入力は本人が行い、秘密は送らないでください。
 
@@ -154,38 +154,40 @@ WIFプールOFF、既存Access、API自動配備OFFは維持します。取り�
 
 根拠：[Artifact Registryの有効化と無効化](https://docs.cloud.google.com/artifact-registry/docs/enable-service)、[Vision準備](https://docs.cloud.google.com/vision/docs/setup)、[Secret Manager有効化](https://docs.cloud.google.com/secret-manager/docs/configuring-secret-manager)、[Google管理service agents](https://docs.cloud.google.com/iam/docs/service-agents)。秘密は通常の平文入力欄へ置かず、[Cloud RunのSecret参照](https://docs.cloud.google.com/run/docs/configuring/services/secrets)を準備し、本人の秘密入力とruntimeへの限定権限は別ゲートにします。
 
-## 6. 今すること：費用通知・検査・非公開保存先
+## 6. 費用通知・検査・非公開保存先（完了・参照用）
 
-対象はすべて **KOKO / `koko-510318`**。10/9にCodexが非秘密の未保存フォームを準備しました。以下は本人への提案で、保存済み・支出承認済みとは扱いません。**「予算の終了」→「検査API有効化」→「リポジトリ作成」**の順に、対象と費用を確認して本人が確定してください。追加契約・有料アップグレード・異なる対象が出たら、その操作だけ止めます。
+対象はすべて **KOKO / `koko-510318`**。10/9、本人の「3件完了」報告後、保存済み予算、検査APIの有効状態、リポジトリの設定と空のimage一覧を読取り確認しました。**再保存・再作成は不要です。** 以下は実施済み設定の参照で、image送信・有料検査実行・配備の承認ではありません。
 
 ### A. Google分の早期費用通知を保存
 
-開いている「予算の作成」で、次の設定を確認して **「終了」** を押します。フォームを失った場合はCodexが再準備し、請求先IDをチャット/Gitへ貼り付けません。
+保存済み `koko-google-monthly-alert` の編集画面で次の値を読み取り、変更・再保存はしていません。請求先IDはチャット/Gitへ貼り付けません。
 
-| 項目           | 提案値                                                                              |
-| -------------- | ----------------------------------------------------------------------------------- |
-| 種類・名前     | アラートのみ / `koko-google-monthly-alert`                                          |
-| 対象           | KOKOだけ、Googleの全サービス、月単位                                                |
-| 金額・実額通知 | 1,000円、500円/900円/1,000円で通知                                                  |
-| クレジット     | プロモーションクレジットは計算から除外、無料枠は含める                              |
-| 通知先         | プロジェクトオーナー。課金管理者/ユーザーへの通知、追加メールチャネル、Pub/SubはOFF |
+| 項目           | 保存済み値                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| 種類・名前     | アラートのみ / `koko-google-monthly-alert`                                                     |
+| 対象           | KOKOだけ、Googleの全サービス、月単位                                                           |
+| 金額・実額通知 | 1,000円、500円/900円/1,000円で通知                                                             |
+| クレジット     | プロモーションクレジットは計算から除外、無料枠は含める                                         |
+| 通知先         | プロジェクトオーナーと既存の課金管理者・課金ユーザーの両方ON。追加メールチャネル・Pub/SubはOFF |
 
-全社合計8,000円の準備方針を変更せず、Google分を早めに把握するための提案です。無料トライアルのクレジットで利用額が隠れない設定にします。**通知だけで課金を止めません。** 月の区切りは太平洋時間で、費用反映/通知には24時間以上の遅れもあり得ます。1,000円を超えない保証ではありません。[Google予算の公式説明](https://docs.cloud.google.com/billing/docs/how-to/budgets)
+当初準備した通知先はオーナーだけでしたが、保存結果は両方ONでした。本人は一度オーナーだけへ戻すと回答し、その後**両方ONを維持**する最終方針へ変更しました。Codexはチェック変更・再保存を行っていません。既存ロールに応じた費用通知であり、新たな管理権限付与ではありません。
+
+全社合計8,000円の準備方針を変更せず、Google分を早めに把握する通知です。無料トライアルのクレジットで利用額が隠れない設定です。**通知だけで課金を止めません。** 月の区切りは太平洋時間で、費用反映/通知には24時間以上の遅れもあり得ます。1,000円を超えない保証ではありません。[Google予算の公式説明](https://docs.cloud.google.com/billing/docs/how-to/budgets)
 
 代替のSpend capは1サービスの停止制御には使えますが、他のGoogleサービスや他社費用をまとめて止められず、遅延・サービス停止の影響もあります。まず全Googleの通知を準備し、実処理前にサービス別上限/停止手順を別途確認します。通知先・金額の変更や削除は後から可能ですが、既に発生した利用料を取り消す機能ではありません。
 
 ### B. コンテナーの脆弱性検査を有効化
 
-[Container Scanning API](https://console.cloud.google.com/marketplace/product/google/containerscanning.googleapis.com?project=koko-510318)で、KOKOとAPI名を確認し **「この API を有効にする」** を押します。写真のAI判定ではなく、実行プログラムに含まれる既知の脆弱性を調べる追加提案です。
+[Container Scanning API](https://console.cloud.google.com/apis/api/containerscanning.googleapis.com/empty?project=koko-510318)で、KOKO・API名・有効状態を確認済みです。写真のAI判定ではなく、実行プログラムに含まれる既知の脆弱性を調べます。まだimage未送信のため、クラウド検査の実行・結果確認は未実施です。
 
 - 公式単価は**新しいimage digestの初回検査1件につき$0.26**。仮に1ドル150円なら約39円、1〜5版なら約39〜195円。税・為替で変わり、上限保証ではありません。同じdigestの再検査は追加課金されません。[Artifact Analysis料金](https://cloud.google.com/artifact-analysis/pricing)
-- API有効化後、スキャン対象リポジトリへのimage送信で検査/費用が発生します。project単位の有効化であり、今後の別リポジトリも設定を確認します。今回は既存リポジトリ0件、image送信なしです。
+- API有効化後、スキャン対象リポジトリへのimage送信で検査/費用が発生します。project単位の有効化であり、今後の別リポジトリも設定を確認します。今回は下記1件を作成済み、image送信なしです。
 - npm auditだけではOS依存の検査を十分に代替できないため、セキュリティ優先で追加します。利点は配備前の検出、欠点は版ごとの費用と確認作業です。検査で重大な問題が出たら修正し、検査成功だけで安全性全体を保証しません。
-- 不採用なら押さず知らせてください。APIを無断で有効化/無効化せず、代替検査の案を整理します。既発生の費用は取り消せません。
+- 有効化済みAPIを無断で無効化しません。既発生の費用を取り消す機能ではありません。
 
 ### C. 実行プログラムの非公開保存先を作成
 
-開いている[Artifact Registry作成画面](https://console.cloud.google.com/artifacts/create-repo?project=koko-510318)で次を確認し **「作成」** を押します。**投稿写真・動画の保存先ではなく、画像処理プログラムの保管庫**です。
+[Artifact Registryのkoko-images](https://console.cloud.google.com/artifacts/docker/koko-510318/asia-northeast1/koko-images?project=koko-510318)で次を確認済みです。**投稿写真・動画の保存先ではなく、画像処理プログラムの保管庫**です。編集画面は読取りのみで戻り、設定変更していません。
 
 | 項目                 | 指定値                                                    |
 | -------------------- | --------------------------------------------------------- |
@@ -196,23 +198,48 @@ WIFプールOFF、既存Access、API自動配備OFFは維持します。取り�
 | 不変のイメージタグ   | 有効（同じタグで別版に上書きしない）                      |
 | クリーンアップ       | テストを実行、ポリシー追加なし。自動削除なし              |
 | プラットフォームログ | プロジェクト設定を継承。今回overrideしない                |
-| 脆弱性スキャン       | 有効。BのAPIも有効にして初めて実検査できる                |
+| 脆弱性スキャン       | 有効。再読込み後、詳細の「アクティブ」も確認              |
 
 作成後も匿名公開権限を追加しません。ただし既存project IAMの継承は残り、専用アカウント2件だけがアクセスできる意味ではありません。保存は請求先合計0.5GiB/月まで無料枠、超過分は約$0.10/GiB・月。仮に全体で平均2GiBを30日保存すると約$0.15、仮150円/USDで約23円で、検査/転送は別です。将来の実サイズ・保持版数で再計算します。[Artifact Registry料金](https://cloud.google.com/artifact-registry/pricing)
 
 東京は予定Cloud Runと同一地域に合わせる選択です。不変タグは誤上書きを防ぐ一方、タグ付きimageの削除にも制約があります。取り消すために保存済みimageやリポジトリを無断削除せず、データと配備の参照先を確認します。[作成と不変タグの公式手順](https://docs.cloud.google.com/artifact-registry/docs/repositories/create-repos)
 
-### 標準アカウントの注意と完了報告
+### 標準アカウントの注意
 
 10/9のproject IAM読取りで**標準ComputeサービスアカウントにEditor**を確認しました。本人は他アプリ利用の有無を「分かりません」と回答。Cloud Runサービス一覧は空でしたが、Compute Engine APIは無効でVM一覧を確認できず、他依存先がないとは断定できません。調査だけのためにAPIを有効化せず、既存権限も削除しません。**KOKO runtimeに標準アカウントを使わず、専用の `koko-image-runtime` を指定**します。Editorの整理は依存先/影響を確認した別の本人ゲートとし、Google管理service agentsを一括削除しません。[Googleの権限最小化手順](https://docs.cloud.google.com/compute/docs/access/service-accounts)
 
-3件が終わったら **「費用通知・検査API・保存先の3件完了」** と返信してください。今回コンテナー送信、Cloud Run作成/配備、秘密登録、IAM変更、プールONはしません。画像のdigestと配備対象が確定していないため、仮の公開imageでCloud Runを先に作らないでください。
+3件は確認済みです。コンテナー送信、Cloud Run作成/配備、秘密登録、IAM変更、プールONは未実施です。リモートdigestと配備対象が確定していないため、仮の公開imageでCloud Runを先に作らないでください。
 
-## 7. 今は操作しない後続工程
+## 7. 今すること：Google CLIへ本人ログイン
+
+### 準備済みのことと認証の影響
+
+10/9、公式Google Cloud CLI **588.0.0** のWindows x86_64・Python同梱archiveを `tmp/tooling/google-cloud-sdk-588.0.0/` へ展開しました。公式SHA-256と一致し、空の隔離設定で `--version` を確認済みです。Windows PATH・既存CLI設定・Docker認証を変更せず、管理者用インストーラーも実行していません。別PCではこの作業フォルダーは共有されないため、同じ準備が必要です。
+
+本人ログインはブラウザのログインとは別です。**このPCのGoogle CLIへ、選択するGoogleアカウントの資格情報を保存します。CLIはそのアカウントが元から持つ権限で操作でき、KOKOだけに権限を限定するログインではありません。** `--no-activate` は既定の有効アカウント切替を抑えるもので、権限を狭める指定ではありません。以後の操作は明示したアカウントと `--project=koko-510318` に固定して確認します。
+
+### 本人が行うこと（管理者PowerShellは不要）
+
+1. 通常のPowerShellでKOKOルートを開き、次を実行します。
+
+   ```powershell
+   & .\tmp\tooling\google-cloud-sdk-588.0.0\google-cloud-sdk\bin\gcloud.cmd auth login arcer.jp@gmail.com --no-launch-browser --no-activate
+   ```
+
+2. 表示されるログインURLを自分のブラウザで開き、**`arcer.jp@gmail.com` とGoogle Cloud CLI**を確認して本人がログイン・許可します。別アカウント、支払、サービスアカウント鍵、想定外の追加権限が出たら確定せず知らせてください。
+3. 確認コードが出たら、**自分のPowerShellへだけ**貼り付けます。ログインURL・コード・token・認証画面をチャット/Git/共有資料へ送らないでください。成功後は **「Google CLIログイン完了」** とだけ返信します。
+
+`gcloud init`、`application-default login`、`--update-adc`、JSON鍵発行、Dockerへの認証登録、image送信、配備は今は行いません。今回は本人ログインまでで、クラウド利用・課金・IAM変更・実配備の包括承認ではありません。不要になった認証の取消しは、そのアカウントと依存作業を確認して別途行います。
+
+Codexは既に固定ソースからserviceコンテナーを作り、非root・外部通信なしでhealthの処理OFF応答と処理ルートの拒否を検証しました。リモートへの送信・クラウド脆弱性検査・Cloud Run起動・WIF実認証は未検証です。本人ログイン後、固定SHA・送信先・回数・費用を示して次の送信操作を分離します。
+
+根拠（2026-10-09確認）：[公式versioned archiveとchecksum](https://docs.cloud.google.com/sdk/docs/downloads-versioned-archives)、[gcloud auth loginの公式仕様](https://docs.cloud.google.com/sdk/gcloud/reference/auth/login)、[Artifact Registryの認証方式](https://docs.cloud.google.com/artifact-registry/docs/docker/authentication)。SA長期鍵による代用はしません。
+
+## 8. 今は操作しない後続工程
 
 コードと実際の対象が確定してから、別途本人へ案内します。今の作成作業と混ぜません。
 
-1. 第1〜5節は完了。第6節の本人操作後、Codexが保存結果を読み取り、固定SHAのコンテナー送信・digest・処理OFFの初回配備案と費用/停止条件を準備します。必要なCLIの認証は本人へ渡し、ブラウザログインだけでCLI認証済みとしません。画面保存と実token交換の成功を区別します。
+1. 第1〜6節は完了。第7節の本人ログイン後、Codexがアカウント・対象・固定SHAを照合し、コンテナー送信・digest・処理OFFの初回配備案と費用/停止条件を準備します。送信と初回配備は別ゲートで、ブラウザログインだけでCLI認証済みとしません。画面保存と実token交換の成功を区別します。
 2. caller/runtimeのメール・数値IDを環境別設定へ反映する準備をします。runtimeやプロジェクト番号をcaller subjectとして代用しません。登録先・費用・停止方法を提示し、実保存は別ゲートにします。
 3. 画像Cloud Run **1サービス上だけ**で、callerに`roles/run.invoker`を付与。全利用者・全認証利用者は許可しません。別のruntimeアカウントがVision等の処理権限を持ちます。
 4. Worker→固定Vercel中継の専用認証を本人が登録。既存Access/Supabase/CSRFの秘密を再利用せず、期限/更新/漏洩時の停止方法を確認します。

@@ -8,7 +8,9 @@
 
 続く本人の「4 API有効化済み」報告後、Cloud Run Admin/Artifact Registry/Cloud Vision/Secret Managerの4 metrics画面でKOKOと有効状態を確認しました。[第5節](cloud-run-auth-setup.md#5-kokoの4-api有効化完了参照用)は完了済み参照です。API有効化と資源作成、Secret登録、実配備、実接続受入を区別します。
 
-予算の保存済み行、Artifact Registryの既存リポジトリ、Cloud Runサービスの一覧行はありませんでした。Google限定1,000円/月の早期通知案と、東京の非公開Docker保存先 `koko-images` の未保存フォームを準備。Container Scanning APIは無効で、従量課金の追加提案として有効化画面を開きました。3件の対象・費用・最終ボタンは[第6節](cloud-run-auth-setup.md#6-今すること費用通知検査非公開保存先)へ集約し、本人確定待ちです。8,000円は準備方針であり設定済み停止上限ではなく、提案の通知も自動停止ではありません。今回AIは確定ボタン・コンテナー送信・配備を実行していません。
+続く本人の「3件完了」報告後、Google限定1,000円/月・500/900/1,000円の費用通知、Container Scanning API有効、東京の非公開Docker保存先 `koko-images` を確認しました。保存済み設定と費用は[第6節](cloud-run-auth-setup.md#6-費用通知検査非公開保存先完了参照用)が正本。通知先は本人の最終指定によりプロジェクトオーナーと既存の課金管理者・課金ユーザーの両方ONを維持し、AIによる変更・再保存はしていません。リポジトリは不変タグON・削除ポリシーなし・スキャン有効。初回の非アクティブ表示は再読込み後にアクティブへ変わり、設定変更は不要でした。image一覧は空です。8,000円は準備方針であり設定済み停止上限ではなく、通知も自動停止ではありません。
+
+固定ソースからserviceコンテナーをローカルbuildし、外部通信なし・非rootで処理OFFのhealthと処理ルート拒否を検証しました。公式Google CLI 588.0.0もchecksum照合して作業フォルダーに準備し、隔離した空設定でversion確認済み。OS PATH・既存認証設定は変更していません。**次の本人操作は[第7節のCLIログイン](cloud-run-auth-setup.md#7-今することgoogle-cliへ本人ログイン)**です。コンテナー送信、クラウド検査の実行、Cloud Run作成/配備、Secret、IAM変更、プールONは未実施です。
 
 project IAMに標準Compute SAのEditorとGoogle管理service agent群を確認しました。前回との差のすべてを4 APIによる自動追加と断定しません。他アプリ有無は本人も未把握、Compute Engine API無効のためVM一覧は未確認。権限削除/API追加有効化はせず、専用runtimeを使う方針と、既存Editorの別途依存調査を記録しました。既存の保護は変更しません。
 
